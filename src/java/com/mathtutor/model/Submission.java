@@ -89,6 +89,10 @@ public class Submission implements Serializable {
         return isCorrect;
     }
 
+    public Boolean isCorrect() {
+        return isCorrect != null && isCorrect;
+    }
+
     public void setIsCorrect(Boolean isCorrect) {
         this.isCorrect = isCorrect;
     }

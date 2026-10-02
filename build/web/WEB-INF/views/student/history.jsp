@@ -100,36 +100,34 @@
                                                                     <c:choose>
                                                                         <c:when test="${sub.questionType == 'MCQ'}">
                                                                             <c:choose>
-                                                                                <c:when test="${sub.correct}">
-                                                                                    <span
-                                                                                        class="text-success fw-bold"><i
-                                                                                            class="bi bi-check-lg"></i>
-                                                                                        Đúng</span>
+                                                                                <c:when test="${sub.correct or sub.isCorrect}">
+                                                                                    <span class="badge bg-success-subtle text-success fw-bold px-2 py-1">
+                                                                                        <i class="bi bi-check-circle-fill me-1"></i>Đúng
+                                                                                    </span>
                                                                                 </c:when>
                                                                                 <c:otherwise>
-                                                                                    <span class="text-danger fw-bold"><i
-                                                                                            class="bi bi-x-lg"></i>
-                                                                                        Sai</span>
+                                                                                    <span class="badge bg-danger-subtle text-danger fw-bold px-2 py-1">
+                                                                                        <i class="bi bi-x-circle-fill me-1"></i>Sai
+                                                                                    </span>
                                                                                 </c:otherwise>
                                                                             </c:choose>
+                                                                            <c:if test="${not empty sub.studentAnswer}">
+                                                                                <div class="small text-muted mt-1">Đã chọn: <strong class="text-dark"><c:out value="${sub.studentAnswer}"/></strong></div>
+                                                                            </c:if>
                                                                         </c:when>
                                                                         <c:otherwise>
                                                                             <c:choose>
                                                                                 <c:when test="${sub.reviewed}">
-                                                                                    <span
-                                                                                        class="text-success fw-bold tooltip-trigger"
+                                                                                    <span class="badge bg-success-subtle text-success fw-bold px-2 py-1 tooltip-trigger"
                                                                                         data-bs-toggle="tooltip"
-                                                                                        title="Feedback: <c:out value='${sub.teacherFeedback}'/>">
-                                                                                        <i
-                                                                                            class="bi bi-check2-circle"></i>
-                                                                                        Đã chấm
+                                                                                        title="Nhận xét: <c:out value='${sub.teacherFeedback}'/>">
+                                                                                        <i class="bi bi-check2-circle me-1"></i>Đã chấm: <strong>${sub.score}đ</strong>
                                                                                     </span>
                                                                                 </c:when>
                                                                                 <c:otherwise>
-                                                                                    <span
-                                                                                        class="text-warning fw-bold"><i
-                                                                                            class="bi bi-hourglass-split"></i>
-                                                                                        Đang chờ GV</span>
+                                                                                    <span class="badge bg-warning-subtle text-warning fw-bold px-2 py-1">
+                                                                                        <i class="bi bi-hourglass-split me-1"></i>Đang chờ GV
+                                                                                    </span>
                                                                                 </c:otherwise>
                                                                             </c:choose>
                                                                         </c:otherwise>

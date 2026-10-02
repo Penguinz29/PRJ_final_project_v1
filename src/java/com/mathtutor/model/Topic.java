@@ -73,4 +73,17 @@ public class Topic implements Serializable {
     public void setLessons(List<Lesson> lessons) {
         this.lessons = lessons;
     }
+
+    private int lessonCount;
+
+    public int getLessonCount() {
+        if (lessons != null && !lessons.isEmpty()) {
+            return lessons.size();
+        }
+        return lessonCount;
+    }
+
+    public void setLessonCount(int lessonCount) {
+        this.lessonCount = lessonCount;
+    }
 }

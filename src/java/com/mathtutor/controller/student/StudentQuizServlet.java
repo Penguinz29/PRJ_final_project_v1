@@ -88,13 +88,13 @@ public class StudentQuizServlet extends HttpServlet {
             items.add(item);
 
             // Lưu kết quả từng câu vào Submissions DB
-            if (currentUser != null && studentAnswer != null) {
+            if (currentUser != null) {
                 Submission sub = new Submission();
                 sub.setStudentId(currentUser.getUserId());
                 sub.setLessonId(lessonId > 0 ? lessonId : null);
                 sub.setQuestionId(q.getQuestionId());
                 sub.setQuestionType("MCQ");
-                sub.setStudentAnswer(studentAnswer);
+                sub.setStudentAnswer(studentAnswer != null ? studentAnswer : "");
                 sub.setIsCorrect(isCorrect);
                 sub.setReviewed(true); // MCQ tự chấm, không cần teacher review
                 submissionDAO.insert(sub);
