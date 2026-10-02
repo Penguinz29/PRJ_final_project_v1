@@ -11,6 +11,15 @@
                 <c:remove var="flash" scope="session" />
             </c:if>
 
+            <c:if test="${not empty sessionScope.errorFlash}">
+                <div class="alert alert-danger alert-dismissible fade show flash-alert" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <c:out value="${sessionScope.errorFlash}" />
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                <c:remove var="errorFlash" scope="session" />
+            </c:if>
+
             <c:if test="${not empty requestScope.error}">
                 <div class="alert alert-danger alert-dismissible fade show flash-alert" role="alert">
                     <i class="bi bi-exclamation-circle-fill me-2"></i>

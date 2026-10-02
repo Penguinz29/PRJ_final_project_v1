@@ -116,6 +116,40 @@ public class UserDAO {
         return false;
     }
 
+    /**
+     * FR-ADM-03: Lấy thông tin user theo ID
+     */
+    public User getById(int userId) {
+        String sql = "SELECT * FROM Users WHERE UserId = ?";
+        try (Connection conn = DBContext.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return mapUser(rs);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    /**
+     * FR-ADM-03: Đổi trạng thái kích hoạt/khóa tài khoản (IsActive: 1 <-> 0)
+     */
+    public boolean toggleStatus(int userId) {
+        String sql = "UPDATE Users SET IsActive = CASE WHEN IsActive = 1 THEN 0 ELSE 1 END WHERE UserId = ?";
+        try (Connection conn = DBContext.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, userId);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
     private User mapUser(ResultSet rs) throws SQLException {
         User u = new User();
         u.setUserId(rs.getInt("UserId"));
