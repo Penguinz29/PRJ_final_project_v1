@@ -132,9 +132,16 @@
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Đang kiểm tra...';
         resultDiv.className = 'alert d-none mb-3';
 
+        const apiKeyInput = document.getElementById('cfg_GEMINI_API_KEY');
+        const modelSelect = document.getElementById('cfg_DEFAULT_MODEL');
+        const params = new URLSearchParams();
+        if (apiKeyInput && apiKeyInput.value) params.append('GEMINI_API_KEY', apiKeyInput.value.trim());
+        if (modelSelect && modelSelect.value) params.append('DEFAULT_MODEL', modelSelect.value.trim());
+
         fetch(document.body.dataset.ctx + '/admin/ai-config/test-connection', {
             method: 'POST',
-            headers: {'Content-Type': 'application/x-www-form-urlencoded'}
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: params.toString()
         })
         .then(res => res.json())
         .then(data => {

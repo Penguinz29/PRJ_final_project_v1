@@ -44,16 +44,16 @@ public class AdminAiConfigServlet extends HttpServlet {
      */
     private void handleUpdate(HttpServletRequest req, HttpServletResponse resp, User currentUser) throws IOException {
         String[] keys = {"GEMINI_API_KEY", "DEFAULT_MODEL", "VISION_MODEL", "TUTOR_TEMPERATURE", "MAX_OUTPUT_TOKENS"};
+        int uid = (currentUser != null) ? currentUser.getUserId() : 1;
 
         for (String key : keys) {
             String value = req.getParameter(key);
             if (value != null) {
-                aiConfigDAO.update(key, value.trim(), currentUser.getUserId());
+                aiConfigDAO.update(key, value.trim(), uid);
             }
         }
 
-        req.getSession().setAttribute("flashMsg", "Cập nhật cấu hình AI thành công!");
-        req.getSession().setAttribute("flashType", "success");
+        req.getSession().setAttribute("flash", "Cập nhật cấu hình AI thành công!");
         resp.sendRedirect(req.getContextPath() + "/admin/ai-config");
     }
 
@@ -64,8 +64,15 @@ public class AdminAiConfigServlet extends HttpServlet {
         resp.setContentType("application/json;charset=UTF-8");
         PrintWriter out = resp.getWriter();
 
-        String apiKey = aiConfigDAO.getValue("GEMINI_API_KEY");
-        String model = aiConfigDAO.getValue("DEFAULT_MODEL");
+        String apiKey = req.getParameter("GEMINI_API_KEY");
+        if (apiKey == null || apiKey.trim().isEmpty()) {
+            apiKey = aiConfigDAO.getValue("GEMINI_API_KEY");
+        }
+
+        String model = req.getParameter("DEFAULT_MODEL");
+        if (model == null || model.trim().isEmpty()) {
+            model = aiConfigDAO.getValue("DEFAULT_MODEL");
+        }
 
         if (apiKey == null || apiKey.trim().isEmpty()) {
             out.print("{\"success\":false,\"message\":\"API Key chưa được cấu hình. Vui lòng nhập GEMINI_API_KEY.\"}");

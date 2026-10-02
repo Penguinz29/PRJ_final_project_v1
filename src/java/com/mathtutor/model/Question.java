@@ -39,6 +39,10 @@ public class Question implements Serializable {
         return questionType;
     }
 
+    public String getType() {
+        return questionType;
+    }
+
     public void setQuestionType(String questionType) {
         this.questionType = questionType;
     }
@@ -60,6 +64,10 @@ public class Question implements Serializable {
     }
 
     public boolean isAiGenerated() {
+        return aiGenerated;
+    }
+
+    public boolean getAiGenerated() {
         return aiGenerated;
     }
 

@@ -26,11 +26,16 @@ public class TeacherQuestionServlet extends HttpServlet {
         String action = Validator.getString(req, "action", "");
         User currentUser = (User) req.getSession().getAttribute("currentUser");
         List<Topic> topics = topicDAO.getByTeacherId(currentUser.getUserId());
+        if (topics == null || topics.isEmpty()) {
+            topics = topicDAO.getAll();
+        }
         req.setAttribute("topics", topics);
 
         if (path.equals("/teacher/question/form") || "create".equals(action) || "edit".equals(action)) {
             if (topics != null && !topics.isEmpty()) {
                 req.setAttribute("lessons", lessonDAO.getByTopicId(topics.get(0).getTopicId()));
+            } else {
+                req.setAttribute("lessons", lessonDAO.getAll());
             }
             if ("edit".equals(action)) {
                 req.setAttribute("isEdit", true);
