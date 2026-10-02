@@ -299,6 +299,15 @@
                                     </div>
                                 </c:if>
 
+                                <c:if test="${not empty sessionScope.flashMsg}">
+                                    <div class="alert alert-${sessionScope.flashType} py-2 mb-3" role="alert">
+                                        <i class="bi bi-check-circle-fill me-1"></i>
+                                        <c:out value="${sessionScope.flashMsg}" />
+                                    </div>
+                                    <c:remove var="flashMsg" scope="session" />
+                                    <c:remove var="flashType" scope="session" />
+                                </c:if>
+
                                 <form action="${pageContext.request.contextPath}/login" method="post"
                                     class="needs-validation" novalidate>
                                     <div class="field">
@@ -325,7 +334,7 @@
                                     <button type="submit" class="btn-login">Đăng nhập</button>
                                 </form>
 
-                                <p class="help">Chưa có tài khoản? Liên hệ giáo viên hoặc quản trị viên để được cấp.</p>
+                                <p class="help">Chưa có tài khoản? <a href="${pageContext.request.contextPath}/register" style="color:var(--violet-dark);font-weight:600;text-decoration:none">Đăng ký ngay</a></p>
 
                                 <%-- DEMO: xóa khi nộp bài --%>
                                     <div class="demo-box">

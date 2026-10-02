@@ -22,9 +22,9 @@ public class AuthFilter implements Filter {
         HttpServletResponse res = (HttpServletResponse) response;
         String uri = req.getRequestURI();
 
-        // 1. Cho phép tài nguyên tĩnh & login
-        if (uri.contains("/assets/") || uri.endsWith("/login") || uri.endsWith("/index.jsp")
-                || uri.endsWith("/FINAL_prj_v1/")) {
+        // 1. Cho phép tài nguyên tĩnh & login & register
+        if (uri.contains("/assets/") || uri.endsWith("/login") || uri.endsWith("/register")
+                || uri.endsWith("/index.jsp") || uri.endsWith("/FINAL_prj_v1/")) {
             chain.doFilter(request, response);
             return;
         }

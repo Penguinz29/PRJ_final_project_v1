@@ -62,6 +62,60 @@ public class UserDAO {
         return 0;
     }
 
+    /**
+     * Kiểm tra username đã tồn tại chưa
+     */
+    public boolean existsByUsername(String username) {
+        String sql = "SELECT COUNT(*) FROM Users WHERE Username = ?";
+        try (Connection conn = DBContext.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, username);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next())
+                    return rs.getInt(1) > 0;
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    /**
+     * Kiểm tra email đã tồn tại chưa
+     */
+    public boolean existsByEmail(String email) {
+        String sql = "SELECT COUNT(*) FROM Users WHERE Email = ?";
+        try (Connection conn = DBContext.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, email);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next())
+                    return rs.getInt(1) > 0;
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    /**
+     * Đăng ký tài khoản mới (mặc định role=STUDENT, IsActive=1)
+     */
+    public boolean insertUser(String username, String passwordHash, String fullName, String email) {
+        String sql = "INSERT INTO Users (Username, PasswordHash, FullName, Email, [Role], IsActive) VALUES (?, ?, ?, ?, 'STUDENT', 1)";
+        try (Connection conn = DBContext.getConnection();
+                PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, username);
+            ps.setString(2, passwordHash);
+            ps.setString(3, fullName);
+            ps.setString(4, email);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
     private User mapUser(ResultSet rs) throws SQLException {
         User u = new User();
         u.setUserId(rs.getInt("UserId"));
