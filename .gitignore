@@ -1,0 +1,12 @@
+# Build output & compiled files
+build/
+dist/
+*.class
+
+# NetBeans local/user-specific settings
+nbproject/private/
+.nb-gradle/
+
+# OS temporary files
+Thumbs.db
+.DS_Store
