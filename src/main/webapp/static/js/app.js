@@ -1,0 +1,528 @@
+/**
+ * MathTutor 12 – app.js
+ * Vanilla JS, module pattern, khởi tạo trong DOMContentLoaded.
+ * Mọi chuỗi từ server/AI chèn vào DOM qua textContent hoặc escapeHtml().
+ */
+(function () {
+  'use strict';
+
+  /* ── Utility ── */
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function qs(sel, ctx) { return (ctx || document).querySelector(sel); }
+  function qsa(sel, ctx) { return (ctx || document).querySelectorAll(sel); }
+
+  /* ── 7.9 KaTeX render ── */
+  function renderMath(el) {
+    if (!window.renderMathInElement || !el) return;
+    renderMathInElement(el, {
+      delimiters: [
+        { left: '$$', right: '$$', display: true },
+        { left: '$',  right: '$',  display: false }
+      ],
+      throwOnError: false
+    });
+  }
+
+  /* ── CSRF + fetch có timeout (mọi lời gọi POST/PUT/DELETE tới server) ── */
+  function csrfToken() {
+    var meta = qs('meta[name="csrf-token"]');
+    return meta ? meta.getAttribute('content') : '';
+  }
+
+  /**
+   * fetch tự gắn header X-CSRF-TOKEN cho request ghi và hủy sau timeoutMs (mặc định 100 giây,
+   * trùng timeout bất đồng bộ phía server).
+   */
+  function csrfFetch(url, options) {
+    options = options || {};
+    var headers = new Headers(options.headers || {});
+    var method = (options.method || 'GET').toUpperCase();
+    if (method !== 'GET' && method !== 'HEAD') headers.set('X-CSRF-TOKEN', csrfToken());
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, options.timeoutMs || 100000);
+    var init = Object.assign({}, options, { headers: headers, signal: controller.signal });
+    delete init.timeoutMs;
+    return fetch(url, init).finally(function () { clearTimeout(timer); });
+  }
+
+  /** Bật/tắt trạng thái đang xử lý của một nút (spinner + khóa nút chống gửi trùng). */
+  function setLoading(button, loading) {
+    if (!button) return;
+    if (loading) {
+      button.dataset.label = button.dataset.label || button.innerHTML;
+      button.disabled = true;
+      button.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Đang xử lý...';
+    } else {
+      button.disabled = false;
+      if (button.dataset.label) button.innerHTML = button.dataset.label;
+    }
+  }
+
+  /** Thông báo nhỏ góc phải màn hình (type: success | danger | warning | info). */
+  function showToast(message, type) {
+    var box = qs('#toastBox');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'toastBox';
+      box.className = 'position-fixed top-0 end-0 p-3';
+      box.style.zIndex = 1080;
+      document.body.appendChild(box);
+    }
+    var el = document.createElement('div');
+    el.className = 'alert alert-' + (type || 'info') + ' shadow-sm mb-2';
+    el.textContent = message;
+    box.appendChild(el);
+    setTimeout(function () { el.remove(); }, 4000);
+  }
+
+  window.csrfFetch = csrfFetch;
+  window.renderMath = renderMath;
+  window.setLoading = setLoading;
+  window.showToast = showToast;
+
+  /* ── 7.1 Form validate + chống gửi trùng ── */
+  function initFormValidation() {
+    qsa('form.needs-validation').forEach(function (form) {
+      form.addEventListener('submit', function (e) {
+        if (!form.checkValidity()) {
+          e.preventDefault();
+          e.stopPropagation();
+        } else {
+          var btn = form.querySelector('[type="submit"]');
+          if (btn) {
+            btn.disabled = true;
+            btn.dataset.label = btn.dataset.label || btn.textContent;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Đang xử lý...';
+          }
+        }
+        form.classList.add('was-validated');
+      });
+    });
+
+    // Khôi phục nút khi bấm Back (pageshow)
+    window.addEventListener('pageshow', function (e) {
+      if (e.persisted) {
+        qsa('[type="submit"]').forEach(function (btn) {
+          btn.disabled = false;
+          if (btn.dataset.label) btn.textContent = btn.dataset.label;
+        });
+      }
+    });
+  }
+
+  /* ── 7.2 Hiện/ẩn mật khẩu ── */
+  function initPasswordToggle() {
+    qsa('[data-toggle-password]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var input = qs(btn.dataset.togglePassword);
+        if (!input) return;
+        var show = input.type === 'password';
+        input.type = show ? 'text' : 'password';
+        var icon = btn.querySelector('i');
+        if (icon) icon.className = show ? 'bi bi-eye-slash' : 'bi bi-eye';
+        btn.setAttribute('aria-label', show ? 'Ẩn mật khẩu' : 'Hiện mật khẩu');
+      });
+    });
+  }
+
+  /* ── 7.3 Confirm-modal xóa ── */
+  function initConfirmModal() {
+    var modal = qs('#confirmModal');
+    if (!modal) return;
+    var msgEl = modal.querySelector('#confirmMessage');
+    var okBtn = modal.querySelector('#confirmOkBtn');
+    var bsModal = new bootstrap.Modal(modal);
+    var targetForm = null;
+
+    qsa('[data-confirm]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        if (msgEl) msgEl.textContent = btn.dataset.confirmMessage || 'Bạn có chắc muốn thực hiện?';
+        targetForm = btn.dataset.form ? qs(btn.dataset.form) : btn.closest('form');
+        bsModal.show();
+      });
+    });
+
+    if (okBtn) {
+      okBtn.addEventListener('click', function () {
+        if (targetForm) targetForm.submit();
+        bsModal.hide();
+      });
+    }
+  }
+
+  /* ── 7.4 Tự mở modal ── */
+  function initAutoOpenModal() {
+    // Mở modal có data-open-on-load="true"
+    qsa('[data-open-on-load="true"]').forEach(function (el) {
+      var m = bootstrap.Modal.getOrCreateInstance(el);
+      m.show();
+    });
+    // Mở #addUserModal khi URL có ?add=1
+    if (window.location.search.indexOf('add=1') !== -1) {
+      var addModal = qs('#addUserModal');
+      if (addModal) bootstrap.Modal.getOrCreateInstance(addModal).show();
+    }
+  }
+
+  /* ── 7.6 Quiz điều hướng ── */
+  function initQuiz() {
+    var quizForm = qs('#quizForm');
+    if (!quizForm) return;
+
+    var cards = qsa('.question-card', quizForm);
+    var dots  = qsa('.quiz-dot');
+    var bar   = qs('#quizProgressBar');
+    var current = 0;
+
+    // Thêm class js lên html để CSS ẩn câu
+    document.documentElement.classList.add('js');
+
+    function showCard(idx) {
+      cards.forEach(function (c, i) {
+        c.style.display = i === idx ? '' : 'none';
+      });
+      dots.forEach(function (d, i) {
+        d.classList.toggle('current', i === idx);
+      });
+      current = idx;
+      updateProgress();
+      qs('#btnPrev') && (qs('#btnPrev').disabled = idx === 0);
+      qs('#btnNext') && (qs('#btnNext').style.display = idx < cards.length - 1 ? '' : 'none');
+      qs('#btnSubmit') && (qs('#btnSubmit').style.display = idx === cards.length - 1 ? '' : 'none');
+    }
+
+    function countAnswered() {
+      var cnt = 0;
+      cards.forEach(function (c) {
+        if (c.querySelector('input[type="radio"]:checked')) cnt++;
+      });
+      return cnt;
+    }
+
+    function updateProgress() {
+      if (bar) {
+        var pct = cards.length ? Math.round((countAnswered() / cards.length) * 100) : 0;
+        bar.style.width = pct + '%';
+        bar.setAttribute('aria-valuenow', pct);
+      }
+      // Cập nhật dots
+      cards.forEach(function (c, i) {
+        var dot = dots[i];
+        if (!dot) return;
+        dot.classList.toggle('answered', !!c.querySelector('input[type="radio"]:checked'));
+      });
+    }
+
+    // Lắng nghe radio
+    quizForm.addEventListener('change', function () { updateProgress(); });
+
+    // Nút Trước / Tiếp
+    var btnPrev = qs('#btnPrev');
+    var btnNext = qs('#btnNext');
+    if (btnPrev) btnPrev.addEventListener('click', function () { if (current > 0) showCard(current - 1); });
+    if (btnNext) btnNext.addEventListener('click', function () { if (current < cards.length - 1) showCard(current + 1); });
+
+    // Click dot
+    dots.forEach(function (d, i) {
+      d.addEventListener('click', function () { showCard(i); });
+    });
+
+    // Xác nhận nộp
+    var btnSubmit = qs('#btnSubmit');
+    if (btnSubmit) {
+      btnSubmit.addEventListener('click', function (e) {
+        e.preventDefault();
+        var unanswered = cards.length - countAnswered();
+        var msg = unanswered > 0
+          ? 'Bạn còn ' + unanswered + ' câu chưa trả lời. Vẫn nộp bài?'
+          : 'Xác nhận nộp bài?';
+        if (confirm(msg)) {
+          btnSubmit.disabled = true;
+          quizForm.submit();
+        }
+      });
+    }
+
+    // Chống thoát nhầm
+    window.addEventListener('beforeunload', function (e) {
+      if (countAnswered() > 0) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
+
+    showCard(0);
+  }
+
+  /* ── 7.7 Dropzone ảnh ── */
+  function initDropzone() {
+    var zone = qs('.dropzone');
+    var fileInput = zone ? zone.querySelector('input[type="file"]') : null;
+    if (!zone || !fileInput) return;
+
+    var preview = qs('#imagePreview');
+    var removeBtn = qs('#removeImageBtn');
+
+    var ALLOWED = ['image/jpeg', 'image/png', 'image/webp'];
+    var MAX_SIZE = 5 * 1024 * 1024;
+
+    function showError(msg) {
+      var err = qs('#imageError');
+      if (err) { err.textContent = msg; err.style.display = msg ? '' : 'none'; }
+      fileInput.value = '';
+      if (preview) preview.style.display = 'none';
+    }
+
+    function handleFile(file) {
+      if (!ALLOWED.includes(file.type)) { showError('Chỉ chấp nhận JPG, PNG, WEBP.'); return; }
+      if (file.size > MAX_SIZE) { showError('Ảnh phải nhỏ hơn 5MB.'); return; }
+      showError('');
+      if (preview) {
+        preview.src = URL.createObjectURL(file);
+        preview.style.display = '';
+      }
+      if (removeBtn) removeBtn.style.display = '';
+    }
+
+    zone.addEventListener('click', function () { fileInput.click(); });
+    fileInput.addEventListener('change', function () {
+      if (fileInput.files[0]) handleFile(fileInput.files[0]);
+    });
+
+    zone.addEventListener('dragover', function (e) { e.preventDefault(); zone.classList.add('dragover'); });
+    zone.addEventListener('dragleave', function () { zone.classList.remove('dragover'); });
+    zone.addEventListener('drop', function (e) {
+      e.preventDefault();
+      zone.classList.remove('dragover');
+      var file = e.dataTransfer.files[0];
+      if (file) { fileInput.files = e.dataTransfer.files; handleFile(file); }
+    });
+
+    if (removeBtn) {
+      removeBtn.addEventListener('click', function () {
+        fileInput.value = '';
+        if (preview) { URL.revokeObjectURL(preview.src); preview.style.display = 'none'; }
+        removeBtn.style.display = 'none';
+      });
+    }
+  }
+
+  /* ── 7.8 YouTube preview ── */
+  function initYoutubePreview() {
+    var input = qs('#youtubeUrl');
+    var previewWrap = qs('#youtubePreviewWrap');
+    var iframe = qs('#youtubePreview');
+    if (!input) return;
+
+    function toEmbed(url) {
+      if (!url) return null;
+      var m;
+      m = url.match(/[?&]v=([^&]+)/);       if (m) return 'https://www.youtube.com/embed/' + m[1];
+      m = url.match(/youtu\.be\/([^?]+)/);   if (m) return 'https://www.youtube.com/embed/' + m[1];
+      m = url.match(/shorts\/([^?]+)/);      if (m) return 'https://www.youtube.com/embed/' + m[1];
+      return null;
+    }
+
+    function update() {
+      var embed = toEmbed(input.value.trim());
+      if (embed) {
+        input.classList.remove('is-invalid');
+        if (iframe) iframe.src = embed;
+        if (previewWrap) previewWrap.style.display = '';
+      } else {
+        if (input.value.trim()) input.classList.add('is-invalid');
+        else input.classList.remove('is-invalid');
+        if (previewWrap) previewWrap.style.display = 'none';
+        if (iframe) iframe.src = '';
+      }
+    }
+
+    input.addEventListener('input', update);
+    update();
+  }
+
+  /* ── 7.10 MCQ/ESSAY switch ── */
+  function initQuestionTypeSwitch() {
+    var radios = qsa('[name="type"]');
+    var mcqBlock = qs('#mcqBlock');
+    if (!radios.length || !mcqBlock) return;
+
+    function toggle() {
+      var selected = qs('[name="type"]:checked');
+      var isMcq = selected && selected.value === 'MCQ';
+      mcqBlock.style.display = isMcq ? '' : 'none';
+      qsa('#mcqBlock input, #mcqBlock select', document).forEach(function (el) {
+        el.disabled = !isMcq;
+        if (!isMcq) el.removeAttribute('required');
+      });
+    }
+
+    radios.forEach(function (r) { r.addEventListener('change', toggle); });
+    toggle();
+  }
+
+  /* ── 7.11 Đếm câu AI đã chọn ── */
+  function initAiPreviewCounter() {
+    var form = qs('#aiPreviewForm');
+    if (!form) return;
+    var counter = qs('#aiSelectedCount');
+    var saveBtn = qs('#aiSaveBtn');
+
+    function update() {
+      var checked = qsa('input[name="idx"]:checked', form).length;
+      if (counter) counter.textContent = checked;
+      if (saveBtn) saveBtn.disabled = checked === 0;
+    }
+
+    form.addEventListener('change', update);
+    update();
+  }
+
+  /* ── Sidebar mobile toggle ── */
+  function initSidebarToggle() {
+    var toggleBtn = qs('#sidebarToggle');
+    var sidebar   = qs('.app-sidebar');
+    var overlay   = qs('.sidebar-overlay');
+    if (!toggleBtn || !sidebar) return;
+
+    function close() { sidebar.classList.remove('show'); if (overlay) overlay.classList.remove('show'); }
+
+    toggleBtn.addEventListener('click', function () {
+      sidebar.classList.toggle('show');
+      if (overlay) overlay.classList.toggle('show');
+    });
+
+    if (overlay) overlay.addEventListener('click', close);
+  }
+
+  /* ── KaTeX auto-render toàn trang ── */
+  function initKaTeX() {
+    renderMath(document.body);
+  }
+
+  /* ── Edit user modal (fill data-*) ── */
+  function initEditUserModal() {
+    var modal = qs('#editUserModal');
+    if (!modal) return;
+
+    qsa('[data-bs-target="#editUserModal"]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        ['userId', 'fullName', 'email', 'phone'].forEach(function (field) {
+          var el = modal.querySelector('[name="' + field + '"]');
+          if (el && btn.dataset[field] !== undefined) el.value = btn.dataset[field];
+        });
+      });
+    });
+  }
+
+  /* ── Reset password modal ── */
+  function initResetPwdModal() {
+    var modal = qs('#resetPwdModal');
+    if (!modal) return;
+
+    qsa('[data-bs-target="#resetPwdModal"]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var el = modal.querySelector('[name="userId"]');
+        if (el && btn.dataset.userId) el.value = btn.dataset.userId;
+        var nameEl = modal.querySelector('#resetPwdUserName');
+        if (nameEl && btn.dataset.fullName) nameEl.textContent = btn.dataset.fullName;
+      });
+    });
+
+    var newPw    = modal.querySelector('[name="newPassword"]');
+    var confirmPw = modal.querySelector('[name="confirmPassword"]');
+    if (newPw && confirmPw) {
+      function checkMatch() {
+        if (confirmPw.value && newPw.value !== confirmPw.value) {
+          confirmPw.setCustomValidity('Mật khẩu xác nhận không khớp.');
+        } else {
+          confirmPw.setCustomValidity('');
+        }
+      }
+      newPw.addEventListener('input', checkMatch);
+      confirmPw.addEventListener('input', checkMatch);
+    }
+  }
+
+  /* ── Topic modal (add / edit) ── */
+  function initTopicModal() {
+    var modal = qs('#topicModal');
+    if (!modal) return;
+
+    qsa('[data-action="edit-topic"]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var idEl   = modal.querySelector('[name="topicId"]');
+        var nameEl = modal.querySelector('[name="topicName"]');
+        var descEl = modal.querySelector('[name="description"]');
+        var actEl  = modal.querySelector('[name="action"]');
+        var titleEl = modal.querySelector('.modal-title');
+
+        if (idEl)   idEl.value   = btn.dataset.topicId   || '';
+        if (nameEl) nameEl.value = btn.dataset.topicName  || '';
+        if (descEl) descEl.value = btn.dataset.description || '';
+        if (actEl)  actEl.value  = 'update';
+        if (titleEl) titleEl.textContent = 'Sửa chủ đề';
+      });
+    });
+
+    // Reset khi mở để thêm mới
+    var addBtn = qs('[data-action="add-topic"]');
+    if (addBtn) {
+      addBtn.addEventListener('click', function () {
+        var f = modal.querySelector('form');
+        if (f) f.reset();
+        var idEl  = modal.querySelector('[name="topicId"]');
+        var actEl = modal.querySelector('[name="action"]');
+        var titleEl = modal.querySelector('.modal-title');
+        if (idEl)   idEl.value  = '';
+        if (actEl)  actEl.value = 'create';
+        if (titleEl) titleEl.textContent = 'Thêm chủ đề';
+      });
+    }
+  }
+
+  /* ── KaTeX preview cho textarea ── */
+  function initLatexPreview() {
+    qsa('[data-latex-preview]').forEach(function (textarea) {
+      var target = qs(textarea.dataset.latexPreview);
+      if (!target) return;
+      var timer;
+      textarea.addEventListener('input', function () {
+        clearTimeout(timer);
+        timer = setTimeout(function () {
+          target.textContent = textarea.value;
+          renderMath(target);
+        }, 300);
+      });
+    });
+  }
+
+  /* ── init ── */
+  document.addEventListener('DOMContentLoaded', function () {
+    initFormValidation();
+    initPasswordToggle();
+    initConfirmModal();
+    initAutoOpenModal();
+    initQuiz();
+    initDropzone();
+    initYoutubePreview();
+    initKaTeX();
+    initQuestionTypeSwitch();
+    initAiPreviewCounter();
+    initSidebarToggle();
+    initEditUserModal();
+    initResetPwdModal();
+    initTopicModal();
+    initLatexPreview();
+  });
+
+})();

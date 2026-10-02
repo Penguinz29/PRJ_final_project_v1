@@ -1,8 +1,8 @@
 # 🎓 EduTutor Math 12 — Nền tảng Học tập & Ôn thi Toán 12 Tích hợp AI
 
 > **Dự án Môn học:** PRJ301 (Java Web Application) — FPT University  
-> **Phiên bản:** 2.0 (Branch: `project-v2`)  
-> **Kiến trúc:** Mô hình MVC (Model - View - Controller) chuẩn với Jakarta EE 10 / Servlet 6.0  
+> **Phiên bản:** 2.1 (Branch: `project-v2`)  
+> **Kiến trúc:** Spring MVC 6.2 thuần (không Spring Boot) + Spring Data JPA / Hibernate 6.6 + HikariCP trên Jakarta EE 10 / Servlet 6.0 (Tomcat 10.1), SQL Server, Google Gemini API  
 
 ---
 
@@ -19,14 +19,17 @@
 
 | Thành phần | Công nghệ / Thư viện | Ghi chú |
 |------------|----------------------|---------|
-| **Ngôn ngữ** | Java 17 (OpenJDK 17 Temurin) | Chuẩn LTS hiện đại |
-| **Web Framework** | Jakarta Servlet 6.0, JSP, JSTL 2.0 | Chạy trên Tomcat 10.1 |
-| **Cơ sở dữ liệu** | Microsoft SQL Server 2016+ | Kết nối qua `sqljdbc42.jar` |
-| **Bảo mật** | Jakarta Filter (`AuthFilter`, `EncodingFilter`), BCrypt / SHA-256 | Phân quyền RBAC, chống SQL Injection với `PreparedStatement` |
-| **Trí tuệ nhân tạo** | Google Gemini API (`gemini-1.5-flash`, `gemini-2.0-flash`) | Gọi REST API qua Java `HttpClient` native |
-| **Giao diện (Frontend)** | HTML5, CSS3, Bootstrap 5, Bootstrap Icons | Giao diện Responsive hiện đại |
-| **Hiển thị Toán học** | KaTeX (Auto-render extension) | Hiển thị công thức toán LaTeX cực nhanh và sắc nét |
-| **IDE & Build** | NetBeans IDE 17, Apache Ant | Hỗ trợ cấu hình UTF-8 toàn diện |
+| **Ngôn ngữ** | Java 17 (build được bằng JDK 17 hoặc 21) | Chuẩn LTS |
+| **Web Framework** | **Spring MVC 6.2** (`@Controller`, `@RestController`, `@Service`, `@ControllerAdvice`), JSP + **Jakarta JSTL 3.0** (`jakarta.tags.*`) + Spring form tag | Chạy trên Tomcat 10.1 (Jakarta Servlet 6.0). Cấu hình **hoàn toàn bằng Java** (`WebAppInitializer`, `RootConfig`, `WebConfig`), không `applicationContext.xml` |
+| **Truy cập dữ liệu** | **Spring Data JPA 3.5 + Hibernate ORM 6.6** (Jakarta Persistence 3.1) + **HikariCP** | Repository là `interface extends JpaRepository`; `Specification` cho lọc động; `@EntityGraph` + truy vấn `IN` chống N+1; `@Transactional` ở tầng Service; `hbm2ddl.auto=none` (script SQL là nguồn sự thật) |
+| **Cơ sở dữ liệu** | Microsoft SQL Server 2016+ | Driver `mssql-jdbc` |
+| **Validation** | **Jakarta Bean Validation** (Hibernate Validator 8) | Thông báo tiếng Việt trong `messages.properties` (UTF-8), hiển thị tại từng trường bằng `<form:errors>`; ràng buộc nghiệp vụ ở Service; ràng buộc `UNIQUE/CHECK/FK` ở CSDL |
+| **Bảo mật** | `AuthInterceptor` phân quyền ADMIN/TEACHER/STUDENT theo URL (cả `/api/**`), `CsrfInterceptor` (token CSRF cho mọi POST), mật khẩu **BCrypt** (tự nâng cấp từ SHA-256 cũ), đổi session ID sau đăng nhập, Jsoup làm sạch nội dung AI, ảnh upload kiểm tra magic-bytes và chỉ phục vụ cho đúng người | Chống SQL Injection / XSS / CSRF / session fixation |
+| **Trí tuệ nhân tạo** | Google Gemini API qua `java.net.http.HttpClient` (model, khóa API, nhiệt độ... cấu hình trong bảng `AiConfigs`) | Sinh đề, Gia sư AI step-by-step, chấm tự luận OCR; chạy bất đồng bộ (`CompletableFuture` + thread pool riêng), tự thử lại tối đa 3 lần |
+| **Giao diện (Frontend)** | HTML5, CSS3, Bootstrap 5, Bootstrap Icons, AJAX/Fetch | Responsive |
+| **Hiển thị Toán học** | KaTeX (Auto-render) | Công thức LaTeX |
+| **Log** | SLF4J + Logback | Không log khóa API, mật khẩu |
+| **Build** | **Apache Maven** (cấu trúc chuẩn `src/main/java`, `src/main/webapp`; đóng gói `edututor.war`, context path `/edututor`) | Mở trực tiếp bằng **Apache NetBeans 17** (Maven Web Application) |
 
 ---
 
@@ -58,43 +61,37 @@
 
 ```
 PRJ_final_project_v1/
-├── src/
-│   ├── conf/                              # Kịch bản SQL Server CSDL
-│   │   ├── 01_schema.sql                  # Tạo cấu trúc bảng CSDL
-│   │   ├── 02_seed.sql                    # Dữ liệu mẫu (Users, Topics, Lessons, Questions)
-│   │   ├── 03_ai_configs.sql              # Bảng cấu hình AI Gemini
-│   │   └── 04_update_submissions.sql      # Bổ sung cột Score & AiFeedback
-│   └── java/com/mathtutor/
-│       ├── controller/                    # Tầng Servlet Điều hướng
-│       │   ├── admin/                     # Dashboard, User Toggle, AI Config...
-│       │   ├── auth/                      # Login, Logout, Register...
-│       │   ├── student/                   # Quiz, Essay, History, Lesson...
-│       │   └── teacher/                   # AI Exam Generator, Submissions Review...
-│       ├── dao/                           # Tầng Truy cập Dữ liệu (JDBC PreparedStatement)
-│       │   ├── AiConfigDAO.java
-│       │   ├── LessonDAO.java
-│       │   ├── QuestionDAO.java
-│       │   ├── SubmissionDAO.java
-│       │   ├── TopicDAO.java
-│       │   └── UserDAO.java
-│       ├── filter/                        # Bộ lọc Request
-│       │   ├── AuthFilter.java            # Kiểm soát quyền truy cập theo Role
-│       │   └── EncodingFilter.java        # Ép kiểu UTF-8
-│       ├── model/                         # Java POJO Entities
-│       ├── service/                       # Tầng Dịch vụ (Gemini AI REST Service)
-│       └── util/                          # Tiện ích: DBContext, PasswordUtil, Pager...
-├── web/
-│   ├── assets/                            # CSS, JS, hình ảnh
-│   ├── WEB-INF/
-│   │   ├── web.xml                        # Cấu hình Web Application
-│   │   └── views/                         # Giao diện JSP (Modular View)
-│   │       ├── admin/
-│   │       ├── auth/
-│   │       ├── common/                    # Navbar, Sidebar, Flash, Modal...
-│   │       ├── student/
-│   │       └── teacher/
-│   └── login.jsp
-└── README.md
+├── pom.xml                                # Maven (WAR, Spring 6.2, Spring Data JPA, Hibernate 6.6, Hikari, Jackson, Jsoup...)
+├── nb-configuration.xml                   # Gợi ý server Tomcat cho NetBeans
+├── document/                              # SRS, FRS, Claude.md (quy tắc kỹ thuật)
+│   └── sql/                               # Kịch bản SQL Server (chạy theo thứ tự)
+│       ├── 01_schema.sql                  # Tạo CSDL MathTutorDB và các bảng gốc
+│       ├── 02_seed.sql                    # Dữ liệu mẫu (mật khẩu BCrypt của 123456)
+│       ├── 03_ai_configs.sql              # Bảng cấu hình AI
+│       ├── 04_update_submissions.sql      # Cột Score & AiFeedback
+│       └── 05_tutor_and_explanation.sql   # TutorSessions, TutorMessages, Questions.ExplanationLatex
+└── src/
+    ├── main/
+    │   ├── java/com/edututor/
+    │   │   ├── config/                    # WebAppInitializer (thay web.xml), RootConfig (DataSource, JPA, Transaction, Async), WebConfig (MVC, Validator, MessageSource)
+    │   │   ├── interceptor/               # AuthInterceptor (phân quyền), CsrfInterceptor
+    │   │   ├── controller/                # @Controller trả JSP: auth/, admin/, student/, teacher/, FileController
+    │   │   │   └── api/                   # @RestController trả JSON (ApiResponse): Admin/Teacher/Student/Tutor
+    │   │   ├── service/                   # @Service: nghiệp vụ + gọi AI; map Entity -> DTO trong @Transactional; TutorPersistence (ghi DB của gia sư)
+    │   │   ├── ai/                        # GeminiClient (HTTP), AiJsonParser
+    │   │   ├── repository/                # Spring Data JPA (JpaRepository) + spec/ (Specification)
+    │   │   ├── model/                     # Entity JPA (@Entity) + enum Role, QuestionType, ...
+    │   │   ├── dto/                       # Form (Bean Validation), View, Request/Response, ApiResponse, PageResult
+    │   │   ├── exception/                 # GlobalExceptionHandler (@ControllerAdvice) + các exception nghiệp vụ
+    │   │   └── util/                      # HtmlSanitizer, Pager, ScoreUtil, YoutubeUtil, WebUtil, FormErrors
+    │   ├── resources/                     # application.properties, messages.properties (UTF-8), logback.xml
+    │   └── webapp/                        # = "Web Pages" trong NetBeans
+    │       ├── META-INF/context.xml       # Context path /edututor (NetBeans cần file này)
+    │       ├── static/                    # css/, js/ (app.js: csrfFetch, renderMath, ...)
+    │       └── WEB-INF/
+    │           ├── views/                 # JSP: admin, auth, common, error, student, teacher
+    │           └── tags/                  # Tag file dùng lại: pagination.tag, flash.tag, error-card.tag
+    └── test/java/com/edututor/            # UnitTests (chạy trong mvn package) + EduTutorIT, QueryCountIT (cần SQL Server)
 ```
 
 ---
@@ -102,37 +99,39 @@ PRJ_final_project_v1/
 ## 🚀 5. Hướng dẫn Cài đặt & Khởi chạy
 
 ### Bước 1: Chuẩn bị môi trường
-- Cài đặt **JDK 17** (Eclipse Adoptium Temurin 17 khuyên dùng).
-- Cài đặt **Apache Tomcat 10.1** (hỗ trợ Jakarta Servlet 6.0).
-- Cài đặt **SQL Server** (2016 trở lên) và kích hoạt cổng `1433`.
-- Cài đặt **NetBeans IDE 17**.
+- **JDK 17**, **Apache NetBeans 17**, **Apache Tomcat 10.1** (Jakarta Servlet 6.0), **SQL Server** (bật TCP/IP cổng `1433`).
+- Maven đi kèm NetBeans (hoặc Maven 3.9+ độc lập).
 
 ### Bước 2: Thiết lập Cơ sở Dữ liệu
-Mở SQL Server Management Studio (SSMS) và thực thi lần lượt các file script trong thư mục `src/conf/`:
-1. [01_schema.sql](file:///c:/Users/Ngô%20Diệu%20Linh/OneDrive/Desktop/PRJ301-prj/PRJ_final_project_v1/src/conf/01_schema.sql) — Tạo cơ sở dữ liệu `MathTutorDB` và các bảng.
-2. [02_seed.sql](file:///c:/Users/Ngô%20Diệu%20Linh/OneDrive/Desktop/PRJ301-prj/PRJ_final_project_v1/src/conf/02_seed.sql) — Nạp dữ liệu mẫu ban đầu.
-3. [03_ai_configs.sql](file:///c:/Users/Ngô%20Diệu%20Linh/OneDrive/Desktop/PRJ301-prj/PRJ_final_project_v1/src/conf/03_ai_configs.sql) — Nạp cấu hình AI.
-4. [04_update_submissions.sql](file:///c:/Users/Ngô%20Diệu%20Linh/OneDrive/Desktop/PRJ301-prj/PRJ_final_project_v1/src/conf/04_update_submissions.sql) — Cập nhật cấu trúc bảng chấm bài.
+Chạy lần lượt trong SSMS các file trong `document/sql/`: `01_schema.sql` -> `02_seed.sql` -> `03_ai_configs.sql` -> `04_update_submissions.sql` -> `05_tutor_and_explanation.sql`. (`01_schema.sql` **xóa và tạo lại** CSDL `MathTutorDB`.)
 
-### Bước 3: Cấu hình kết nối CSDL
-Kiểm tra thông tin tài khoản SQL Server trong file [DBContext.java](file:///c:/Users/Ngô%20Diệu%20Linh/OneDrive/Desktop/PRJ301-prj/PRJ_final_project_v1/src/java/com/mathtutor/util/DBContext.java):
-```java
-private static final String SERVER_NAME = "localhost";
-private static final String PORT_NUMBER = "1433";
-private static final String DATABASE_NAME = "MathTutorDB";
-private static final String USER_ID = "sa";
-private static final String PASSWORD = "123";
+> Nếu chạy bằng `sqlcmd`, thêm cờ `-x` (tắt thay thế biến) vì dữ liệu mẫu chứa ký tự `$(`: `sqlcmd -S localhost -U sa -P 123 -C -x -f 65001 -i 02_seed.sql`.
+
+### Bước 3: Cấu hình kết nối
+Sửa `src/main/resources/application.properties` (`db.url`, `db.username`, `db.password`) **hoặc** đặt biến môi trường / `-D` `DB_URL`, `DB_USER`, `DB_PASS` (ưu tiên cao hơn). Ảnh bài làm tự luận lưu ở `app.upload-dir` (mặc định `C:/edututor/uploads`, đổi bằng `UPLOAD_DIR`).
+
+Khóa Gemini API, model, temperature, số token **không** nằm trong file này: Admin nhập tại trang **Cấu hình AI** (lưu trong bảng `AiConfigs`, có hiệu lực ngay, không cần khởi động lại). Tên model Gemini thay đổi theo thời gian — hãy kiểm tra tên còn được hỗ trợ rồi bấm **Test Connection**.
+
+### Bước 4: Chạy trên NetBeans 17
+1. *File > Open Project* chọn thư mục dự án (nhận dạng là **Maven Web Application**).
+2. Thêm server nếu chưa có: *Services > Servers > Add Server > Apache Tomcat or TomEE*, trỏ tới thư mục **Tomcat 10.1**. Trong *Project Properties > Run* chọn server này.
+3. Bấm **Clean and Build**, rồi **Run**, mở `http://localhost:8080/edututor/login`.
+4. Khi sửa **Entity**, lớp cấu hình (`WebAppInitializer`, `RootConfig`, `WebConfig`), `pom.xml` hoặc `application.properties`: **Stop Tomcat -> Clean and Build -> Run** lại (Hibernate chỉ quét Entity lúc khởi động).
+
+Hoặc dòng lệnh: `mvn clean package` rồi chép `target/edututor.war` vào `webapps/` của Tomcat 10.1.
+
+> Trình biên dịch phải bật `-parameters` (đã cấu hình sẵn trong `pom.xml`).
+
+### Bước 5 (tùy chọn): Chạy kiểm thử
+```bash
+mvn clean package            # build WAR + 15 unit test, không cần CSDL
+# Kiểm thử tích hợp (Tomcat nhúng + SQL Server thật + Gemini giả + đếm số câu SQL chống N+1). Dùng CSDL riêng đã nạp 01..05:
+mvn clean verify -Pintegration -Dit.db.url="jdbc:sqlserver://localhost:1433;databaseName=MathTutorDB_test;encrypt=true;trustServerCertificate=true" -Dit.db.user=sa -Dit.db.pass=123
 ```
-
-### Bước 4: Mở dự án và Chạy trong NetBeans
-1. Mở **NetBeans IDE 17** -> Chọn **File** -> **Open Project** -> Chọn thư mục `PRJ_final_project_v1`.
-2. Chuột phải vào tên dự án `FINAL_prj_v1` -> Chọn **Properties** -> Mục **Run**:
-   - Server: Chọn **Apache Tomcat 10.1**.
-   - Java Platform: Chọn **JDK 17**.
-3. Chuột phải vào dự án -> Chọn **Clean and Build** (Báo `BUILD SUCCESSFUL`).
-4. Chuột phải vào dự án -> Chọn **Run** (Trình duyệt sẽ tự động mở trang đăng nhập).
+Bộ kiểm thử tích hợp **xóa bài làm, phiên gia sư và đặt lại mật khẩu seed** của CSDL được trỏ tới, vì vậy đừng chạy trên dữ liệu thật.
 
 ---
+
 
 ## 🔑 6. Tài khoản Thử nghiệm (Demo Accounts)
 
@@ -148,9 +147,11 @@ Tất cả các tài khoản mặc định có mật khẩu là: **`123456`**
 
 ---
 
-## ⚙️ 7. Lưu ý Kỹ thuật quan trọng (Encoding & Ant Build)
-- Do đường dẫn thư mục người dùng trên Windows có thể chứa dấu Tiếng Việt (`Ngô Diệu Linh`), hệ thống đã được tối ưu hóa toàn diện với thiết lập:
-  - `ANT_OPTS = -Dfile.encoding=UTF-8`
-  - `JAVA_TOOL_OPTIONS = -Dfile.encoding=UTF-8`
-  - `netbeans.conf` trỏ trực tiếp đến JDK 17 (`netbeans_jdkhome="C:\Program Files\Eclipse Adoptium\jdk-17.0.20.101-hotspot"`).
-- Đảm bảo biên dịch và đóng gói `.war` mượt mà 100% không gặp lỗi xung đột bảng mã ký tự.
+## ⚙️ 7. Lưu ý Kỹ thuật quan trọng
+- **Mật khẩu:** tài khoản seed dùng BCrypt (`123456`). Tài khoản cũ còn băm SHA-256 vẫn đăng nhập được và tự được băm lại bằng BCrypt ở lần đăng nhập thành công đầu tiên.
+- **Tầng dữ liệu:** Entity JPA ánh xạ **1-1 với 9 bảng hiện có** (không đổi cấu trúc CSDL). Mọi quan hệ `LAZY`; Service map Entity sang DTO bên trong `@Transactional`; không bật Open-Session-In-View; câu hỏi làm bài chỉ chọn cột được phép (không lộ đáp án/lời giải trước khi nộp).
+- **Giao dịch & AI:** các lời gọi Gemini nằm **ngoài** transaction; phần ghi DB của gia sư AI nằm ở bean riêng `TutorPersistence`. Các endpoint `/api/tutor/next-step`, `/api/teacher/generate-questions`, `/api/student/submit-essay-ocr`, `/api/admin/ai-config/test-connection` trả `CompletableFuture`, chạy trên thread pool `aiExecutor` nên không chặn luồng Tomcat.
+- **Phản hồi API thống nhất:** mọi `/api/**` trả `{"success", "message", "data", "errors"}`; `GlobalExceptionHandler` ánh xạ lỗi sang mã HTTP (400 dữ liệu sai, 401, 403, 404, 409 xung đột, 422 AI trả dữ liệu không dùng được, 502/503/504 lỗi AI, 500 kèm mã tham chiếu `ERR-yyyyMMdd-xxxx`) và chuyển về trang trước kèm thông báo cho trang thường.
+- **CSRF:** mọi form POST có trường ẩn `_csrf`; `fetch` dùng `csrfFetch()` (header `X-CSRF-TOKEN` lấy từ `<meta name="csrf-token">`). Đăng xuất là `POST /logout`.
+- **Cấu hình bằng Java, không cần `web.xml`** (tệp `WEB-INF/web.xml` còn sót chỉ lặp lại cấu hình session/trang lỗi và có thể xóa): `WebAppInitializer` đăng ký DispatcherServlet, UTF-8 filter, multipart, session timeout 30 phút, cookie `HttpOnly` + `SameSite=Lax`. Trang lỗi nằm ở `WEB-INF/views/error/`.
+- **Phiên bản trước (Servlet thuần, JDBC thủ công; rồi JdbcTemplate)** đã được thay thế hoàn toàn; không còn `DBContext`, `*DAO`, `JdbcTemplate`, `@WebServlet`, `build.xml`/`nbproject` (Ant).

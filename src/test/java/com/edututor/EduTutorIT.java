@@ -1,0 +1,1140 @@
+package com.edututor;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpServer;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.net.CookieManager;
+import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import org.apache.catalina.Context;
+import org.apache.catalina.startup.Tomcat;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
+
+/**
+ * Kiểm thử tích hợp end-to-end (tên *IT: không chạy trong {@code mvn package}): Tomcat nhúng + toàn bộ Spring MVC +
+ * Spring Data JPA/Hibernate + SQL Server thật + Gemini giả (mock HTTP).
+ * Cần CSDL đã nạp document/sql/01..05; chạy riêng:
+ * <pre>
+ * mvn verify -Pintegration -Dit.db.url="jdbc:sqlserver://localhost:1433;databaseName=MathTutorDB_verify;encrypt=true;trustServerCertificate=true"
+ *            -Dit.db.user=sa -Dit.db.pass=123
+ * </pre>
+ * Lưu ý: bài kiểm thử XÓA bài làm / phiên gia sư trong CSDL được trỏ tới.
+ */
+@EnabledIfSystemProperty(named = "it.db.url", matches = ".+")
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+class EduTutorIT {
+
+    // ---------------------------------------------------------------- hạ tầng
+
+    record Resp(int status, String body, String location, String contentType) {
+        boolean has(String s) {
+            return body != null && body.contains(s);
+        }
+    }
+
+    static final ObjectMapper JSON = new ObjectMapper();
+    static Tomcat tomcat;
+    static String base;
+    static HttpServer gemini;
+    static Path uploadDir;
+    static final Deque<String[]> script = new ArrayDeque<>(); // {status, text}
+    static volatile String lastRequestBody = "";
+    static volatile String lastApiKey = "";
+    static volatile String lastUri = "";
+    static volatile int geminiCalls = 0;
+
+    static final java.util.regex.Pattern CSRF_META =
+            java.util.regex.Pattern.compile("name=\"csrf-token\" content=\"([0-9a-f]{64})\"");
+    static final java.util.regex.Pattern CSRF_INPUT =
+            java.util.regex.Pattern.compile("name=\"_csrf\" value=\"([0-9a-f]{64})\"");
+
+    static class Client {
+        final HttpClient http = HttpClient.newBuilder().cookieHandler(new CookieManager())
+                .followRedirects(HttpClient.Redirect.NEVER).build();
+        /** Mã CSRF hiện hành của phiên (lấy từ trang HTML gần nhất). */
+        String csrf;
+        /** Đặt true để cố ý gửi request KHÔNG kèm mã CSRF (TC-SEC-06). */
+        boolean omitCsrf;
+
+        Resp send(HttpRequest.Builder b) throws Exception {
+            HttpResponse<String> r = http.send(b.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            String body = r.body();
+            if (body != null && r.headers().firstValue("Content-Type").orElse("").contains("text/html")) {
+                java.util.regex.Matcher m = CSRF_META.matcher(body);
+                if (m.find()) {
+                    csrf = m.group(1);
+                } else if ((m = CSRF_INPUT.matcher(body)).find()) {
+                    csrf = m.group(1);
+                }
+            }
+            return new Resp(r.statusCode(), body, r.headers().firstValue("Location").orElse(null),
+                    r.headers().firstValue("Content-Type").orElse(""));
+        }
+
+        /** Đảm bảo đã có mã CSRF: tải trang đăng nhập nếu chưa có. */
+        void ensureCsrf() throws Exception {
+            if (csrf == null) {
+                get("/login");
+            }
+        }
+
+        HttpRequest.Builder withCsrf(HttpRequest.Builder b) throws Exception {
+            if (!omitCsrf) {
+                ensureCsrf();
+                if (csrf != null) {
+                    b.header("X-CSRF-TOKEN", csrf);
+                }
+            }
+            return b;
+        }
+
+        Resp get(String path) throws Exception {
+            return send(HttpRequest.newBuilder(URI.create(base + path)).GET());
+        }
+
+        Resp getAjax(String path) throws Exception {
+            return send(HttpRequest.newBuilder(URI.create(base + path)).header("Accept", "application/json").GET());
+        }
+
+        Resp form(String path, Map<String, String> params) throws Exception {
+            params = new LinkedHashMap<>(params);
+            if (!omitCsrf) {
+                ensureCsrf();
+                if (csrf != null) {
+                    params.put("_csrf", csrf);
+                }
+            }
+            StringBuilder sb = new StringBuilder();
+            params.forEach((k, v) -> {
+                if (sb.length() > 0) {
+                    sb.append('&');
+                }
+                sb.append(URLEncoder.encode(k, StandardCharsets.UTF_8)).append('=')
+                        .append(URLEncoder.encode(v, StandardCharsets.UTF_8));
+            });
+            return send(HttpRequest.newBuilder(URI.create(base + path))
+                    .header("Content-Type", "application/x-www-form-urlencoded")
+                    .POST(HttpRequest.BodyPublishers.ofString(sb.toString())));
+        }
+
+        Resp json(String path, String body) throws Exception {
+            return send(withCsrf(HttpRequest.newBuilder(URI.create(base + path))
+                    .header("Content-Type", "application/json").header("Accept", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))));
+        }
+
+        Resp multipart(String path, Map<String, String> fields, String fileField, String fileName, String mime,
+                       byte[] file) throws Exception {
+            String boundary = "----b" + UUID.randomUUID();
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            for (Map.Entry<String, String> e : fields.entrySet()) {
+                out.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + e.getKey()
+                        + "\"\r\n\r\n" + e.getValue() + "\r\n").getBytes(StandardCharsets.UTF_8));
+            }
+            if (file != null) {
+                out.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + fileField
+                        + "\"; filename=\"" + fileName + "\"\r\nContent-Type: " + mime + "\r\n\r\n")
+                        .getBytes(StandardCharsets.UTF_8));
+                out.write(file);
+                out.write("\r\n".getBytes(StandardCharsets.UTF_8));
+            }
+            out.write(("--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
+            return send(withCsrf(HttpRequest.newBuilder(URI.create(base + path))
+                    .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                    .header("Accept", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofByteArray(out.toByteArray()))));
+        }
+
+        Resp login(String user, String pass) throws Exception {
+            Resp r = form("/login", Map.of("username", user, "password", pass));
+            if (r.status() == 302 && r.location() != null) {
+                // Sau đăng nhập server cấp session ID + mã CSRF mới: tải trang đích để lấy mã mới
+                get(r.location().substring(r.location().indexOf("/edututor") + "/edututor".length()));
+            }
+            return r;
+        }
+    }
+
+    static Connection db() throws Exception {
+        return DriverManager.getConnection(System.getProperty("it.db.url"),
+                System.getProperty("it.db.user", "sa"), System.getProperty("it.db.pass", "123"));
+    }
+
+    static Object scalar(String sql, Object... args) throws Exception {
+        try (Connection c = db(); PreparedStatement ps = c.prepareStatement(sql)) {
+            for (int i = 0; i < args.length; i++) {
+                ps.setObject(i + 1, args[i]);
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getObject(1) : null;
+            }
+        }
+    }
+
+    static int count(String sql, Object... args) throws Exception {
+        Object o = scalar(sql, args);
+        return o == null ? 0 : ((Number) o).intValue();
+    }
+
+    static void exec(String sql, Object... args) throws Exception {
+        try (Connection c = db(); PreparedStatement ps = c.prepareStatement(sql)) {
+            for (int i = 0; i < args.length; i++) {
+                ps.setObject(i + 1, args[i]);
+            }
+            ps.executeUpdate();
+        }
+    }
+
+    static String envelope(String text) throws Exception {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("candidates", java.util.List.of(Map.of("content", Map.of("parts", java.util.List.of(Map.of("text", text))))));
+        return JSON.writeValueAsString(m);
+    }
+
+    static final String EXAM_JSON = "[{\"content\":\"Tính $\\\\int_0^1 x\\\\,dx$\",\"level\":1,\"explanation\":\"$=1/2$\","
+            + "\"options\":[{\"letter\":\"B\",\"content\":\"$1/2$\",\"isCorrect\":true},"
+            + "{\"letter\":\"A\",\"content\":\"$1$\",\"isCorrect\":false},"
+            + "{\"letter\":\"C\",\"content\":\"$2$\",\"isCorrect\":false},"
+            + "{\"letter\":\"D\",\"content\":\"$0$\",\"isCorrect\":false}]},"
+            + "{\"content\":\"Cho $a<b$ thì ...\",\"level\":3,\"explanation\":\"e\","
+            + "\"options\":[{\"letter\":\"A\",\"content\":\"x\",\"isCorrect\":true},{\"letter\":\"B\",\"content\":\"y\","
+            + "\"isCorrect\":false},{\"letter\":\"C\",\"content\":\"z\",\"isCorrect\":false},{\"letter\":\"D\","
+            + "\"content\":\"w\",\"isCorrect\":false}]}]";
+
+    static String tutorJson(boolean correct, int step, int total, boolean done) {
+        return "{\"isStepCorrect\":" + correct + ",\"currentStep\":" + step + ",\"totalSteps\":" + total
+                + ",\"feedbackToStudent\":\"Nhận xét bước\",\"nextPromptOrQuestion\":\"Câu hỏi bước " + step
+                + " $x^2$\",\"isSessionCompleted\":" + done + "}";
+    }
+
+    static final byte[] PNG = java.util.Base64.getDecoder().decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==");
+
+    @BeforeAll
+    static void startAll() throws Exception {
+        uploadDir = Files.createTempDirectory("edututor-uploads");
+        if (System.getProperty("it.debug") != null) {
+            java.util.logging.Logger l = java.util.logging.Logger.getLogger("org.springframework.web");
+            l.setLevel(java.util.logging.Level.FINE);
+            java.util.logging.ConsoleHandler h = new java.util.logging.ConsoleHandler();
+            h.setLevel(java.util.logging.Level.FINE);
+            l.addHandler(h);
+        }
+
+        gemini = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        gemini.createContext("/v1beta/models/", ex -> {
+            byte[] in = ex.getRequestBody().readAllBytes();
+            lastRequestBody = new String(in, StandardCharsets.UTF_8);
+            lastApiKey = ex.getRequestHeaders().getFirst("x-goog-api-key");
+            lastUri = ex.getRequestURI().toString();
+            geminiCalls++;
+            int status = 200;
+            String text;
+            String[] scripted;
+            synchronized (script) {
+                scripted = script.poll();
+            }
+            try {
+                if (scripted != null) {
+                    status = Integer.parseInt(scripted[0]);
+                    text = scripted[1];
+                } else {
+                    JsonNode req = JSON.readTree(lastRequestBody);
+                    String sys = req.path("system_instruction").path("parts").path(0).path("text").asText("");
+                    if (sys.isEmpty()) {
+                        text = "Pong";
+                    } else if (sys.contains("giám khảo")) {
+                        text = "{\"extractedText\":\"$y=x^2$\",\"score\":7.4,\"detailedFeedback\":\"Sai dấu ở dòng 2\","
+                                + "\"suggestedCorrection\":\"$x=1$\"}";
+                    } else if (sys.contains("từng bước")) {
+                        text = tutorJson(true, 1, 3, false);
+                    } else {
+                        text = EXAM_JSON;
+                    }
+                }
+                byte[] out = (status == 200 ? envelope(text) : "{\"error\":{\"message\":\"" + text + "\"}}")
+                        .getBytes(StandardCharsets.UTF_8);
+                ex.getResponseHeaders().add("Content-Type", "application/json");
+                ex.sendResponseHeaders(status, out.length);
+                ex.getResponseBody().write(out);
+            } catch (Exception e) {
+                ex.sendResponseHeaders(500, -1);
+            } finally {
+                ex.close();
+            }
+        });
+        gemini.start();
+
+        System.setProperty("DB_URL", System.getProperty("it.db.url"));
+        System.setProperty("DB_USER", System.getProperty("it.db.user", "sa"));
+        System.setProperty("DB_PASS", System.getProperty("it.db.pass", "123"));
+        System.setProperty("UPLOAD_DIR", uploadDir.toString());
+        System.setProperty("gemini.baseUrl", "http://127.0.0.1:" + gemini.getAddress().getPort() + "/v1beta");
+
+        tomcat = new Tomcat();
+        tomcat.setBaseDir(Files.createTempDirectory("tomcat").toString());
+        tomcat.setPort(0);
+        tomcat.getConnector();
+        Context ctx = tomcat.addWebapp("/edututor", new File("src/main/webapp").getAbsolutePath());
+        ctx.setParentClassLoader(EduTutorIT.class.getClassLoader());
+        // Tomcat nhúng gắn sẵn DefaultServlet vào "/"; gỡ ra để DispatcherServlet của Spring nhận "/" như khi chạy Tomcat thật
+        ctx.removeServletMapping("/");
+        tomcat.start();
+        base = "http://127.0.0.1:" + tomcat.getConnector().getLocalPort() + "/edututor";
+
+        // dọn dữ liệu của các lần chạy trước
+        resetDatabase();
+    }
+
+    /** Đưa CSDL về trạng thái seed để chạy lại được nhiều lần. */
+    static void resetDatabase() throws Exception {
+        exec("DELETE FROM TutorMessages");
+        exec("DELETE FROM TutorSessions");
+        exec("DELETE FROM Submissions");
+        exec("DELETE FROM Questions WHERE Content LIKE N'it[_]%'");
+        exec("DELETE FROM Lessons WHERE Title LIKE N'it[_]%'");
+        exec("DELETE FROM Topics WHERE TopicName LIKE N'it[_]%'");
+        exec("DELETE FROM Users WHERE Username LIKE 'it[_]%'");
+        exec("UPDATE Questions SET ExplanationLatex = NULL");
+        // mật khẩu seed '123456' dạng SHA-256 và tài khoản đang hoạt động
+        exec("UPDATE Users SET PasswordHash = '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92', "
+                + "IsActive = 1");
+        exec("UPDATE AiConfigs SET ConfigValue = 'test-key-123', UpdatedBy = NULL WHERE ConfigKey = 'GEMINI_API_KEY'");
+        exec("UPDATE AiConfigs SET ConfigValue = 'gemini-1.5-flash' WHERE ConfigKey = 'DEFAULT_MODEL'");
+        exec("UPDATE AiConfigs SET ConfigValue = 'gemini-1.5-pro' WHERE ConfigKey = 'VISION_MODEL'");
+        exec("UPDATE AiConfigs SET ConfigValue = '0.2' WHERE ConfigKey = 'TUTOR_TEMPERATURE'");
+        exec("UPDATE AiConfigs SET ConfigValue = '2048' WHERE ConfigKey = 'MAX_OUTPUT_TOKENS'");
+    }
+
+    @AfterAll
+    static void stopAll() throws Exception {
+        if (tomcat != null) {
+            tomcat.stop();
+            tomcat.destroy();
+        }
+        if (gemini != null) {
+            gemini.stop(0);
+        }
+    }
+
+    // ---------------------------------------------------------------- AUTH
+
+    @Test
+    @Order(1)
+    void anonymousIsRedirectedAndLoginPageRenders() throws Exception {
+        Client c = new Client();
+        Resp root = c.get("/");
+        assertEquals(302, root.status());
+        assertTrue(root.location().contains("/login"), root.location());
+
+        Resp login = c.get("/login");
+        assertEquals(200, login.status());
+        assertTrue(login.has("Đăng nhập"));
+
+        assertEquals(302, c.get("/student/dashboard").status());
+        assertEquals(302, c.get("/teacher/questions").status());
+        Resp api = c.json("/api/tutor/next-step", "{}");
+        assertEquals(401, api.status());
+        assertTrue(api.has("\"success\":false"));
+        // URL không ánh xạ tới controller nào luôn là 404
+        assertEquals(404, c.get("/khong-ton-tai").status());
+        // tài nguyên tĩnh công khai
+        assertEquals(200, c.get("/static/css/style.css").status());
+        // TC-SEC-06: POST không có mã CSRF -> 403
+        Client noToken = new Client();
+        noToken.omitCsrf = true;
+        assertEquals(403, noToken.form("/login", Map.of("username", "student1", "password", "123456")).status());
+    }
+
+    @Test
+    @Order(2)
+    void loginUpgradesLegacySha256ToBcryptAndRejectsBadPassword() throws Exception {
+        Client c = new Client();
+        Resp bad = c.login("student1", "sai-mat-khau");
+        assertEquals(200, bad.status(), bad.location() + " " + bad.body());
+        assertTrue(bad.has("sai"));
+
+        String before = (String) scalar("SELECT PasswordHash FROM Users WHERE Username = 'student1'");
+        assertFalse(before.startsWith("$2"), "seed vẫn là SHA-256");
+
+        Resp ok = c.login("student1", "123456");
+        assertEquals(302, ok.status());
+        assertTrue(ok.location().contains("/student/dashboard"), ok.location());
+        String after = (String) scalar("SELECT PasswordHash FROM Users WHERE Username = 'student1'");
+        assertTrue(after.startsWith("$2"), "đã nâng cấp BCrypt");
+
+        Client again = new Client();
+        assertEquals(302, again.login("student1", "123456").status());
+        assertEquals(200, c.get("/student/dashboard").status());
+
+        // đăng xuất
+        assertEquals(302, c.form("/logout", Map.of()).status());
+        assertEquals(302, c.get("/student/dashboard").status());
+
+        assertTrue(new Client().login("admin", "123456").location().contains("/admin/dashboard"));
+        assertTrue(new Client().login("teacher1", "123456").location().contains("/teacher/dashboard"));
+    }
+
+    @Test
+    @Order(3)
+    void registerValidatesAndCreatesStudent() throws Exception {
+        Client c = new Client();
+        Resp registerPage = c.get("/register");
+        assertTrue(registerPage.has("Đăng ký"));
+        assertTrue(registerPage.has("name=\"_csrf\""), "form đăng ký có trường CSRF");
+        assertTrue(registerPage.has("novalidate"), "thuộc tính HTML5 truyền qua <form:form>");
+        assertTrue(registerPage.has("type=\"email\""));
+        assertFalse(registerPage.has("name=\"role\""), "form đăng ký không có trường role");
+        Map<String, String> p = new LinkedHashMap<>();
+        p.put("username", "it_user1");
+        p.put("password", "abc12345");
+        p.put("confirmPassword", "khac");
+        p.put("fullName", "Người Dùng Thử");
+        p.put("email", "it_user1@example.com");
+        Resp r1 = c.form("/register", p);
+        assertEquals(200, r1.status());
+        assertTrue(r1.has("không khớp"));
+
+        p.put("confirmPassword", "abc12345");
+        p.put("email", "khong-hop-le");
+        assertTrue(c.form("/register", p).has("không đúng định dạng"));
+
+        // TC-VAL-01: lỗi tiếng Việt tại từng trường, không ghi CSDL
+        int usersBefore = count("SELECT COUNT(*) FROM Users");
+        Map<String, String> weak = new LinkedHashMap<>();
+        weak.put("username", "ab");
+        weak.put("password", "123");
+        weak.put("confirmPassword", "123");
+        weak.put("fullName", "Người Dùng Thử");
+        weak.put("email", "it_weak@example.com");
+        Resp rv = c.form("/register", weak);
+        assertEquals(200, rv.status());
+        assertTrue(rv.has("Tên đăng nhập phải từ 4-30 ký tự"), rv.body());
+        assertTrue(rv.has("Mật khẩu phải từ 8 đến 64 ký tự"), rv.body());
+        assertEquals(usersBefore, count("SELECT COUNT(*) FROM Users"));
+
+        p.put("email", "it_user1@example.com");
+        p.put("username", "student1"); // trùng
+        assertTrue(c.form("/register", p).has("đã được sử dụng"));
+
+        p.put("username", "it_user1");
+        Resp ok = c.form("/register", p);
+        assertEquals(302, ok.status());
+        assertTrue(ok.location().contains("/login"));
+        assertTrue(c.get("/login").has("Đăng ký thành công"), "flash message hiển thị trên trang login");
+
+        assertEquals("STUDENT", scalar("SELECT [Role] FROM Users WHERE Username = 'it_user1'"));
+        // TC-VAL-02: role do client gửi bị bỏ qua
+        Map<String, String> evil = new LinkedHashMap<>(p);
+        evil.put("username", "it_user3");
+        evil.put("email", "it_user3@example.com");
+        evil.put("role", "ADMIN");
+        assertEquals(302, c.form("/register", evil).status());
+        assertEquals("STUDENT", scalar("SELECT [Role] FROM Users WHERE Username = 'it_user3'"));
+        String hash = (String) scalar("SELECT PasswordHash FROM Users WHERE Username = 'it_user1'");
+        assertTrue(hash.startsWith("$2"));
+
+        p.put("username", "it_user2"); // email trùng
+        assertTrue(c.form("/register", p).has("Email đã được đăng ký"));
+
+        assertEquals(302, new Client().login("it_user1", "abc12345").status());
+    }
+
+    // ---------------------------------------------------------------- STUDENT
+
+    @Test
+    @Order(10)
+    void studentPagesRender() throws Exception {
+        Client c = new Client();
+        c.login("student1", "123456");
+        for (String path : new String[]{"/student/dashboard", "/student/topics", "/student/lesson?id=1",
+                "/student/quiz?lessonId=1", "/student/essay?lessonId=2", "/student/history", "/student/ai-tutor"}) {
+            Resp r = c.get(path);
+            assertEquals(200, r.status(), path + " -> " + r.body());
+        }
+        assertTrue(c.get("/student/quiz?lessonId=1").has("name=\"question_1\""));
+        assertTrue(c.get("/student/essay?lessonId=2").has("essayForm"));
+        // trang không tồn tại / id sai chuyển về danh sách
+        assertEquals(302, c.get("/student/lesson?id=9999").status());
+        assertEquals(404, c.get("/khong-ton-tai").status());
+        // học sinh không vào được khu vực Admin / Teacher
+        assertEquals(403, c.get("/admin/dashboard").status());
+        assertEquals(403, c.get("/teacher/questions").status());
+        assertEquals(403, c.json("/api/teacher/generate-questions", "{}").status());
+    }
+
+    @Test
+    @Order(11)
+    void quizFormSubmissionGradesAndSaves() throws Exception {
+        Client c = new Client();
+        c.login("student2", "123456");
+        int before = count("SELECT COUNT(*) FROM Submissions WHERE StudentId = 5");
+        Resp r = c.form("/student/quizSubmit", Map.of("lessonId", "1", "question_1", "A", "question_2", "C"));
+        assertEquals(200, r.status(), r.body());
+        assertTrue(r.has("1/2"), "đúng 1/2 câu");
+        assertEquals(before + 2, count("SELECT COUNT(*) FROM Submissions WHERE StudentId = 5"));
+        assertEquals(1, count("SELECT COUNT(*) FROM Submissions WHERE StudentId = 5 AND QuestionId = 1 AND IsCorrect = 1"));
+        // lịch sử hiển thị
+        Resp h = c.get("/student/history?type=MCQ");
+        assertEquals(200, h.status());
+        assertTrue(h.has("Đúng"));
+    }
+
+    @Test
+    @Order(12)
+    void quizAnswerApiReturnsExplanation() throws Exception {
+        exec("UPDATE Questions SET ExplanationLatex = N'Lời giải $y''=3x^2-3$' WHERE QuestionId = 1");
+        Client c = new Client();
+        c.login("student3", "123456");
+        // TC-SEC-08: trang làm bài không chứa lời giải / cờ đúng-sai (BR-11)
+        Resp quizPage = c.get("/student/quiz?lessonId=1");
+        assertFalse(quizPage.has("Lời giải"), "chưa nộp thì không có lời giải");
+        assertFalse(quizPage.has("IsCorrect"));
+        Resp wrong = c.json("/api/student/submit-quiz-answer", "{\"questionId\":1,\"selectedOptionId\":2}");
+        assertEquals(200, wrong.status(), wrong.body());
+        JsonNode j = JSON.readTree(wrong.body());
+        assertTrue(j.get("success").asBoolean());
+        j = j.get("data");
+        assertFalse(j.get("isCorrect").asBoolean());
+        assertEquals("A", j.get("correctOptionLabel").asText());
+        assertTrue(j.get("explanationLatex").asText().contains("Lời giải"));
+        assertEquals(0.0, j.get("score").asDouble());
+
+        Resp right = c.json("/api/student/submit-quiz-answer", "{\"questionId\":1,\"selectedOptionId\":1}");
+        assertTrue(JSON.readTree(right.body()).get("data").get("isCorrect").asBoolean());
+        assertEquals(10.0, JSON.readTree(right.body()).get("data").get("score").asDouble(), "đúng = 10 điểm (BR-07)");
+        assertEquals(2, count("SELECT COUNT(*) FROM Submissions WHERE StudentId = 6 AND QuestionId = 1"));
+
+        Resp mismatch = c.json("/api/student/submit-quiz-answer", "{\"questionId\":1,\"selectedOptionId\":5}");
+        assertEquals(400, mismatch.status());
+        assertTrue(JSON.readTree(mismatch.body()).get("message").asText().contains("không thuộc"));
+        assertEquals(400, c.json("/api/student/submit-quiz-answer", "{\"questionId\":1}").status());
+        assertEquals(400, c.json("/api/student/submit-quiz-answer", "{\"questionId\":999,\"selectedOptionId\":1}").status());
+        // câu tự luận không chấm bằng API trắc nghiệm
+        assertEquals(400, c.json("/api/student/submit-quiz-answer", "{\"questionId\":3,\"selectedOptionId\":1}").status());
+    }
+
+    @Test
+    @Order(19)
+    void missingApiKeyGivesFriendlyErrorWithoutCallingGemini() throws Exception {
+        exec("UPDATE AiConfigs SET ConfigValue = '' WHERE ConfigKey = 'GEMINI_API_KEY'");
+        try {
+            Client c = new Client();
+            c.login("student1", "123456");
+            int before = geminiCalls;
+            Resp r = c.json("/api/tutor/next-step", "{\"studentInput\":\"bài toán\"}");
+            assertEquals(502, r.status(), r.body());
+            assertTrue(JSON.readTree(r.body()).get("message").asText().contains("GEMINI_API_KEY"));
+            assertEquals(before, geminiCalls, "không gọi Gemini khi chưa có key");
+        } finally {
+            exec("UPDATE AiConfigs SET ConfigValue = 'test-key-123' WHERE ConfigKey = 'GEMINI_API_KEY'");
+        }
+    }
+
+    @Test
+    @Order(20)
+    void tutorWalksThroughStepsAndEnforcesPedagogy() throws Exception {
+        Client c = new Client();
+        c.login("student1", "123456");
+        script.clear();
+        // Lượt 1: AI "lỡ" trả completed=true ngay từ đầu -> bị từ chối, retry lấy bản hợp lệ
+        script.add(new String[]{"200", tutorJson(true, 1, 3, true)});
+        script.add(new String[]{"200", tutorJson(true, 1, 3, false)});
+        int callsBefore = geminiCalls;
+        Resp r1 = c.json("/api/tutor/next-step",
+                "{\"sessionId\":null,\"lessonId\":1,\"studentInput\":\"Tính $\\\\int_0^1 x\\\\,dx$\",\"currentStep\":0}");
+        assertEquals(200, r1.status(), r1.body());
+        assertEquals(2, geminiCalls - callsBefore, "retry khi AI vi phạm quy tắc");
+        JsonNode j1 = JSON.readTree(r1.body()).get("data");
+        int sid = j1.get("sessionId").asInt();
+        assertEquals(1, j1.get("currentStep").asInt());
+        assertFalse(j1.get("isSessionCompleted").asBoolean());
+        assertEquals(2, count("SELECT COUNT(*) FROM TutorMessages WHERE SessionId = ?", sid));
+        assertEquals("ACTIVE", scalar("SELECT [Status] FROM TutorSessions WHERE SessionId = ?", sid));
+        assertTrue(lastApiKey == null || lastApiKey.isEmpty() || !lastUri.contains("key="), "API key không nằm trên URL");
+
+        // Lượt 2: trả lời SAI, AI cố nhảy sang bước 3 -> server giữ nguyên bước 1
+        script.add(new String[]{"200", tutorJson(false, 3, 3, false)});
+        Resp r2 = c.json("/api/tutor/next-step", "{\"sessionId\":" + sid + ",\"studentInput\":\"sai\",\"currentStep\":1}");
+        JsonNode j2 = JSON.readTree(r2.body()).get("data");
+        assertFalse(j2.get("isStepCorrect").asBoolean());
+        assertEquals(1, j2.get("currentStep").asInt());
+        // lịch sử được nạp làm ngữ cảnh cho Gemini (3 lượt trước + lượt mới)
+        assertTrue(JSON.readTree(lastRequestBody).get("contents").size() >= 3);
+
+        // Lượt 3: đúng -> bước 2
+        script.add(new String[]{"200", tutorJson(true, 2, 3, false)});
+        JsonNode j3 = JSON.readTree(c.json("/api/tutor/next-step",
+                "{\"sessionId\":" + sid + ",\"studentInput\":\"đúng 1\",\"currentStep\":1}").body()).get("data");
+        assertEquals(2, j3.get("currentStep").asInt());
+
+        // Lượt 4: đúng -> bước 3; Lượt 5: đúng bước cuối -> hoàn thành
+        script.add(new String[]{"200", tutorJson(true, 3, 3, false)});
+        assertEquals(3, JSON.readTree(c.json("/api/tutor/next-step",
+                "{\"sessionId\":" + sid + ",\"studentInput\":\"đúng 2\",\"currentStep\":2}").body()).get("data").get("currentStep").asInt());
+        script.add(new String[]{"200", tutorJson(true, 3, 3, true)});
+        JsonNode j5 = JSON.readTree(c.json("/api/tutor/next-step",
+                "{\"sessionId\":" + sid + ",\"studentInput\":\"đúng 3\",\"currentStep\":3}").body()).get("data");
+        assertTrue(j5.get("isSessionCompleted").asBoolean());
+        assertEquals("COMPLETED", scalar("SELECT [Status] FROM TutorSessions WHERE SessionId = ?", sid));
+        assertEquals(10, count("SELECT COUNT(*) FROM TutorMessages WHERE SessionId = ?", sid));
+
+        // phiên đã kết thúc -> 409
+        Resp r6 = c.json("/api/tutor/next-step", "{\"sessionId\":" + sid + ",\"studentInput\":\"nữa\",\"currentStep\":3}");
+        assertEquals(409, r6.status());
+
+        // xem lại phiên cũ trên trang
+        Resp page = c.get("/student/ai-tutor?sessionId=" + sid);
+        assertEquals(200, page.status());
+        assertTrue(page.has("Nhận xét bước"));
+
+        // TC-SEC-07 / BR-14: học sinh khác không truy cập được phiên này -> 403
+        Client other = new Client();
+        other.login("student2", "123456");
+        assertEquals(403, other.json("/api/tutor/next-step",
+                "{\"sessionId\":" + sid + ",\"studentInput\":\"x\",\"currentStep\":1}").status());
+        assertEquals(403, other.get("/student/ai-tutor?sessionId=" + sid).status());
+        // input rỗng
+        assertEquals(400, c.json("/api/tutor/next-step", "{\"studentInput\":\"  \"}").status());
+    }
+
+    @Test
+    @Order(21)
+    void tutorFirstTurnFailureLeavesNoSession() throws Exception {
+        Client c = new Client();
+        c.login("student1", "123456");
+        script.clear();
+        for (int i = 0; i < 3; i++) {
+            script.add(new String[]{"200", "khong phai json"});
+        }
+        int sessionsBefore = count("SELECT COUNT(*) FROM TutorSessions WHERE StudentId = 4");
+        Resp r = c.json("/api/tutor/next-step", "{\"studentInput\":\"bài toán\"}");
+        assertEquals(422, r.status(), r.body());
+        assertTrue(JSON.readTree(r.body()).get("message").asText().contains("3 lần"));
+        // Phiên chỉ được tạo SAU khi AI trả lời thành công nên không để lại phiên rỗng
+        assertEquals(sessionsBefore, count("SELECT COUNT(*) FROM TutorSessions WHERE StudentId = 4"));
+        script.clear();
+    }
+
+    @Test
+    @Order(30)
+    void essayOcrGradesImageAndStoresSubmission() throws Exception {
+        exec("UPDATE AiConfigs SET ConfigValue = 'test-key-123' WHERE ConfigKey = 'GEMINI_API_KEY'");
+        Client c = new Client();
+        c.login("student1", "123456");
+        script.clear();
+
+        Resp r = c.multipart("/api/student/submit-essay-ocr", Map.of("questionId", "3"), "essayImage", "bai.png",
+                "image/png", PNG);
+        assertEquals(200, r.status(), r.body());
+        JsonNode envelope = JSON.readTree(r.body());
+        assertTrue(envelope.get("success").asBoolean());
+        JsonNode j = envelope.get("data");
+        assertEquals(7.5, j.get("score").asDouble(), "7.4 làm tròn tới 0.25");
+        assertEquals("$y=x^2$", j.get("extractedText").asText());
+        String url = j.get("imageUrl").asText();
+        assertTrue(url.startsWith("/uploads/") && url.endsWith(".png"), url);
+        assertTrue(Files.exists(uploadDir.resolve(url.substring("/uploads/".length()))));
+
+        // Payload gửi Gemini: ảnh Base64 + đề bài, dùng VISION_MODEL, key ở header
+        JsonNode sent = JSON.readTree(lastRequestBody);
+        assertTrue(sent.toString().contains("inline_data"));
+        assertTrue(sent.toString().contains("image/png"));
+        assertTrue(lastUri.contains("gemini-1.5-pro"), lastUri);
+        assertEquals("test-key-123", lastApiKey);
+        assertEquals("application/json", sent.get("generationConfig").get("response_mime_type").asText());
+        assertEquals(2048, Math.min(2048, sent.get("generationConfig").get("maxOutputTokens").asInt()));
+
+        // Lưu Submissions
+        int sid = j.get("submissionId").asInt();
+        assertEquals("ESSAY", scalar("SELECT QuestionType FROM Submissions WHERE SubmissionId = ?", sid));
+        assertEquals(url, scalar("SELECT EssayImagePath FROM Submissions WHERE SubmissionId = ?", sid));
+        assertTrue(((String) scalar("SELECT AiFeedback FROM Submissions WHERE SubmissionId = ?", sid)).contains("Sai dấu"));
+        assertEquals(0, count("SELECT CAST(IsReviewed AS INT) FROM Submissions WHERE SubmissionId = ?", sid));
+        assertEquals(7.5, ((Number) scalar("SELECT Score FROM Submissions WHERE SubmissionId = ?", sid)).doubleValue());
+
+        // Ảnh chỉ phục vụ cho chủ bài / giáo viên / admin (TC-SEC-07); người ẩn danh bị chuyển về /login
+        Resp img = c.get(url);
+        assertEquals(200, img.status());
+        assertEquals(302, new Client().get(url).status());
+        Client otherStudent = new Client();
+        otherStudent.login("student2", "123456");
+        assertEquals(403, otherStudent.get(url).status());
+        Client teacher = new Client();
+        teacher.login("teacher1", "123456");
+        assertEquals(200, teacher.get(url).status());
+        assertEquals(404, c.get("/uploads/khong-co-anh.png").status());
+
+        // Đầu vào không hợp lệ
+        assertEquals(400, c.multipart("/api/student/submit-essay-ocr", Map.of("questionId", "3"), "essayImage",
+                "a.png", "image/png", "day khong phai anh".getBytes(StandardCharsets.UTF_8)).status());
+        assertEquals(400, c.multipart("/api/student/submit-essay-ocr", Map.of("questionId", "3"), "x", "y", "z",
+                null).status());
+        byte[] big = new byte[5 * 1024 * 1024 + 10];
+        System.arraycopy(PNG, 0, big, 0, PNG.length);
+        Resp tooBig = c.multipart("/api/student/submit-essay-ocr", Map.of("questionId", "3"), "essayImage", "b.png",
+                "image/png", big);
+        assertEquals(400, tooBig.status(), tooBig.body());
+        assertTrue(tooBig.has("5MB"));
+        // câu hỏi trắc nghiệm không dùng API tự luận
+        assertEquals(400, c.multipart("/api/student/submit-essay-ocr", Map.of("questionId", "1"), "essayImage", "a.png",
+                "image/png", PNG).status());
+
+        // Chỉ nhập văn bản (không ảnh) vẫn chấm được
+        script.add(new String[]{"200", "{\"extractedText\":\"x\",\"score\":\"9\",\"detailedFeedback\":\"tốt\","
+                + "\"suggestedCorrection\":\"\"}"});
+        Resp t = c.multipart("/api/student/submit-essay-ocr", Map.of("questionId", "3", "studentAnswer", "Lời giải $x$"),
+                "x", "y", "z", null);
+        assertEquals(200, t.status(), t.body());
+        assertTrue(JSON.readTree(t.body()).get("data").get("imageUrl").isNull());
+        assertTrue(lastUri.contains("gemini-1.5-flash"), "không ảnh dùng DEFAULT_MODEL: " + lastUri);
+    }
+
+    @Test
+    @Order(31)
+    void aiHttpErrorsAreTranslatedAndTransientOnesRetried() throws Exception {
+        Client c = new Client();
+        c.login("student1", "123456");
+        // 400 từ Gemini: không retry
+        script.clear();
+        script.add(new String[]{"400", "API key not valid"});
+        int before = geminiCalls;
+        Resp bad = c.json("/api/tutor/next-step", "{\"studentInput\":\"x\"}");
+        assertEquals(502, bad.status());
+        assertTrue(bad.has("API key not valid"));
+        assertEquals(1, geminiCalls - before);
+        // 503 rồi thành công: retry
+        script.clear();
+        script.add(new String[]{"503", "overloaded"});
+        script.add(new String[]{"200", tutorJson(true, 1, 4, false)});
+        before = geminiCalls;
+        Resp ok = c.json("/api/tutor/next-step", "{\"studentInput\":\"bài mới\"}");
+        assertEquals(200, ok.status(), ok.body());
+        assertEquals(2, geminiCalls - before);
+        script.clear();
+    }
+
+    // ---------------------------------------------------------------- ADMIN
+
+    @Test
+    @Order(40)
+    void adminPagesAndAiConfig() throws Exception {
+        Client c = new Client();
+        assertEquals(302, c.login("admin", "123456").status());
+        for (String p : new String[]{"/admin/dashboard", "/admin/teachers", "/admin/students", "/admin/topics",
+                "/admin/lessons", "/admin/questions", "/admin/ai-config"}) {
+            Resp r = c.get(p);
+            assertEquals(200, r.status(), p + " -> " + r.body());
+        }
+        Resp cfg = c.get("/admin/ai-config");
+        assertFalse(cfg.has("test-key-123"), "không in API key ra HTML");
+        assertTrue(cfg.has("Đã cấu hình"));
+
+        // Cập nhật: để trống API key => giữ nguyên; temperature hợp lệ => lưu
+        Resp up = c.form("/admin/ai-config/update", Map.of("GEMINI_API_KEY", "", "DEFAULT_MODEL", "gemini-2.0-flash",
+                "VISION_MODEL", "gemini-1.5-pro", "TUTOR_TEMPERATURE", "0.5", "MAX_OUTPUT_TOKENS", "3000"));
+        assertEquals(302, up.status());
+        assertEquals("test-key-123", scalar("SELECT ConfigValue FROM AiConfigs WHERE ConfigKey = 'GEMINI_API_KEY'"));
+        assertEquals("gemini-2.0-flash", scalar("SELECT ConfigValue FROM AiConfigs WHERE ConfigKey = 'DEFAULT_MODEL'"));
+        assertEquals("0.5", scalar("SELECT ConfigValue FROM AiConfigs WHERE ConfigKey = 'TUTOR_TEMPERATURE'"));
+        assertEquals(1, scalar("SELECT UpdatedBy FROM AiConfigs WHERE ConfigKey = 'DEFAULT_MODEL'"));
+        assertTrue(c.get("/admin/ai-config").has("Cập nhật cấu hình AI thành công"));
+
+        // Cấu hình mới có hiệu lực ngay (không restart): model + temperature + maxTokens đi vào request Gemini
+        script.clear();
+        Client st = new Client();
+        st.login("student1", "123456");
+        st.json("/api/tutor/next-step", "{\"studentInput\":\"kiểm tra cấu hình\"}");
+        assertTrue(lastUri.contains("gemini-2.0-flash"), lastUri);
+        JsonNode gen = JSON.readTree(lastRequestBody).get("generationConfig");
+        assertEquals(0.5, gen.get("temperature").asDouble());
+        assertEquals(3000, gen.get("maxOutputTokens").asInt());
+
+        // Giá trị sai bị từ chối, DB không đổi
+        c.form("/admin/ai-config/update", Map.of("TUTOR_TEMPERATURE", "5"));
+        assertEquals("0.5", scalar("SELECT ConfigValue FROM AiConfigs WHERE ConfigKey = 'TUTOR_TEMPERATURE'"));
+        assertTrue(c.get("/admin/ai-config").has("0.0 đến 1.0"));
+        // khóa lạ bị bỏ qua
+        c.form("/admin/ai-config/update", Map.of("EVIL_KEY", "x"));
+
+        // Test connection (UC-ADM-07)
+        Resp ping2 = c.form("/api/admin/ai-config/test-connection", Map.of("DEFAULT_MODEL", "gemini-1.5-flash"));
+        assertEquals(200, ping2.status(), ping2.body());
+        assertTrue(JSON.readTree(ping2.body()).get("success").asBoolean(), ping2.body());
+        assertTrue(lastRequestBody.contains("Ping"));
+        script.add(new String[]{"403", "Permission denied"});
+        Resp fail = c.form("/api/admin/ai-config/test-connection", Map.of("GEMINI_API_KEY", "sai"));
+        assertFalse(JSON.readTree(fail.body()).get("success").asBoolean());
+        assertTrue(fail.has("không hợp lệ"), fail.body());
+        // giáo viên không được test kết nối / vào cấu hình AI -> 403 (TC-SEC-02)
+        Client tch = new Client();
+        tch.login("teacher1", "123456");
+        assertEquals(403, tch.form("/api/admin/ai-config/test-connection", Map.of()).status());
+        assertEquals(403, tch.get("/admin/ai-config").status());
+        exec("UPDATE AiConfigs SET ConfigValue = 'gemini-1.5-flash' WHERE ConfigKey = 'DEFAULT_MODEL'");
+        exec("UPDATE AiConfigs SET ConfigValue = '0.2' WHERE ConfigKey = 'TUTOR_TEMPERATURE'");
+        exec("UPDATE AiConfigs SET ConfigValue = '2048' WHERE ConfigKey = 'MAX_OUTPUT_TOKENS'");
+    }
+
+    @Test
+    @Order(41)
+    void adminTogglesAccountStatus() throws Exception {
+        Client c = new Client();
+        c.login("admin", "123456");
+        assertEquals(1, count("SELECT CAST(IsActive AS INT) FROM Users WHERE Username = 'student5'"));
+        Client victim = new Client();
+        victim.login("student5", "123456");
+        assertEquals(200, victim.get("/student/dashboard").status());
+        Resp t = c.form("/admin/users/toggle-status", Map.of("userId", "8", "returnUrl", "/edututor/admin/students"));
+        assertEquals(302, t.status());
+        assertTrue(t.location().endsWith("/admin/students"), t.location());
+        assertEquals(0, count("SELECT CAST(IsActive AS INT) FROM Users WHERE Username = 'student5'"));
+        assertTrue(c.get("/admin/students").has("Đã khóa tài khoản student5"));
+        // BR-01: tài khoản đang đăng nhập bị chặn ngay ở request kế tiếp
+        Resp locked = victim.get("/student/dashboard");
+        assertEquals(302, locked.status());
+        assertTrue(locked.location().contains("locked=1"), locked.location());
+        // tài khoản bị khóa không đăng nhập được
+        assertTrue(new Client().login("student5", "123456").has("khóa"));
+        c.form("/admin/users/toggle-status", Map.of("userId", "8"));
+        assertEquals(1, count("SELECT CAST(IsActive AS INT) FROM Users WHERE Username = 'student5'"));
+        c.get("/admin/dashboard"); // tiêu thụ flash message "đã kích hoạt lại"
+        // không tự khóa chính mình
+        Resp self = c.form("/admin/users/toggle-status", Map.of("userId", "1"));
+        assertEquals(302, self.status());
+        assertEquals(1, count("SELECT CAST(IsActive AS INT) FROM Users WHERE Username = 'admin'"));
+        assertTrue(c.get("/admin/dashboard").has("không thể tự khóa"));
+        // returnUrl bên ngoài bị bỏ qua (chống open redirect)
+        Resp evil = c.form("/admin/users/toggle-status", Map.of("userId", "8", "returnUrl", "https://evil.com/"));
+        assertTrue(evil.location().endsWith("/admin/dashboard"), evil.location());
+        c.form("/admin/users/toggle-status", Map.of("userId", "8"));
+        // giáo viên không được toggle
+        Client t1 = new Client();
+        t1.login("teacher1", "123456");
+        assertEquals(403, t1.form("/admin/users/toggle-status", Map.of("userId", "8")).status());
+    }
+
+    // ---------------------------------------------------------------- TEACHER
+
+    @Test
+    @Order(50)
+    void teacherManagesTopicsAndLessons() throws Exception {
+        Client c = new Client();
+        c.login("teacher1", "123456");
+        for (String p : new String[]{"/teacher/dashboard", "/teacher/topics", "/teacher/lessons",
+                "/teacher/lessons?topicId=1", "/teacher/lessons?action=create", "/teacher/lessons?action=edit&id=1",
+                "/teacher/students", "/teacher/students/history?studentId=4", "/teacher/submissions"}) {
+            Resp r = c.get(p);
+            assertEquals(200, r.status(), p + " -> " + r.body());
+        }
+        assertTrue(c.get("/teacher/dashboard").has("stat-number"));
+
+        assertEquals(302, c.form("/teacher/topics", Map.of("action", "create", "topicName", "it_Chủ đề thử",
+                "description", "mô tả")).status());
+        int topicId = count("SELECT TopicId FROM Topics WHERE TopicName = N'it_Chủ đề thử'");
+        assertTrue(topicId > 0);
+        c.form("/teacher/topics", Map.of("action", "update", "topicId", "" + topicId, "topicName", "it_Chủ đề sửa",
+                "description", "d2"));
+        assertEquals("it_Chủ đề sửa", scalar("SELECT TopicName FROM Topics WHERE TopicId = ?", topicId));
+        // tên rỗng bị chặn
+        c.form("/teacher/topics", Map.of("action", "create", "topicName", " "));
+        assertTrue(c.get("/teacher/topics").has("không được để trống"));
+
+        c.form("/teacher/lessons", Map.of("action", "create", "topicId", "" + topicId, "title", "it_Bài học thử",
+                "summary", "s", "content", "nội dung", "youtubeUrl", ""));
+        int lessonId = count("SELECT LessonId FROM Lessons WHERE Title = N'it_Bài học thử'");
+        assertTrue(lessonId > 0);
+        c.form("/teacher/lessons", Map.of("action", "update", "id", "" + lessonId, "topicId", "" + topicId,
+                "title", "it_Bài học sửa", "summary", "s", "content", "c", "youtubeUrl", ""));
+        assertEquals("it_Bài học sửa", scalar("SELECT Title FROM Lessons WHERE LessonId = ?", lessonId));
+        c.form("/teacher/lessons", Map.of("action", "delete", "id", "" + lessonId));
+        assertEquals(0, count("SELECT COUNT(*) FROM Lessons WHERE LessonId = ?", lessonId));
+
+        // teacher2 không sửa/xóa được chủ đề của teacher1
+        Client t2 = new Client();
+        t2.login("teacher2", "123456");
+        assertEquals(403, t2.form("/teacher/topics", Map.of("action", "delete", "id", "" + topicId)).status());
+        assertEquals(1, count("SELECT COUNT(*) FROM Topics WHERE TopicId = ?", topicId));
+
+        // BR-05: không xóa chủ đề còn bài học (TC-TEA-01)
+        c.form("/teacher/lessons", Map.of("action", "create", "topicId", "" + topicId, "title", "it_Bài học giữ lại",
+                "summary", "s", "content", "c", "youtubeUrl", ""));
+        c.form("/teacher/topics", Map.of("action", "delete", "id", "" + topicId));
+        assertEquals(1, count("SELECT COUNT(*) FROM Topics WHERE TopicId = ?", topicId));
+        assertTrue(c.get("/teacher/topics").has("còn bài học"));
+        exec("DELETE FROM Lessons WHERE Title = N'it_Bài học giữ lại'");
+
+        // Bean Validation: tên bài học quá ngắn bị chặn, báo lỗi tiếng Việt
+        for (int i = 0; i < 3; i++) {
+            c.get("/teacher/lessons?topicId=" + topicId); // tiêu thụ các flash thành công còn tồn đọng
+        }
+        c.form("/teacher/lessons", Map.of("action", "create", "topicId", "" + topicId, "title", "ab"));
+        assertEquals(0, count("SELECT COUNT(*) FROM Lessons WHERE Title = N'ab'"));
+        assertTrue(c.get("/teacher/lessons?topicId=" + topicId).has("phải từ 3 đến 200 ký tự"));
+
+        c.form("/teacher/topics", Map.of("action", "delete", "id", "" + topicId));
+        assertEquals(0, count("SELECT COUNT(*) FROM Topics WHERE TopicId = ?", topicId));
+    }
+
+    @Test
+    @Order(51)
+    void teacherQuestionBankCrudFilterAndPaging() throws Exception {
+        Client c = new Client();
+        c.login("teacher1", "123456");
+        for (String p : new String[]{"/teacher/questions", "/teacher/questions?topicId=1&lessonId=1&type=MCQ&level=2&page=1",
+                "/teacher/questions?action=create", "/teacher/questions?action=edit&id=1", "/teacher/questions?page=99",
+                "/teacher/ai/generate"}) {
+            Resp r = c.get(p);
+            assertTrue(r.status() == 200 || r.status() == 302, p + " -> " + r.status() + r.body());
+        }
+        Resp filtered = c.get("/teacher/questions?lessonId=1&type=MCQ&level=1");
+        assertTrue(filtered.has("e^x"), "chỉ còn câu mức 1 của bài 1");
+        assertFalse(filtered.has("x^3 - 3x"));
+        assertTrue(c.get("/teacher/questions?type=ESSAY").has("Tìm giá trị lớn nhất"));
+
+        Map<String, String> q = new LinkedHashMap<>();
+        q.put("action", "create");
+        q.put("lessonId", "1");
+        q.put("type", "MCQ");
+        q.put("level", "2");
+        q.put("content", "it_Câu hỏi thử $x^2$");
+        q.put("explanation", "it_lời giải");
+        q.put("correctOption", "C");
+        q.put("opt_A", "a");
+        q.put("opt_B", "b");
+        q.put("opt_C", "c");
+        q.put("opt_D", "d");
+        assertEquals(302, c.form("/teacher/questions", q).status());
+        int qid = count("SELECT QuestionId FROM Questions WHERE Content LIKE N'it[_]Câu hỏi thử%'");
+        assertTrue(qid > 0);
+        assertEquals("it_lời giải", scalar("SELECT ExplanationLatex FROM Questions WHERE QuestionId = ?", qid));
+        assertEquals(0, count("SELECT CAST(IsAiGenerated AS INT) FROM Questions WHERE QuestionId = ?", qid));
+        assertEquals(4, count("SELECT COUNT(*) FROM QuestionOptions WHERE QuestionId = ?", qid));
+        assertEquals("C", scalar("SELECT OptionLetter FROM QuestionOptions WHERE QuestionId = ? AND IsCorrect = 1", qid));
+
+        // form sửa hiển thị dữ liệu
+        Resp edit = c.get("/teacher/questions?action=edit&id=" + qid);
+        assertEquals(200, edit.status());
+        assertTrue(edit.has("it_lời giải"));
+
+        // bí danh theo FRS: POST /teacher/questions/create
+        q.put("content", "it_Câu hỏi thử qua create");
+        assertEquals(302, c.form("/teacher/questions/create", q).status());
+        assertEquals(1, count("SELECT COUNT(*) FROM Questions WHERE Content LIKE N'it[_]Câu hỏi thử qua create%'"));
+        q.put("content", "it_Câu hỏi thử");
+
+        // sửa: đổi đáp án đúng
+        q.put("action", "update");
+        q.put("id", "" + qid);
+        q.put("correctOption", "B");
+        q.put("content", "it_Câu hỏi thử đã sửa");
+        c.form("/teacher/questions", q);
+        assertEquals("B", scalar("SELECT OptionLetter FROM QuestionOptions WHERE QuestionId = ? AND IsCorrect = 1", qid));
+        assertEquals(4, count("SELECT COUNT(*) FROM QuestionOptions WHERE QuestionId = ?", qid));
+
+        // dữ liệu sai: thiếu đáp án đúng / phương án trống
+        Map<String, String> bad = new LinkedHashMap<>(q);
+        bad.put("action", "create");
+        bad.put("correctOption", "");
+        int total = count("SELECT COUNT(*) FROM Questions");
+        c.form("/teacher/questions", bad);
+        assertEquals(total, count("SELECT COUNT(*) FROM Questions"));
+        assertTrue(c.get("/teacher/questions?action=create").has("đáp án đúng"));
+
+        // xóa câu chưa có bài làm
+        c.form("/teacher/questions", Map.of("action", "delete", "id", "" + qid));
+        assertEquals(0, count("SELECT COUNT(*) FROM Questions WHERE QuestionId = ?", qid));
+        assertEquals(0, count("SELECT COUNT(*) FROM QuestionOptions WHERE QuestionId = ?", qid));
+        // không xóa câu đã có bài làm
+        c.form("/teacher/questions", Map.of("action", "delete", "id", "1"));
+        assertEquals(1, count("SELECT COUNT(*) FROM Questions WHERE QuestionId = 1"));
+        assertTrue(c.get("/teacher/questions").has("không thể xóa"));
+
+        // phân trang: tạo thêm nhiều câu hỏi tự luận
+        for (int i = 0; i < 11; i++) {
+            c.form("/teacher/questions", Map.of("action", "create", "lessonId", "2", "type", "ESSAY", "level", "1",
+                    "content", "it_essay " + i));
+        }
+        Resp p2 = c.get("/teacher/questions?type=ESSAY&page=2");
+        assertEquals(200, p2.status());
+        assertTrue(p2.has("page-link"));
+        exec("DELETE FROM Questions WHERE Content LIKE N'it[_]%'");
+    }
+
+    @Test
+    @Order(52)
+    void teacherGeneratesAndBatchSavesAiQuestions() throws Exception {
+        Client c = new Client();
+        c.login("teacher1", "123456");
+        script.clear();
+        // lần 1: 503, lần 2: JSON hỏng, lần 3: hợp lệ => vẫn thành công (tối đa 3 lần)
+        script.add(new String[]{"503", "busy"});
+        script.add(new String[]{"200", "```json\n{ hỏng"});
+        script.add(new String[]{"200", "```json\n" + EXAM_JSON + "\n```"});
+        int before = geminiCalls;
+        Resp r = c.json("/api/teacher/generate-questions",
+                "{\"lessonId\":1,\"difficultyLevel\":1,\"count\":2}");
+        assertEquals(200, r.status(), r.body());
+        assertEquals(3, geminiCalls - before);
+        JsonNode j = JSON.readTree(r.body());
+        assertTrue(j.get("success").asBoolean());
+        assertEquals(2, j.get("data").size());
+        JsonNode q0 = j.get("data").get(0);
+        assertEquals("A", q0.get("options").get(0).get("letter").asText(), "đã sắp xếp A-D");
+        assertTrue(q0.get("options").get(1).get("isCorrect").asBoolean());
+        assertTrue(lastRequestBody.contains("system_instruction"));
+        assertTrue(lastRequestBody.contains("GDPT 2018"));
+        assertEquals("application/json", JSON.readTree(lastRequestBody).get("generationConfig")
+                .get("response_mime_type").asText());
+
+        // schema sai (thiếu đáp án đúng) -> retry rồi báo lỗi 422 (AI trả dữ liệu không dùng được)
+        script.clear();
+        String noCorrect = "[{\"content\":\"c\",\"options\":[{\"letter\":\"A\",\"content\":\"1\",\"isCorrect\":false},"
+                + "{\"letter\":\"B\",\"content\":\"2\",\"isCorrect\":false},{\"letter\":\"C\",\"content\":\"3\","
+                + "\"isCorrect\":false},{\"letter\":\"D\",\"content\":\"4\",\"isCorrect\":false}]}]";
+        for (int i = 0; i < 3; i++) {
+            script.add(new String[]{"200", noCorrect});
+        }
+        Resp bad = c.json("/api/teacher/generate-questions", "{\"lessonId\":1,\"difficultyLevel\":1,\"count\":2}");
+        assertEquals(422, bad.status());
+        script.clear();
+        assertEquals(400, c.json("/api/teacher/generate-questions", "{\"difficultyLevel\":9,\"lessonId\":1}").status());
+        script.add(new String[]{"200", EXAM_JSON});
+        Resp hard = c.json("/api/teacher/generate-questions",
+                "{\"lessonId\":2,\"difficultyLevel\":\"HARD\",\"count\":5}");
+        assertEquals(200, hard.status(), hard.body());
+        assertTrue(lastRequestBody.contains("Vận dụng cao"), "HARD ứng với mức 3");
+        assertTrue(lastRequestBody.contains("Cực trị"), "tên bài học tra từ lessonId trong CSDL");
+        script.clear();
+        // VAL-12: thiếu lessonId / count ngoài 1..10 -> 400 kèm lỗi theo trường
+        assertEquals(400, c.json("/api/teacher/generate-questions", "{}").status());
+        Resp tooMany = c.json("/api/teacher/generate-questions", "{\"lessonId\":1,\"count\":11}");
+        assertEquals(400, tooMany.status());
+        assertEquals("count", JSON.readTree(tooMany.body()).get("errors").get(0).get("field").asText());
+
+        // XSS: nội dung AI chứa HTML nguy hiểm bị loại bỏ trước khi lưu
+        String body = "{\"lessonId\":1,\"questions\":[{\"content\":\"it_ai <script>alert(1)</script> $x$\",\"level\":2,"
+                + "\"explanation\":\"gt\",\"options\":[{\"letter\":\"A\",\"content\":\"<img src=x onerror=alert(1)> a\","
+                + "\"isCorrect\":false},{\"letter\":\"B\",\"content\":\"b\",\"isCorrect\":true},{\"letter\":\"C\","
+                + "\"content\":\"c\",\"isCorrect\":false},{\"letter\":\"D\",\"content\":\"d\",\"isCorrect\":false}]}]}";
+        Resp save = c.json("/api/teacher/questions/batch-save", body);
+        assertEquals(200, save.status(), save.body());
+        assertEquals(1, JSON.readTree(save.body()).get("data").get("saved").asInt());
+        int qid = count("SELECT QuestionId FROM Questions WHERE Content LIKE N'it[_]ai%'");
+        assertEquals(1, count("SELECT CAST(IsAiGenerated AS INT) FROM Questions WHERE QuestionId = ?", qid));
+        String content = (String) scalar("SELECT Content FROM Questions WHERE QuestionId = ?", qid);
+        assertFalse(content.contains("<script"), content);
+        assertTrue(content.contains("$x$"));
+        assertFalse(((String) scalar("SELECT Content FROM QuestionOptions WHERE QuestionId = ? AND OptionLetter = 'A'", qid))
+                .contains("<img"));
+        assertEquals("B", scalar("SELECT OptionLetter FROM QuestionOptions WHERE QuestionId = ? AND IsCorrect = 1", qid));
+
+        // batch-save lỗi: bài học sai / danh sách rỗng / không đủ phương án => transaction không lưu gì
+        int total = count("SELECT COUNT(*) FROM Questions");
+        assertEquals(400, c.json("/api/teacher/questions/batch-save", "{\"lessonId\":999,\"questions\":[]}").status());
+        assertEquals(400, c.json("/api/teacher/questions/batch-save", "{\"lessonId\":1,\"questions\":[]}").status());
+        String broken = "{\"lessonId\":1,\"questions\":[" + "{\"content\":\"it_ok\",\"options\":["
+                + "{\"letter\":\"A\",\"content\":\"1\",\"isCorrect\":true},{\"letter\":\"B\",\"content\":\"2\"},"
+                + "{\"letter\":\"C\",\"content\":\"3\"},{\"letter\":\"D\",\"content\":\"4\"}]},"
+                + "{\"content\":\"it_broken\",\"options\":[{\"letter\":\"A\",\"content\":\"1\",\"isCorrect\":true}]}]}";
+        assertEquals(400, c.json("/api/teacher/questions/batch-save", broken).status());
+        assertEquals(total, count("SELECT COUNT(*) FROM Questions"), "rollback toàn bộ batch");
+
+        // lessons-by-topic
+        Resp l = c.getAjax("/api/teacher/lessons-by-topic?topicId=1");
+        assertEquals(200, l.status());
+        assertEquals(2, JSON.readTree(l.body()).get("data").size());
+        exec("DELETE FROM Questions WHERE Content LIKE N'it[_]%'");
+    }
+
+    @Test
+    @Order(53)
+    void teacherReviewsEssayAndAdjustsScore() throws Exception {
+        Client c = new Client();
+        c.login("teacher1", "123456");
+        int sid = count("SELECT TOP 1 SubmissionId FROM Submissions WHERE QuestionType = 'ESSAY' AND EssayImagePath IS NOT NULL");
+        assertTrue(sid > 0, "cần bài tự luận từ test OCR");
+        Resp list = c.get("/teacher/submissions?status=pending");
+        assertEquals(200, list.status());
+        assertTrue(list.has("Nguyễn Văn A"));
+        Resp detail = c.get("/teacher/submissions?id=" + sid);
+        assertEquals(200, detail.status(), detail.body());
+        assertTrue(detail.has("/uploads/"), "hiển thị ảnh bài làm");
+        assertTrue(detail.has("Sai dấu"), "hiển thị nhận xét AI");
+
+        Resp post = c.form("/teacher/submissions", Map.of("submissionId", "" + sid, "score", "8,5", "isCorrect", "true",
+                "teacherFeedback", "Cô chấm lại"));
+        assertEquals(302, post.status());
+        assertEquals(8.5, ((Number) scalar("SELECT Score FROM Submissions WHERE SubmissionId = ?", sid)).doubleValue());
+        assertEquals(1, count("SELECT CAST(IsReviewed AS INT) FROM Submissions WHERE SubmissionId = ?", sid));
+        assertEquals("Cô chấm lại", scalar("SELECT TeacherFeedback FROM Submissions WHERE SubmissionId = ?", sid));
+        assertTrue(c.get("/teacher/submissions?status=reviewed").has("Nguyễn Văn A"));
+
+        c.get("/teacher/submissions?id=" + sid); // tiêu thụ flash thành công
+        // VAL-20: điểm ngoài 0..10 hoặc không theo bước 0.25 bị từ chối, điểm cũ giữ nguyên
+        c.form("/teacher/submissions", Map.of("submissionId", "" + sid, "score", "15"));
+        assertTrue(c.get("/teacher/submissions?id=" + sid).has("từ 0 đến 10"));
+        c.form("/teacher/submissions", Map.of("submissionId", "" + sid, "score", "7.3"));
+        c.get("/teacher/submissions?id=" + sid);
+        assertEquals(8.5, ((Number) scalar("SELECT Score FROM Submissions WHERE SubmissionId = ?", sid)).doubleValue());
+        c.form("/teacher/submissions", Map.of("submissionId", "" + sid, "score", "abc"));
+        assertTrue(c.get("/teacher/submissions?id=" + sid).has("từ 0 đến 10"));
+        assertEquals(302, c.get("/teacher/submissions?id=99999").status());
+        // không chấm được bài trắc nghiệm qua màn hình tự luận
+        int mcq = count("SELECT TOP 1 SubmissionId FROM Submissions WHERE QuestionType = 'MCQ'");
+        c.form("/teacher/submissions", Map.of("submissionId", "" + mcq, "score", "3"));
+        assertNotNull(scalar("SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM Submissions WHERE SubmissionId = " + mcq
+                + " AND TeacherFeedback IS NOT NULL)"));
+
+        // học sinh xem điểm đã chấm trong lịch sử
+        Client st = new Client();
+        st.login("student1", "123456");
+        Resp hist = st.get("/student/history?type=ESSAY");
+        assertEquals(200, hist.status());
+        assertTrue(hist.has("8.5"), hist.body());
+    }
+
+    @Test
+    @Order(60)
+    void sqlInjectionAttemptsAreHarmless() throws Exception {
+        Client c = new Client();
+        Resp r = c.login("admin' OR '1'='1", "x' OR '1'='1");
+        assertEquals(200, r.status());
+        assertTrue(r.has("sai"));
+        c.login("teacher1", "123456");
+        Resp q = c.get("/teacher/questions?type=MCQ'%20OR%20'1'='1&lessonId=1;DROP%20TABLE%20Questions");
+        assertTrue(q.status() == 200 || q.status() == 302 || q.status() == 400, "" + q.status());
+        assertTrue(count("SELECT COUNT(*) FROM Questions") > 0);
+        assertEquals(1, count("SELECT COUNT(*) FROM Users WHERE Username = 'admin'"));
+    }
+}
