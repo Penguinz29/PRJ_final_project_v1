@@ -12,13 +12,17 @@ public class Submission implements Serializable {
     private String studentAnswer;
     private String essayImagePath;
     private Boolean isCorrect;
+    private Double score;
+    private String aiFeedback;
     private String teacherFeedback;
     private boolean reviewed;
     private Date submittedAt;
 
     // Expand
     private String studentName;
+    private String studentEmail;
     private String questionTitle; // Lấy đoạn đầu câu hỏi để hiển thị UI
+    private String questionContent; // Toàn bộ nội dung câu hỏi
     private String lessonTitle;
     private boolean questionAiGenerated;
 
@@ -144,5 +148,41 @@ public class Submission implements Serializable {
 
     public void setQuestionAiGenerated(boolean questionAiGenerated) {
         this.questionAiGenerated = questionAiGenerated;
+    }
+
+    public Double getScore() {
+        return score;
+    }
+
+    public void setScore(Double score) {
+        this.score = score;
+    }
+
+    public String getAiFeedback() {
+        return aiFeedback;
+    }
+
+    public void setAiFeedback(String aiFeedback) {
+        this.aiFeedback = aiFeedback;
+    }
+
+    public String getStudentEmail() {
+        return studentEmail;
+    }
+
+    public void setStudentEmail(String studentEmail) {
+        this.studentEmail = studentEmail;
+    }
+
+    public String getQuestionContent() {
+        return questionContent;
+    }
+
+    public void setQuestionContent(String questionContent) {
+        this.questionContent = questionContent;
+    }
+
+    public boolean getReviewed() {
+        return reviewed;
     }
 }

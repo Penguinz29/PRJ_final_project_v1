@@ -41,7 +41,7 @@
 
                                 <div class="card table-card border-top-0 rounded-top-0">
                                     <div class="table-responsive">
-                                        <table class="table table-hover mb-0">
+                                        <table class="table table-hover align-middle mb-0">
                                             <thead>
                                                 <tr>
                                                     <th>#</th>
@@ -49,6 +49,9 @@
                                                     <th>Bài làm</th>
                                                     <th>Câu hỏi</th>
                                                     <th>Nguồn</th>
+                                                    <c:if test="${status == 'reviewed'}">
+                                                        <th>Điểm số</th>
+                                                    </c:if>
                                                     <th>Nộp lúc</th>
                                                     <th>Thao tác</th>
                                                 </tr>
@@ -57,7 +60,7 @@
                                                 <c:choose>
                                                     <c:when test="${empty submissions}">
                                                         <tr>
-                                                            <td colspan="7">
+                                                            <td colspan="${status == 'reviewed' ? 8 : 7}">
                                                                 <div class="empty-state">
                                                                     <i class="bi bi-clipboard-check empty-icon"></i>
                                                                     <p>Không có bài luận nào ${empty status or status ==
@@ -71,7 +74,8 @@
                                                             <tr>
                                                                 <td class="text-muted">${(page-1)*10 + vs.count}</td>
                                                                 <td class="fw-semibold">
-                                                                    <c:out value="${sub.studentName}" />
+                                                                    <c:out value="${sub.studentName}" /><br>
+                                                                    <small class="text-muted"><c:out value="${sub.studentEmail}" /></small>
                                                                 </td>
                                                                 <td>
                                                                     <div style="max-height:40px;overflow:hidden;font-size:.85rem;color:#444;"
@@ -79,9 +83,7 @@
                                                                         <c:choose>
                                                                             <c:when
                                                                                 test="${not empty sub.essayImagePath}">
-                                                                                <i
-                                                                                    class="bi bi-image text-primary me-1"></i>[Có
-                                                                                hình ảnh đính kèm]
+                                                                                <i class="bi bi-image text-primary me-1"></i>[Có hình ảnh viết tay]
                                                                             </c:when>
                                                                             <c:otherwise>
                                                                                 <c:out value="${sub.studentAnswer}" />
@@ -94,21 +96,38 @@
                                                                     <c:out value="${sub.questionTitle}" />
                                                                 </td>
                                                                 <td>
-                                                                    <c:if test="${sub.questionAiGenerated}">
-                                                                        <i class="bi bi-stars text-ai"
-                                                                            title="Câu hỏi AI sinh"></i>
-                                                                    </c:if>
+                                                                    <c:choose>
+                                                                        <c:when test="${sub.questionAiGenerated}">
+                                                                            <span class="badge-ai"><i class="bi bi-stars me-1"></i>AI</span>
+                                                                        </c:when>
+                                                                        <c:otherwise>
+                                                                            <span class="badge bg-secondary-subtle text-secondary">Thủ công</span>
+                                                                        </c:otherwise>
+                                                                    </c:choose>
                                                                 </td>
+                                                                <c:if test="${status == 'reviewed'}">
+                                                                    <td>
+                                                                        <c:choose>
+                                                                            <c:when test="${sub.score != null}">
+                                                                                <span class="badge ${sub.score >= 5.0 ? 'bg-success' : 'bg-danger'}">
+                                                                                    <fmt:formatNumber value="${sub.score}" pattern="0.00" /> / 10
+                                                                                </span>
+                                                                            </c:when>
+                                                                            <c:otherwise>
+                                                                                <span class="badge bg-secondary">Chưa có</span>
+                                                                            </c:otherwise>
+                                                                        </c:choose>
+                                                                    </td>
+                                                                </c:if>
                                                                 <td class="text-muted" style="font-size:.85rem;">
                                                                     <fmt:formatDate value="${sub.submittedAt}"
                                                                         pattern="dd/MM/yyyy HH:mm" />
                                                                 </td>
                                                                 <td>
                                                                     <a href="${pageContext.request.contextPath}/teacher/submissions?id=${sub.submissionId}"
-                                                                        class="btn btn-sm btn-outline-primary">
-                                                                        ${empty status or status == 'pending' ? '<i
-                                                                            class="bi bi-eyedropper me-1"></i>Chấm điểm'
-                                                                        : '<i class="bi bi-eye me-1"></i>Xem lại'}
+                                                                        class="btn btn-sm ${empty status or status == 'pending' ? 'btn-primary' : 'btn-outline-primary'}">
+                                                                        ${empty status or status == 'pending' ? '<i class="bi bi-eyedropper me-1"></i>Chấm điểm'
+                                                                        : '<i class="bi bi-pencil me-1"></i>Xem & Sửa'}
                                                                     </a>
                                                                 </td>
                                                             </tr>
