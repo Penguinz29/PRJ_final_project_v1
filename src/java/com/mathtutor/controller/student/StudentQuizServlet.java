@@ -2,9 +2,12 @@ package com.mathtutor.controller.student;
 
 import com.mathtutor.dao.LessonDAO;
 import com.mathtutor.dao.QuestionDAO;
+import com.mathtutor.dao.SubmissionDAO;
 import com.mathtutor.model.Lesson;
 import com.mathtutor.model.Question;
 import com.mathtutor.model.QuestionOption;
+import com.mathtutor.model.Submission;
+import com.mathtutor.model.User;
 import com.mathtutor.util.Validator;
 import java.io.IOException;
 import java.util.HashMap;
@@ -20,6 +23,7 @@ import jakarta.servlet.http.HttpServletResponse;
 public class StudentQuizServlet extends HttpServlet {
     private LessonDAO lessonDAO = new LessonDAO();
     private QuestionDAO questionDAO = new QuestionDAO();
+    private SubmissionDAO submissionDAO = new SubmissionDAO();
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
@@ -47,6 +51,9 @@ public class StudentQuizServlet extends HttpServlet {
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         int lessonId = Validator.getInt(req, "lessonId", 0);
         Lesson lesson = lessonDAO.getById(lessonId);
+
+        // Lấy user hiện tại từ session
+        User currentUser = (User) req.getSession().getAttribute("currentUser");
 
         List<Question> questions = questionDAO.getByLessonAndType(lessonId, "MCQ");
         com.mathtutor.model.AttemptResult result = new com.mathtutor.model.AttemptResult();
@@ -80,7 +87,18 @@ public class StudentQuizServlet extends HttpServlet {
             item.setCorrect(isCorrect);
             items.add(item);
 
-            // Lưu kết quả vào Submissions DB (tuỳ chọn hoặc làm sau)
+            // Lưu kết quả từng câu vào Submissions DB
+            if (currentUser != null && studentAnswer != null) {
+                Submission sub = new Submission();
+                sub.setStudentId(currentUser.getUserId());
+                sub.setLessonId(lessonId > 0 ? lessonId : null);
+                sub.setQuestionId(q.getQuestionId());
+                sub.setQuestionType("MCQ");
+                sub.setStudentAnswer(studentAnswer);
+                sub.setIsCorrect(isCorrect);
+                sub.setReviewed(true); // MCQ tự chấm, không cần teacher review
+                submissionDAO.insert(sub);
+            }
         }
 
         result.setCorrectCount(correctCount);
@@ -95,3 +113,4 @@ public class StudentQuizServlet extends HttpServlet {
         req.getRequestDispatcher("/WEB-INF/views/student/result.jsp").forward(req, resp);
     }
 }
+
