@@ -22,10 +22,15 @@
                                     <h1><i class="bi bi-patch-question me-2 text-primary"></i>Câu hỏi
                                         <span class="badge bg-secondary ms-2">${totalRecords}</span>
                                     </h1>
-                                    <a href="${pageContext.request.contextPath}/teacher/questions?action=create"
-                                        class="btn btn-primary btn-sm">
-                                        <i class="bi bi-plus-lg me-1"></i>Thêm câu hỏi
-                                    </a>
+                                    <div class="d-flex gap-2">
+                                        <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#aiGeneratorModal">
+                                            <i class="bi bi-stars me-1 text-primary"></i>Sinh câu hỏi bằng AI
+                                        </button>
+                                        <a href="${pageContext.request.contextPath}/teacher/questions?action=create"
+                                            class="btn btn-primary btn-sm">
+                                            <i class="bi bi-plus-lg me-1"></i>Thêm câu hỏi
+                                        </a>
+                                    </div>
                                 </div>
 
                                 <%-- Lọc --%>
@@ -177,8 +182,332 @@
                                     </jsp:include>
                             </main>
                         </div>
-                        <jsp:include page="../common/confirm-modal.jsp" />
+                         <jsp:include page="../common/confirm-modal.jsp" />
+
+                        <!-- Modal Sinh câu hỏi bằng AI (FR-TEA-03) -->
+                        <div class="modal fade" id="aiGeneratorModal" tabindex="-1" aria-labelledby="aiGeneratorModalLabel" aria-hidden="true">
+                            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title" id="aiGeneratorModalLabel">
+                                            <i class="bi bi-stars text-primary me-2"></i>Sinh câu hỏi trắc nghiệm bằng Gemini AI
+                                        </h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <!-- Form tham số sinh đề -->
+                                        <div class="card mb-3 border-0 bg-light">
+                                            <div class="card-body">
+                                                <div class="row g-3">
+                                                    <div class="col-md-6">
+                                                        <label class="form-label fw-semibold">Chuyên đề Toán 12</label>
+                                                        <select class="form-select form-select-sm" id="aiTopicSelect">
+                                                            <c:forEach var="t" items="${topics}">
+                                                                <option value="${t.topicId}"><c:out value="${t.topicName}" /></option>
+                                                            </c:forEach>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label fw-semibold">Bài học mục tiêu</label>
+                                                        <select class="form-select form-select-sm" id="aiLessonSelect">
+                                                            <c:forEach var="l" items="${lessons}">
+                                                                <option value="${l.lessonId}"><c:out value="${l.title}" /></option>
+                                                            </c:forEach>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label fw-semibold">Mức độ nhận thức (GDPT 2018)</label>
+                                                        <select class="form-select form-select-sm" id="aiLevelSelect">
+                                                            <option value="1">Mức 1: Nhận biết / Thông hiểu (Dễ)</option>
+                                                            <option value="2">Mức 2: Vận dụng (Trung bình)</option>
+                                                            <option value="3">Mức 3: Vận dụng cao (Khó)</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label fw-semibold">Số lượng câu hỏi</label>
+                                                        <select class="form-select form-select-sm" id="aiCountSelect">
+                                                            <option value="3">3 câu hỏi</option>
+                                                            <option value="5" selected>5 câu hỏi</option>
+                                                            <option value="10">10 câu hỏi</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                                <div class="mt-3 text-end">
+                                                    <button type="button" class="btn btn-primary btn-sm" id="btnRunAiGenerate">
+                                                        <i class="bi bi-magic me-1"></i> Bắt đầu sinh câu hỏi
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Trạng thái loading / Thông báo -->
+                                        <div id="aiLoading" class="text-center py-4 d-none">
+                                            <div class="spinner-border text-primary" role="status" style="width: 2.5rem; height: 2.5rem;"></div>
+                                            <p class="mt-2 text-muted fw-semibold">Gemini AI đang biên soạn câu hỏi chuẩn GDPT 2018 và kết xuất LaTeX...</p>
+                                            <small class="text-muted">Quá trình này mất khoảng 3 - 6 giây</small>
+                                        </div>
+
+                                        <div id="aiAlert" class="alert d-none" role="alert"></div>
+
+                                        <!-- Vùng xem trước kết quả sinh -->
+                                        <div id="aiPreviewArea" class="d-none">
+                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                <h6 class="fw-bold mb-0 text-success">
+                                                    <i class="bi bi-check2-circle me-1"></i>Kết quả sinh câu hỏi (<span id="aiCountBadge">0</span> câu)
+                                                </h6>
+                                                <div>
+                                                    <button type="button" class="btn btn-link btn-sm text-decoration-none p-0 me-2" id="btnSelectAllAi">Chọn tất cả</button>
+                                                    <button type="button" class="btn btn-link btn-sm text-decoration-none p-0 text-muted" id="btnDeselectAllAi">Bỏ chọn</button>
+                                                </div>
+                                            </div>
+                                            <div id="aiQuestionsContainer" class="d-flex flex-column gap-3"></div>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Đóng</button>
+                                        <button type="button" class="btn btn-success btn-sm d-none" id="btnSaveAiQuestions">
+                                            <i class="bi bi-cloud-arrow-up me-1"></i> Lưu vào Ngân hàng câu hỏi
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <jsp:include page="../common/footer.jsp" />
+
+                        <script>
+                            (function() {
+                                const ctx = document.body.dataset.ctx || '';
+                                const topicSelect = document.getElementById('aiTopicSelect');
+                                const lessonSelect = document.getElementById('aiLessonSelect');
+                                const levelSelect = document.getElementById('aiLevelSelect');
+                                const countSelect = document.getElementById('aiCountSelect');
+                                const btnRun = document.getElementById('btnRunAiGenerate');
+                                const loading = document.getElementById('aiLoading');
+                                const alertBox = document.getElementById('aiAlert');
+                                const previewArea = document.getElementById('aiPreviewArea');
+                                const container = document.getElementById('aiQuestionsContainer');
+                                const countBadge = document.getElementById('aiCountBadge');
+                                const btnSave = document.getElementById('btnSaveAiQuestions');
+
+                                let generatedList = [];
+
+                                // Khi đổi Chuyên đề -> nạp bài học tương ứng
+                                if (topicSelect) {
+                                    topicSelect.addEventListener('change', function() {
+                                        fetch(ctx + '/teacher/lessons-by-topic?topicId=' + this.value)
+                                            .then(res => res.json())
+                                            .then(lessons => {
+                                                lessonSelect.innerHTML = '';
+                                                lessons.forEach(l => {
+                                                    const opt = document.createElement('option');
+                                                    opt.value = l.lessonId;
+                                                    opt.textContent = l.title;
+                                                    lessonSelect.appendChild(opt);
+                                                });
+                                            })
+                                            .catch(err => console.error('Lỗi nạp bài học:', err));
+                                    });
+                                }
+
+                                // Bấm nút sinh câu hỏi
+                                if (btnRun) {
+                                    btnRun.addEventListener('click', function() {
+                                        const lessonId = lessonSelect ? lessonSelect.value : '';
+                                        const level = levelSelect ? levelSelect.value : '1';
+                                        const count = countSelect ? countSelect.value : '5';
+
+                                        if (!lessonId) {
+                                            showAlert('Vui lòng chọn bài học mục tiêu!', 'warning');
+                                            return;
+                                        }
+
+                                        btnRun.disabled = true;
+                                        loading.classList.remove('d-none');
+                                        previewArea.classList.add('d-none');
+                                        btnSave.classList.add('d-none');
+                                        alertBox.classList.add('d-none');
+
+                                        const params = new URLSearchParams();
+                                        params.append('lessonId', lessonId);
+                                        params.append('level', level);
+                                        params.append('count', count);
+
+                                        fetch(ctx + '/api/teacher/generate-questions', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+                                            body: params.toString()
+                                        })
+                                        .then(res => res.json())
+                                        .then(data => {
+                                            loading.classList.add('d-none');
+                                            btnRun.disabled = false;
+
+                                            if (!data.success) {
+                                                showAlert(data.message || 'Lỗi khi gọi AI.', 'danger');
+                                                return;
+                                            }
+
+                                            generatedList = data.questions || [];
+                                            if (generatedList.length === 0) {
+                                                showAlert('Không có câu hỏi nào được trả về.', 'warning');
+                                                return;
+                                            }
+
+                                            renderPreviewQuestions(generatedList);
+                                        })
+                                        .catch(err => {
+                                            loading.classList.add('d-none');
+                                            btnRun.disabled = false;
+                                            showAlert('Lỗi kết nối máy chủ: ' + err.message, 'danger');
+                                        });
+                                    });
+                                }
+
+                                function renderPreviewQuestions(questions) {
+                                    container.innerHTML = '';
+                                    countBadge.textContent = questions.length;
+
+                                    questions.forEach((q, idx) => {
+                                        const card = document.createElement('div');
+                                        card.className = 'card border';
+                                        let optionsHtml = '';
+                                        if (q.options && Array.isArray(q.options)) {
+                                            optionsHtml = '<div class="row g-2 mt-1">';
+                                            q.options.forEach(opt => {
+                                                const isCorrect = opt.isCorrect === true || opt.isCorrect === 'true';
+                                                const badgeClass = isCorrect ? 'border-success bg-success-subtle fw-semibold' : 'border-light-subtle bg-white';
+                                                const checkIcon = isCorrect ? '<i class="bi bi-check-circle-fill text-success ms-1"></i>' : '';
+                                                optionsHtml += '<div class="col-md-6">' +
+                                                    '<div class="p-2 border rounded ' + badgeClass + '" style="font-size: .88rem;">' +
+                                                        '<strong>' + (opt.letter || '') + '.</strong> ' + (opt.content || '') + ' ' + checkIcon +
+                                                    '</div>' +
+                                                '</div>';
+                                            });
+                                            optionsHtml += '</div>';
+                                        }
+
+                                        let explanationHtml = '';
+                                        if (q.explanation) {
+                                            explanationHtml = '<div class="mt-2 p-2 bg-light rounded text-muted" style="font-size: .83rem;">' +
+                                                '<i class="bi bi-lightbulb text-warning me-1"></i><strong>Lời giải:</strong> ' + q.explanation +
+                                            '</div>';
+                                        }
+
+                                        card.innerHTML = '<div class="card-body p-3">' +
+                                            '<div class="d-flex align-items-start gap-2">' +
+                                                '<input class="form-check-input mt-1 ai-q-check" type="checkbox" checked data-idx="' + idx + '" id="chk_ai_' + idx + '">' +
+                                                '<div class="flex-grow-1">' +
+                                                    '<label class="form-check-label fw-bold mb-1" for="chk_ai_' + idx + '">' +
+                                                        'Câu ' + (idx + 1) +
+                                                        ' <span class="badge bg-primary-subtle text-primary ms-1" style="font-size: .75rem;">Mức ' + (q.level || 1) + '</span>' +
+                                                    '</label>' +
+                                                    '<div class="latex-content mb-2">' + (q.content || '') + '</div>' +
+                                                    optionsHtml +
+                                                    explanationHtml +
+                                                '</div>' +
+                                            '</div>' +
+                                        '</div>';
+                                        container.appendChild(card);
+                                    });
+
+                                    previewArea.classList.remove('d-none');
+                                    btnSave.classList.remove('d-none');
+
+                                    // Render KaTeX cho toàn bộ công thức toán trong container
+                                    if (typeof renderMathInElement === 'function') {
+                                        renderMathInElement(container, {
+                                            delimiters: [
+                                                { left: '$$', right: '$$', display: true },
+                                                { left: '$', right: '$', display: false }
+                                            ],
+                                            throwOnError: false
+                                        });
+                                    }
+                                }
+
+                                // Chọn tất cả / Bỏ chọn
+                                const btnSelectAll = document.getElementById('btnSelectAllAi');
+                                const btnDeselectAll = document.getElementById('btnDeselectAllAi');
+                                if (btnSelectAll) {
+                                    btnSelectAll.addEventListener('click', () => {
+                                        document.querySelectorAll('.ai-q-check').forEach(c => c.checked = true);
+                                    });
+                                }
+                                if (btnDeselectAll) {
+                                    btnDeselectAll.addEventListener('click', () => {
+                                        document.querySelectorAll('.ai-q-check').forEach(c => c.checked = false);
+                                    });
+                                }
+
+                                // Lưu các câu hỏi đã chọn vào CSDL
+                                if (btnSave) {
+                                    btnSave.addEventListener('click', function() {
+                                        const checkboxes = document.querySelectorAll('.ai-q-check:checked');
+                                        if (checkboxes.length === 0) {
+                                            showAlert('Vui lòng chọn ít nhất một câu hỏi để lưu.', 'warning');
+                                            return;
+                                        }
+
+                                        btnSave.disabled = true;
+                                        btnSave.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Đang lưu...';
+
+                                        const params = new URLSearchParams();
+                                        params.append('lessonId', lessonSelect.value);
+                                        params.append('count', checkboxes.length);
+
+                                        let k = 0;
+                                        checkboxes.forEach(chk => {
+                                            const idx = parseInt(chk.dataset.idx, 10);
+                                            const q = generatedList[idx];
+                                            params.append('q_' + k + '_content', q.content || '');
+                                            params.append('q_' + k + '_level', q.level || 1);
+                                            params.append('q_' + k + '_explanation', q.explanation || '');
+
+                                            let correctLetter = 'A';
+                                            if (q.options && Array.isArray(q.options)) {
+                                                q.options.forEach(opt => {
+                                                    const letter = opt.letter || 'A';
+                                                    params.append('q_' + k + '_opt_' + letter, opt.content || '');
+                                                    if (opt.isCorrect === true || opt.isCorrect === 'true') {
+                                                        correctLetter = letter;
+                                                    }
+                                                });
+                                            }
+                                            params.append('q_' + k + '_correct', correctLetter);
+                                            k++;
+                                        });
+
+                                        fetch(ctx + '/teacher/questions/save-ai', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+                                            body: params.toString()
+                                        })
+                                        .then(res => res.json())
+                                        .then(data => {
+                                            if (data.success) {
+                                                window.location.href = ctx + '/teacher/questions?lessonId=' + lessonSelect.value;
+                                            } else {
+                                                btnSave.disabled = false;
+                                                btnSave.innerHTML = '<i class="bi bi-cloud-arrow-up me-1"></i> Lưu vào Ngân hàng câu hỏi';
+                                                showAlert(data.message || 'Lỗi khi lưu câu hỏi.', 'danger');
+                                            }
+                                        })
+                                        .catch(err => {
+                                            btnSave.disabled = false;
+                                            btnSave.innerHTML = '<i class="bi bi-cloud-arrow-up me-1"></i> Lưu vào Ngân hàng câu hỏi';
+                                            showAlert('Lỗi khi gửi yêu cầu lưu: ' + err.message, 'danger');
+                                        });
+                                    });
+                                }
+
+                                function showAlert(msg, type) {
+                                    alertBox.className = 'alert alert-' + type;
+                                    alertBox.innerHTML = msg;
+                                    alertBox.classList.remove('d-none');
+                                }
+                            })();
+                        </script>
                     </body>
 
                     </html>

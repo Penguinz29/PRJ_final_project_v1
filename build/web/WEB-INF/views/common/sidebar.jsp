@@ -34,6 +34,12 @@
                                 class="sidebar-link ${param.active == 'admin-questions' ? 'active' : ''}">
                                 <i class="bi bi-patch-question"></i> Câu hỏi
                             </a>
+
+                            <div class="sidebar-group-label">Hệ thống</div>
+                            <a href="${pageContext.request.contextPath}/admin/ai-config"
+                                class="sidebar-link ${param.active == 'admin-ai-config' ? 'active' : ''}">
+                                <i class="bi bi-gear-wide-connected"></i> Cấu hình AI
+                            </a>
                         </c:when>
 
                         <%--=====TEACHER=====--%>

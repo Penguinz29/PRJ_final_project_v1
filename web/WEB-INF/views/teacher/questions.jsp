@@ -378,37 +378,36 @@
                                                 const isCorrect = opt.isCorrect === true || opt.isCorrect === 'true';
                                                 const badgeClass = isCorrect ? 'border-success bg-success-subtle fw-semibold' : 'border-light-subtle bg-white';
                                                 const checkIcon = isCorrect ? '<i class="bi bi-check-circle-fill text-success ms-1"></i>' : '';
-                                                optionsHtml += `
-                                                    <div class="col-md-6">
-                                                        <div class="p-2 border rounded ${badgeClass}" style="font-size: .88rem;">
-                                                            <strong>${opt.letter || ''}.</strong> ${opt.content || ''} ${checkIcon}
-                                                        </div>
-                                                    </div>
-                                                `;
+                                                optionsHtml += '<div class="col-md-6">' +
+                                                    '<div class="p-2 border rounded ' + badgeClass + '" style="font-size: .88rem;">' +
+                                                        '<strong>' + (opt.letter || '') + '.</strong> ' + (opt.content || '') + ' ' + checkIcon +
+                                                    '</div>' +
+                                                '</div>';
                                             });
                                             optionsHtml += '</div>';
                                         }
 
-                                        card.innerHTML = `
-                                            <div class="card-body p-3">
-                                                <div class="d-flex align-items-start gap-2">
-                                                    <input class="form-check-input mt-1 ai-q-check" type="checkbox" checked data-idx="${idx}" id="chk_ai_${idx}">
-                                                    <div class="flex-grow-1">
-                                                        <label class="form-check-label fw-bold mb-1" for="chk_ai_${idx}">
-                                                            Câu ${idx + 1}
-                                                            <span class="badge bg-primary-subtle text-primary ms-1" style="font-size: .75rem;">Mức ${q.level || 1}</span>
-                                                        </label>
-                                                        <div class="latex-content mb-2">${q.content || ''}</div>
-                                                        ${optionsHtml}
-                                                        ${q.explanation ? `
-                                                            <div class="mt-2 p-2 bg-light rounded text-muted" style="font-size: .83rem;">
-                                                                <i class="bi bi-lightbulb text-warning me-1"></i><strong>Lời giải:</strong> ${q.explanation}
-                                                            </div>
-                                                        ` : ''}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        `;
+                                        let explanationHtml = '';
+                                        if (q.explanation) {
+                                            explanationHtml = '<div class="mt-2 p-2 bg-light rounded text-muted" style="font-size: .83rem;">' +
+                                                '<i class="bi bi-lightbulb text-warning me-1"></i><strong>Lời giải:</strong> ' + q.explanation +
+                                            '</div>';
+                                        }
+
+                                        card.innerHTML = '<div class="card-body p-3">' +
+                                            '<div class="d-flex align-items-start gap-2">' +
+                                                '<input class="form-check-input mt-1 ai-q-check" type="checkbox" checked data-idx="' + idx + '" id="chk_ai_' + idx + '">' +
+                                                '<div class="flex-grow-1">' +
+                                                    '<label class="form-check-label fw-bold mb-1" for="chk_ai_' + idx + '">' +
+                                                        'Câu ' + (idx + 1) +
+                                                        ' <span class="badge bg-primary-subtle text-primary ms-1" style="font-size: .75rem;">Mức ' + (q.level || 1) + '</span>' +
+                                                    '</label>' +
+                                                    '<div class="latex-content mb-2">' + (q.content || '') + '</div>' +
+                                                    optionsHtml +
+                                                    explanationHtml +
+                                                '</div>' +
+                                            '</div>' +
+                                        '</div>';
                                         container.appendChild(card);
                                     });
 

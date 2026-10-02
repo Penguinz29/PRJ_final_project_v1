@@ -238,7 +238,7 @@
                                 const answered = document.querySelectorAll('.q-radio:checked').length;
                                 let msg = 'Bạn chắc chắn muốn nộp bài?';
                                 if (answered < total) {
-                                    msg = `Bạn còn ${total - answered} câu chưa làm. Vẫn nộp bài?`;
+                                    msg = 'Bạn còn ' + (total - answered) + ' câu chưa làm. Vẫn nộp bài?';
                                 }
                                 if (confirm(msg)) {
                                     document.getElementById('quizForm').submit();
