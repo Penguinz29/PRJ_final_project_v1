@@ -10,6 +10,7 @@
 | Giao diện | JSP + JSTL + **Bootstrap 5.3** (framework UI duy nhất) + KaTeX |
 | AI | Google Gemini REST API (model cấu hình được trong CSDL) |
 | Tài liệu đi kèm | `EduTutor_FRS.md` (đặc tả chức năng chi tiết), `EduTutor_Database.sql` (DDL + dữ liệu mẫu) |
+| Quy ước tham chiếu | Bộ tài liệu gốc đặt trong `docs/` (`EduTutor_SRS.md`, `EduTutor_FRS.md`, `EduTutor_Database.sql`). Trong repo hiện tại các tệp này nằm ở `document/SRS.md`, `document/FRS.md` và `document/sql/*.sql`; mọi dẫn chiếu `EduTutor_*` trong tài liệu được hiểu là các tệp tương ứng này. Tài khoản mẫu: `admin`, `teacher1`, `student1`…, mật khẩu **`EduTutor@123`** |
 
 ---
 
@@ -21,7 +22,7 @@ Tài liệu mô tả đầy đủ yêu cầu chức năng, phi chức năng, d�
 ### 1.2. Phạm vi
 EduTutor Math 12 là website gia sư hỗ trợ học **Toán lớp 12** (Chương trình GDPT 2018) cho 3 nhóm người dùng: **Admin, Teacher, Student**. Hệ thống gồm:
 
-- Quản lý người dùng, chủ đề, bài học và **bài giảng** (video, YouTube, văn bản, liên kết).
+- Quản lý người dùng, chủ đề, bài học và **bài giảng** (video, YouTube, văn bản, liên kết). Hai cấp **Chủ đề → Bài học** đóng vai trò "chuyên đề / môn học" của Toán 12; giao diện hiển thị nhãn **"Chuyên đề / Môn học"**.
 - Ngân hàng câu hỏi **trắc nghiệm và tự luận**; giáo viên có thể nhờ AI sinh đề.
 - Luyện tập trắc nghiệm, nhận phản hồi tức thì; khi làm sai, học sinh được **gia sư AI hướng dẫn từng bước**.
 - Luyện tập tự luận: học sinh **chụp/tải ảnh bài giải viết tay**, AI nhận diện, chấm và nhận xét; giáo viên duyệt lại điểm.
@@ -40,7 +41,7 @@ EduTutor Math 12 là website gia sư hỗ trợ học **Toán lớp 12** (Chươ
 | R5 | AI giải được bất kỳ bài phổ thông khi được hỏi, khác biệt là cấu hình để tương tác | FR-TUT-01 (hỏi tự do), prompt cấu hình ở FR-ADM-06 |
 | R6 | Tương tác giải từng bước; AI dừng lại bắt học sinh nhập số liệu/dữ liệu mới rồi mới giải tiếp | FR-TUT-02, FR-TUT-04 |
 | R7 | Admin đủ quyền thêm giáo viên, học sinh… | FR-ADM-01 → FR-ADM-05 |
-| R8 | Giáo viên thêm bài giảng, câu hỏi, chủ đề, môn học | FR-TEA-01 → FR-TEA-06 |
+| R8 | Giáo viên thêm bài giảng, câu hỏi, chủ đề, môn học | FR-TEA-01 → FR-TEA-06. Hệ thống tổ chức phân cấp **Chủ đề (`topics`) → Bài học (`lessons`)**; hai cấp này đóng vai trò các chuyên đề môn học của Toán 12 và được gắn nhãn **"Chuyên đề / Môn học"** trên giao diện. Thực thể `Subject` (môn học cấp cao, nhiều môn/nhiều lớp) là **hướng mở rộng (Future Scope)** nêu ở mục 1.2, chưa thuộc phạm vi hiện tại |
 | R9 | Học sinh chọn bài, chủ đề, bắt đầu luyện trắc nghiệm, nhận nhận xét AI cho câu sai | FR-STU-01, 03, 04, 05 |
 | R10 | Học sinh luyện tự luận, up ảnh chữ viết tay, nhận nhận xét AI cho câu sai | FR-STU-07, FR-OCR-01 → 04 |
 | R11 | Giao diện dùng 1 framework bất kỳ | Bootstrap 5.3 (mục 2.5) |
@@ -148,24 +149,24 @@ Mô hình **MVC2**: Controller nhận request → Service xử lý nghiệp vụ
 | FR-ADM-01 | Danh sách người dùng có tìm kiếm (tên, username, email), lọc theo vai trò/trạng thái, **phân trang** | M |
 | FR-ADM-02 | **Tạo** tài khoản với vai trò bất kỳ (TEACHER, STUDENT, ADMIN) | M |
 | FR-ADM-03 | Sửa thông tin và đổi vai trò người dùng | M |
-| FR-ADM-04 | Khóa/mở khóa tài khoản; xóa tài khoản (xóa mềm nếu đã có dữ liệu liên quan) | M |
+| FR-ADM-04 | Khóa tài khoản (`ACTIVE → SUSPENDED`) và mở khóa (`SUSPENDED → ACTIVE`); xóa tài khoản: xóa cứng nếu chưa có dữ liệu liên quan, ngược lại xóa mềm sang `INACTIVE`. Tài khoản `INACTIVE` **không** mở khóa được từ giao diện | M |
 | FR-ADM-05 | Đặt lại mật khẩu cho người dùng | S |
-| FR-ADM-06 | Xem/sửa cấu hình AI: khóa API, model, temperature, token, timeout, giới hạn gọi, số bước tutor và **3 prompt** (Tutor, Sinh đề, Chấm bài); có validate | M |
+| FR-ADM-06 | Xem/sửa cấu hình AI: khóa API, model, temperature, token, timeout, giới hạn gọi (học sinh / giáo viên), số bước tutor và **3 prompt** (Tutor, Sinh đề, Chấm bài); có validate | M |
 | FR-ADM-07 | Kiểm tra kết nối Gemini (ping) và hiển thị kết quả | M |
-| FR-ADM-08 | Dashboard thống kê: số người dùng theo vai trò, số câu hỏi, số lượt làm bài, số lần gọi AI | S |
+| FR-ADM-08 | Dashboard thống kê từ **dữ liệu lưu bền vững trong CSDL**: số người dùng theo vai trò/trạng thái, số câu hỏi (trong đó do AI sinh), số lượt làm bài, **số phiên gia sư AI đã tạo**, **số bài tự luận đã chấm qua AI**. Không thống kê "tổng số request AI thô" (bộ đếm trong RAM) | S |
 
 ### 3.3. Giáo viên (TEA)
 
 | Mã | Yêu cầu | Ưu tiên |
 |---|---|---|
-| FR-TEA-01 | CRUD chủ đề (topics); không xóa chủ đề còn bài học | M |
-| FR-TEA-02 | CRUD bài học (lessons); không xóa bài học còn câu hỏi | M |
+| FR-TEA-01 | CRUD chủ đề (topics); không xóa chủ đề còn bài học đang hoạt động (BR-05) | M |
+| FR-TEA-02 | CRUD bài học (lessons); không xóa bài học còn câu hỏi **đang hoạt động** (`is_active = 1`, BR-05) | M |
 | FR-TEA-03 | CRUD **bài giảng** của bài học: `VIDEO` (URL), `YOUTUBE` (URL), `LINK` (website), `TEXT` (nội dung có LaTeX) | M |
 | FR-TEA-04 | CRUD câu hỏi trắc nghiệm (4 phương án, 1 đúng) và tự luận (đáp án/barem cho AI); danh sách có lọc + phân trang | M |
 | FR-TEA-05 | Sinh câu hỏi trắc nghiệm bằng AI theo chủ đề, bài, độ khó, số lượng; xem trước và chỉnh sửa | M |
 | FR-TEA-06 | Lưu hàng loạt câu hỏi AI đã duyệt (`is_ai_generated = 1`) | M |
 | FR-TEA-07 | Danh sách bài tự luận cần duyệt: xem ảnh, văn bản AI nhận diện, điểm AI, nhận xét; **sửa điểm** và thêm nhận xét giáo viên | M |
-| FR-TEA-08 | Xem kết quả làm bài của học sinh theo bài học/câu hỏi (tỉ lệ đúng, điểm trung bình) | S |
+| FR-TEA-08 | Xem kết quả làm bài của học sinh theo bài học/câu hỏi: với trắc nghiệm hiển thị song song **tỉ lệ đúng** (`correct_pct`) và **điểm trung bình thang 10** (`avg_score = correct_pct / 10`) | S |
 | FR-TEA-09 | Dashboard giáo viên: số bài chờ duyệt, câu hỏi gần đây | S |
 
 ### 3.4. Học sinh (STU)
@@ -177,7 +178,7 @@ Mô hình **MVC2**: Controller nhận request → Service xử lý nghiệp vụ
 | FR-STU-03 | Bắt đầu luyện trắc nghiệm theo bài học (lọc độ khó, xáo trộn thứ tự câu) | M |
 | FR-STU-04 | Nộp từng câu, **chấm tức thì**; nếu sai: hiển thị đáp án đúng và lời giải chi tiết | M |
 | FR-STU-05 | Khi sai: nút **"Hỏi gia sư AI"** mở phiên tutor với đề bài và đáp án đã chọn | M |
-| FR-STU-06 | Lịch sử làm bài và tiến độ (tỉ lệ đúng theo chủ đề/bài), phân trang | M |
+| FR-STU-06 | Lịch sử làm bài (phân trang) và tiến độ: dashboard hiển thị tiến độ tổng hợp **theo Chủ đề**; bấm vào một chủ đề để xem tiến độ bóc tách **theo từng Bài học** | M |
 | FR-STU-07 | Chọn bài học → danh sách câu tự luận → làm bài (chuyển sang FR-OCR-01) | M |
 
 ### 3.5. Gia sư AI từng bước (TUT)
@@ -187,7 +188,7 @@ Mô hình **MVC2**: Controller nhận request → Service xử lý nghiệp vụ
 | FR-TUT-01 | Tạo phiên gia sư từ: (a) **bài toán nhập tự do** (không cần chọn bài), (b) một bài học, (c) một câu trắc nghiệm vừa sai, (d) một bài tự luận vừa chấm | M |
 | FR-TUT-02 | AI chia bài toán thành `TUTOR_MIN_STEPS`–`TUTOR_MAX_STEPS` bước, mỗi lượt chỉ hỏi **một** bước; không đưa đáp án cuối ngay | M |
 | FR-TUT-03 | Học sinh đúng → khen và sang bước kế; sai → chỉ ra lỗi, gợi ý, yêu cầu làm lại bước hiện tại | M |
-| FR-TUT-04 | Khi bước cần số liệu/dữ liệu mới, AI **dừng lại, yêu cầu học sinh nhập** (`needsStudentInput`), chỉ tiếp tục khi có dữ liệu | M |
+| FR-TUT-04 | Khi bước cần số liệu/dữ liệu mới, AI **dừng lại, yêu cầu học sinh nhập** (`needsStudentInput`); server ghi trạng thái chờ vào `tutor_sessions.awaiting_input = 1` (kèm `input_hint`) và chỉ tiếp tục khi học sinh cung cấp dữ liệu (xem BR-15) | M |
 | FR-TUT-05 | Kết thúc phiên khi hoàn thành (`COMPLETED`); xem lại và tiếp tục phiên cũ; học sinh có thể chủ động kết thúc (`ABANDONED`) | M |
 
 ### 3.6. Chấm tự luận qua ảnh (OCR)
@@ -311,6 +312,7 @@ flowchart TD
 | Student | `/student/quiz?lessonId=` | Luyện trắc nghiệm |
 | Student | `/student/essay?lessonId=`, `/student/essay/{questionId}` | Chọn câu tự luận, nộp ảnh |
 | Student | `/student/tutor`, `/student/tutor/{sessionId}` | Danh sách phiên, khung chat gia sư |
+| Student | `/student/topics/{topicId}/progress` | Tiến độ chi tiết theo từng bài học của một chủ đề |
 | Student | `/student/history` | Lịch sử làm bài |
 
 ### 5.3. Giao diện với hệ thống ngoài (Gemini)
@@ -353,17 +355,29 @@ erDiagram
         varchar email UK
         varchar role
         varchar status
+        datetime2 created_at
+        datetime2 updated_at
     }
     topics {
         int topic_id PK
         nvarchar topic_name UK
+        nvarchar description
         int order_index
+        bit is_active
+        int created_by FK
+        datetime2 created_at
+        datetime2 updated_at
     }
     lessons {
         int lesson_id PK
         int topic_id FK
         nvarchar lesson_name
         nvarchar content_summary
+        int order_index
+        bit is_active
+        int created_by FK
+        datetime2 created_at
+        datetime2 updated_at
     }
     lesson_materials {
         int material_id PK
@@ -372,22 +386,33 @@ erDiagram
         nvarchar title
         varchar url
         nvarchar content_text
+        int order_index
+        int created_by FK
+        datetime2 created_at
+        datetime2 updated_at
     }
     questions {
         int question_id PK
         int lesson_id FK
         int created_by FK
+        nvarchar question_text
         varchar question_type
         varchar difficulty_level
         nvarchar explanation_latex
         nvarchar reference_solution
         bit is_ai_generated
+        bit is_active
+        datetime2 created_at
+        datetime2 updated_at
     }
     question_options {
         int option_id PK
         int question_id FK
         char option_label
+        nvarchar option_text
         bit is_correct
+        datetime2 created_at
+        datetime2 updated_at
     }
     submissions {
         int submission_id PK
@@ -400,8 +425,14 @@ erDiagram
         nvarchar extracted_text
         decimal ai_score
         decimal final_score
+        nvarchar ai_feedback
+        nvarchar suggested_correction
+        nvarchar teacher_comment
         varchar status
         int reviewed_by FK
+        datetime2 reviewed_at
+        datetime2 submitted_at
+        datetime2 updated_at
     }
     ai_configs {
         int config_id PK
@@ -409,16 +440,23 @@ erDiagram
         nvarchar config_value
         bit is_secret
         int updated_by FK
+        datetime2 created_at
+        datetime2 updated_at
     }
     tutor_sessions {
         int session_id PK
         int student_id FK
         int lesson_id FK
         int question_id FK
+        nvarchar title
         nvarchar problem_text
         int total_steps
         int current_step
         varchar status
+        bit awaiting_input
+        nvarchar input_hint
+        datetime2 created_at
+        datetime2 updated_at
     }
     tutor_messages {
         int message_id PK
@@ -427,6 +465,8 @@ erDiagram
         int step_number
         nvarchar content_text
         bit is_step_correct
+        datetime2 created_at
+        datetime2 updated_at
     }
 ```
 
@@ -434,22 +474,40 @@ erDiagram
 
 | Bảng | Mục đích | Khóa ngoại | Ràng buộc chính |
 |---|---|---|---|
-| `users` | Tài khoản 3 vai trò | — | `username`, `email` duy nhất; `role ∈ {ADMIN, TEACHER, STUDENT}`; `status ∈ {ACTIVE, INACTIVE, SUSPENDED}` |
-| `topics` | Chuyên đề | `created_by → users` | `topic_name` duy nhất |
-| `lessons` | Bài học | `topic_id → topics`, `created_by → users` | — |
-| `lesson_materials` | Bài giảng (video/YouTube/link/text) | `lesson_id → lessons` (cascade) | `material_type ∈ {VIDEO, YOUTUBE, LINK, TEXT}`; TEXT bắt buộc `content_text`, loại khác bắt buộc `url` |
-| `questions` | Ngân hàng câu hỏi | `lesson_id`, `created_by` | `question_type ∈ {MULTIPLE_CHOICE, ESSAY}`; `difficulty_level ∈ {EASY, MEDIUM, HARD, ADVANCED}`; `reference_solution` chỉ dùng cho AI chấm |
+| `users` | Tài khoản 3 vai trò | — | `username`, `email` duy nhất; `role ∈ {ADMIN, TEACHER, STUDENT}`; `status ∈ {ACTIVE, SUSPENDED, INACTIVE}` (ý nghĩa ở bảng trạng thái bên dưới) |
+| `topics` | Chuyên đề (cấp trên của bài học) | `created_by → users` | `topic_name` duy nhất; `order_index INT NOT NULL DEFAULT 1`; `is_active BIT NOT NULL DEFAULT 1` (xóa mềm khi đã có lịch sử) |
+| `lessons` | Bài học | `topic_id → topics`, `created_by → users` | `order_index INT NOT NULL DEFAULT 1`; `is_active BIT NOT NULL DEFAULT 1` (xóa mềm khi đã có lịch sử) |
+| `lesson_materials` | Bài giảng (video/YouTube/link/text) | `lesson_id → lessons` (cascade), `created_by → users` | `material_type ∈ {VIDEO, YOUTUBE, LINK, TEXT}`; TEXT bắt buộc `content_text`, loại khác bắt buộc `url`; `order_index INT NOT NULL DEFAULT 1` |
+| `questions` | Ngân hàng câu hỏi | `lesson_id`, `created_by` | `question_type ∈ {MULTIPLE_CHOICE, ESSAY}`; `difficulty_level ∈ {EASY, MEDIUM, HARD, ADVANCED}`; `reference_solution` chỉ dùng cho AI chấm; `is_active BIT NOT NULL DEFAULT 1` (0 = xóa mềm, BR-05) |
 | `question_options` | Phương án A–D | `question_id → questions` (cascade) | `(question_id, option_label)` duy nhất |
-| `submissions` | Bài làm trắc nghiệm và tự luận | `student_id`, `question_id`, `selected_option_id`, `reviewed_by` | Điểm thang 10 (`0..10`); `ai_score` giữ nguyên, `final_score` là điểm chính thức |
+| `submissions` | Bài làm trắc nghiệm và tự luận | `student_id`, `question_id`, `selected_option_id`, `reviewed_by` | Điểm thang 10 (`0..10`); `ai_score` giữ nguyên, `final_score` là điểm chính thức; `status ∈ {GRADED, AI_GRADED, REVIEWED}`; có `ai_feedback`, `suggested_correction`, `teacher_comment` (≤ 1.000 ký tự), `reviewed_at` |
 | `ai_configs` | Cấu hình và prompt AI | `updated_by → users` | `config_key` duy nhất; `is_secret` cho khóa API |
-| `tutor_sessions` | Phiên gia sư | `student_id`, `lesson_id` (null), `question_id` (null) | `status ∈ {ACTIVE, COMPLETED, ABANDONED}` |
+| `tutor_sessions` | Phiên gia sư | `student_id`, `lesson_id` (null), `question_id` (null) | `status ∈ {ACTIVE, COMPLETED, ABANDONED}`; `title NVARCHAR(100) NOT NULL` (≤ 100 ký tự đầu của đề); `awaiting_input BIT NOT NULL DEFAULT 0`; `input_hint NVARCHAR(255) NULL` |
 | `tutor_messages` | Hội thoại | `session_id → tutor_sessions` (cascade) | `sender_type ∈ {USER, AI}` |
+
+**Cột thời gian:** mọi bảng đều có `created_at DATETIME2 NOT NULL DEFAULT SYSDATETIME()` và `updated_at DATETIME2 NULL` (cập nhật khi sửa bản ghi, qua `@CreationTimestamp` / `@UpdateTimestamp`). Riêng `submissions` dùng `submitted_at` làm thời điểm tạo.
+
+**Trạng thái tài khoản (`users.status`):**
+
+| Giá trị | Ý nghĩa | Đăng nhập | Thao tác của Admin |
+|---|---|---|---|
+| `ACTIVE` | Đang hoạt động | Được | Khóa → `SUSPENDED`; xóa |
+| `SUSPENDED` | Khóa tạm thời | Không | **Mở khóa** → `ACTIVE`; xóa |
+| `INACTIVE` | Xóa mềm (đã có dữ liệu liên quan, BR-06) | Không | Không có thao tác "Mở khóa"; chỉ khôi phục được bằng can thiệp CSDL |
+
+**Trạng thái bài làm (`submissions.status`):**
+
+| Giá trị | Áp dụng cho | Ý nghĩa |
+|---|---|---|
+| `GRADED` | Trắc nghiệm | Hệ thống chấm tức thì; `final_score` = 10 (đúng) hoặc 0 (sai); không cần duyệt |
+| `AI_GRADED` | Tự luận | AI đã đọc ảnh và chấm; `ai_score` là đề xuất, `final_score` ban đầu = `ai_score`; chờ giáo viên duyệt |
+| `REVIEWED` | Tự luận | Giáo viên đã duyệt / chỉnh `final_score`, thêm `teacher_comment`, ghi `reviewed_by`, `reviewed_at`; `ai_score` giữ nguyên |
 
 Ghi chú thiết kế:
 - Rubric nêu "5–6 bảng"; đồ án có **6 bảng lõi** (`users`, `topics`, `lessons`, `questions`, `submissions`, `tutor_sessions`) cộng **4 bảng phụ** xuất hiện *do chuẩn hóa*: `lesson_materials`, `question_options`, `tutor_messages` là thuộc tính đa trị (quan hệ 1–N) buộc phải tách để đạt 1NF/3NF; `ai_configs` lưu cấu hình AI để Admin đổi không cần sửa code. Có thể nhóm thành 4 cụm: *người dùng* (users) • *nội dung* (topics, lessons, lesson_materials, questions, question_options) • *kết quả* (submissions) • *AI* (ai_configs, tutor_sessions, tutor_messages).
 - Mỗi bảng ánh xạ **một Entity JPA** (10 Entity); `hbm2ddl.auto=none` — script SQL là nguồn sự thật, Hibernate không tự sửa cấu trúc.
 - Điểm trắc nghiệm quy ra thang 10 (đúng = 10, sai = 0) để thống nhất với tự luận; `is_correct` giữ kết quả đúng/sai.
-- Script đầy đủ (DDL, chỉ mục, dữ liệu mẫu, mật khẩu mẫu `123456`) trong `EduTutor_Database.sql`.
+- Script đầy đủ (DDL, chỉ mục, dữ liệu mẫu) trong `EduTutor_Database.sql` (trong repo: `document/sql/01…06`). Mật khẩu mẫu của mọi tài khoản seed là **`EduTutor@123`** (đạt VAL-02), được lưu dạng BCrypt.
 
 ### 6.3. Lưu trữ file
 Ảnh bài tự luận lưu ngoài thư mục web, tại `${app.upload-dir}/essays/{studentId}/{uuid}.{ext}`; CSDL chỉ lưu đường dẫn tương đối. Ảnh chỉ được phục vụ qua controller có kiểm tra quyền (chủ bài, giáo viên, admin).
@@ -465,7 +523,7 @@ Ghi chú thiết kế:
 | NFR-03 | Bảo mật | 100% truy vấn tham số hóa (JPA/Hibernate dùng `PreparedStatement`, cấm nối chuỗi JPQL/SQL); không bind request thẳng vào Entity; mật khẩu băm **BCrypt**; `<c:out>`/escape và JSoup sanitize nội dung hiển thị; CSRF token cho mọi form/POST; cookie session `HttpOnly`, `SameSite=Lax`; đổi session ID sau đăng nhập | Review code + thử tấn công cơ bản |
 | NFR-04 | Phân quyền | Mọi URL (kể cả `/api/**`) kiểm tra vai trò ở server; không tin dữ liệu ẩn từ client; học sinh chỉ truy cập dữ liệu của mình | Test case TC-SEC |
 | NFR-05 | Bảo mật dữ liệu AI | Khóa API chỉ hiển thị dạng che (`AIza****abcd`), không ghi vào log; file upload kiểm tra phần mở rộng, MIME và *magic bytes*, đổi tên ngẫu nhiên | Review |
-| NFR-06 | Kiểm soát chi phí | Giới hạn `AI_RATE_LIMIT_PER_HOUR` lần gọi AI/học sinh; lỗi vượt hạn trả HTTP 429 | TC-AI-08 |
+| NFR-06 | Kiểm soát chi phí | Giới hạn gọi AI theo `(userId, vai trò/hành động)`: học sinh `AI_RATE_LIMIT_PER_HOUR` (mặc định 60/giờ, gia sư + chấm ảnh); giáo viên `AI_RATE_LIMIT_TEACHER_PER_HOUR` (mặc định 300/giờ, sinh đề); Admin được miễn cho thao tác Test kết nối. Vượt hạn trả HTTP 429 | TC-AI-08 |
 | NFR-07 | Độ tin cậy | `@ControllerAdvice` xử lý lỗi tập trung; AI trả JSON sai cú pháp → thử lại tối đa 3 lần; lỗi HTTP 429/5xx → thử lại tối đa 2 lần với chờ lũy tiến; AI hỏng không làm sập chức năng khác | TC-AI-06, 07 |
 | NFR-08 | Toàn vẹn dữ liệu | Thao tác nhiều bước (tạo câu hỏi + 4 phương án, lưu hàng loạt) dùng `@Transactional` (`JpaTransactionManager`); không giữ transaction khi chờ AI | Test rollback |
 | NFR-09 | Khả dụng | Responsive (≥ 360 px), thông báo lỗi rõ ràng, hiển thị đúng ký hiệu toán GDPT 2018 | Kiểm tra trên điện thoại |
@@ -480,11 +538,11 @@ Ghi chú thiết kế:
 
 | Mã | Quy tắc |
 |---|---|
-| BR-01 | Chỉ tài khoản `ACTIVE` mới đăng nhập được; tài khoản bị khóa đang đăng nhập sẽ bị chặn ở request kế tiếp |
+| BR-01 | Chỉ tài khoản `ACTIVE` mới đăng nhập được (`SUSPENDED`, `INACTIVE` bị từ chối); tài khoản bị khóa đang đăng nhập sẽ bị chặn ở request kế tiếp. Chỉ `SUSPENDED` được mở khóa; `INACTIVE` (xóa mềm) thì không |
 | BR-02 | Hệ thống phải luôn còn ít nhất 1 Admin `ACTIVE`; không cho khóa/xóa/hạ quyền Admin cuối cùng; Admin không tự khóa chính mình |
-| BR-03 | Giáo viên chỉ sửa/xóa câu hỏi và bài giảng **do mình tạo**; Admin sửa được tất cả |
+| BR-03 | Áp dụng cho **toàn bộ tài nguyên giáo viên**: chủ đề (`topics`), bài học (`lessons`), bài giảng (`lesson_materials`) và câu hỏi (`questions`). Giáo viên chỉ sửa/xóa mục có `created_by` là mình; Admin có toàn quyền trên toàn hệ thống. Mọi giáo viên vẫn được *xem* nội dung dùng chung |
 | BR-04 | Câu trắc nghiệm có đúng 4 phương án A–D và đúng 1 phương án đúng; câu tự luận không có phương án |
-| BR-05 | Không xóa chủ đề còn bài học, bài học còn câu hỏi; câu hỏi đã có bài nộp thì chuyển `is_active = 0` thay vì xóa |
+| BR-05 | **Câu hỏi:** đã có bài nộp thì chuyển `is_active = 0` (xóa mềm), chưa có thì xóa hẳn. **Bài học:** không xóa nếu còn câu hỏi *đang hoạt động*; kiểm tra bằng `countByLessonIdAndIsActiveTrue(lessonId) == 0`. Nếu chỉ còn câu hỏi đã xóa mềm (`is_active = 0`) thì cho phép xóa: xóa cứng khi không còn bài nộp liên quan, ngược lại xóa mềm bài học (`lessons.is_active = 0`, ẩn khỏi danh sách nhưng giữ lịch sử). **Chủ đề:** không xóa nếu còn bài học *đang hoạt động*; xóa cứng khi không còn bài học nào, ngược lại xóa mềm (`topics.is_active = 0`). Mọi danh sách chỉ hiển thị bản ghi `is_active = 1` |
 | BR-06 | Người dùng đã có dữ liệu liên quan chỉ được xóa mềm (`INACTIVE`) |
 | BR-07 | Mọi điểm quy về thang 10; điểm tự luận làm tròn tới 0.25 |
 | BR-08 | Câu hỏi do AI sinh phải được giáo viên xem trước và xác nhận mới lưu |
@@ -492,8 +550,9 @@ Ghi chú thiết kế:
 | BR-10 | Học sinh được làm lại câu hỏi nhiều lần; tiến độ tính theo lần làm **gần nhất** của mỗi câu |
 | BR-11 | Server không bao giờ gửi `is_correct`, `explanation_latex`, `reference_solution` xuống client trước khi học sinh nộp câu đó |
 | BR-12 | Gia sư AI không đưa đáp án cuối ở bước đầu; số bước nằm trong khoảng `TUTOR_MIN_STEPS`–`TUTOR_MAX_STEPS`; một lượt chỉ hỏi một bước |
-| BR-13 | Mỗi học sinh tối đa `AI_RATE_LIMIT_PER_HOUR` lượt gọi AI/giờ (tutor + chấm ảnh) |
+| BR-13 | Giới hạn gọi AI áp dụng theo `(userId, vai trò/hành động)`, cửa sổ trượt 60 phút: **học sinh** tối đa `AI_RATE_LIMIT_PER_HOUR` (mặc định 60) lượt cho gia sư (khởi tạo + từng bước) và chấm ảnh tự luận; **giáo viên** tối đa `AI_RATE_LIMIT_TEACHER_PER_HOUR` (mặc định 300, cấu hình trong `ai_configs`) lượt sinh câu hỏi; **Admin** được miễn giới hạn cho Test kết nối API. Hai nhóm hạn mức độc lập nhau |
 | BR-14 | Phiên tutor chỉ thuộc về học sinh tạo ra nó; học sinh khác truy cập → 403 |
+| BR-15 | Khi AI trả `needsStudentInput = true`, server đặt `tutor_sessions.awaiting_input = 1` và lưu `input_hint`. Lượt kế tiếp của học sinh được hiểu là **dữ liệu cung cấp cho bước hiện tại** (không chấm đúng/sai, không chuyển bước); server đưa dữ liệu đó vào prompt rồi đặt lại `awaiting_input = 0`, `input_hint = NULL`. Trạng thái này lưu ở CSDL nên mở lại phiên cũ vẫn đúng |
 
 ### 8.2. Bảng validation tập trung
 
@@ -530,6 +589,8 @@ Ghi chú thiết kế:
 
 ### 9.1. Kịch bản demo (8 bước)
 
+Tài khoản demo (dữ liệu mẫu): `admin`, `teacher1`, `teacher2`, `student1`…`student5`; mật khẩu chung **`EduTutor@123`**.
+
 | Bước | Vai trò | Nội dung | Kết quả mong đợi |
 |---|---|---|---|
 | 1 | Admin | Đăng nhập → Quản lý người dùng → tạo giáo viên mới; mở Cấu hình AI, đặt Temperature 0.3, dán khóa API, bấm **Test kết nối** | Tạo được tài khoản TEACHER; báo kết nối thành công |
@@ -555,23 +616,27 @@ Ghi chú thiết kế:
 | TC-SEC-08 | Response `GET /student/quiz` | Không chứa `is_correct`, lời giải |
 | TC-AI-01 | Test kết nối với khóa đúng / sai | Thành công / thông báo lỗi rõ |
 | TC-AI-02 | Sinh 5 câu, AI trả JSON hợp lệ | Hiển thị đủ 5 câu để xem trước |
-| TC-AI-03 | Tutor: gửi bài toán đầu tiên | AI không đưa đáp án cuối; trả bước 1; `totalSteps` trong 3–6 |
+| TC-AI-03 | Tutor: gửi bài toán đầu tiên | AI không đưa đáp án cuối ngay; trả về câu hỏi bước 1; `totalSteps` nằm trong khoảng `[TUTOR_MIN_STEPS, TUTOR_MAX_STEPS]` đang cấu hình trong `ai_configs` (mặc định 3–6; giới hạn cấu hình 2–10 theo VAL-15) |
 | TC-AI-04 | Tutor: trả lời sai bước | `isStepCorrect=false`, giữ nguyên bước, có gợi ý |
-| TC-AI-05 | Tutor: bài cần dữ liệu mới | `needsStudentInput=true`; AI chờ, không tự bịa số liệu |
+| TC-AI-05 | Tutor: bài cần dữ liệu mới | `needsStudentInput=true`, `awaiting_input=1`; AI chờ, không tự bịa số liệu; lượt sau học sinh nhập số liệu thì `awaiting_input` về 0 và bước không bị chấm sai/đổi |
 | TC-AI-06 | AI trả JSON sai cú pháp | Tự thử lại ≤ 3 lần rồi báo lỗi thân thiện |
 | TC-AI-07 | Ngắt mạng / quá timeout | Báo "AI tạm thời không phản hồi", các chức năng khác vẫn dùng được |
-| TC-AI-08 | Vượt giới hạn gọi AI/giờ | HTTP 429 + thông báo |
+| TC-AI-08 | Vượt giới hạn gọi AI/giờ (học sinh vượt 60 lượt; giáo viên vượt 300 lượt sinh đề) | HTTP 429 + thông báo; Test kết nối của Admin không bị giới hạn |
 | TC-OCR-01 | Tải file `.exe` đổi tên thành `.jpg` | Từ chối (magic bytes) |
 | TC-OCR-02 | Tải ảnh 8 MB | Từ chối, báo dung lượng |
 | TC-OCR-03 | Tải ảnh không phải bài toán | `legible=false`, báo học sinh chụp lại, không lưu điểm |
 | TC-ADM-01 | Khóa Admin cuối cùng | Bị chặn (BR-02) |
+| TC-ADM-02 | Mở khóa tài khoản `SUSPENDED` / tài khoản `INACTIVE` | `SUSPENDED` → `ACTIVE`; `INACTIVE` bị từ chối (409), không có nút "Mở khóa" |
 | TC-TEA-01 | Xóa chủ đề còn bài học | Bị chặn, thông báo rõ |
 | TC-TEA-02 | Tạo câu trắc nghiệm có 2 đáp án đúng | Báo lỗi validation |
+| TC-TEA-03 | Xóa bài học còn câu hỏi `is_active = 1` / bài học chỉ còn câu hỏi `is_active = 0` | Trường hợp đầu bị chặn (409); trường hợp sau được phép xóa (BR-05) |
+| TC-TEA-04 | Giáo viên B sửa/xóa chủ đề, bài học, bài giảng, câu hỏi do giáo viên A tạo | HTTP 403 (BR-03); Admin thao tác được |
 | TC-DB-01 | Chạy `EduTutor_Database.sql` trên SQL Server sạch | Tạo đủ 10 bảng + dữ liệu mẫu, không lỗi |
 | TC-DB-02 | Khởi động ứng dụng với `hbm2ddl.auto=none` | Hibernate nạp đủ 10 Entity, không lỗi mapping; không tự sửa bảng |
 | TC-DB-03 | Bật log `org.hibernate.SQL`, mở `/student/quiz` 10 câu | Số câu SQL không tăng theo số câu hỏi (không N+1) |
 | TC-VAL-01 | Đăng ký với `username = ab`, mật khẩu `123` | Lỗi tiếng Việt hiển thị tại từng trường, không ghi CSDL |
 | TC-VAL-02 | Gửi trực tiếp `role=ADMIN` trong form đăng ký | Bị bỏ qua; tài khoản tạo ra có vai trò STUDENT |
+| TC-VAL-03 | Đăng nhập bằng tài khoản mẫu `admin / teacher1 / student1` với mật khẩu `EduTutor@123` | Thành công; mật khẩu mẫu thỏa VAL-02 (8–64 ký tự, có chữ và số) |
 
 ---
 
@@ -613,6 +678,6 @@ Ghi chú thiết kế:
 | Chống SQL Injection ra sao? | Mọi truy vấn có tham số; không nối chuỗi JPQL/SQL; test `' OR 1=1 --` (TC-SEC-04) |
 | Chống CSRF/XSS/session fixation? | Token CSRF cho mọi POST; sanitize bằng JSoup + `<c:out>`; `changeSessionId()` sau đăng nhập; cookie `HttpOnly`, `SameSite` |
 | Vì sao 10 bảng thay vì 5–6? | 6 bảng lõi; 3 bảng 1–N tách ra do chuẩn hóa (bài giảng, phương án, tin nhắn) và 1 bảng cấu hình AI để Admin đổi không cần deploy |
-| Gia sư AI "từng bước" hoạt động thế nào? | Server giữ `current_step`; AI trả JSON; server chuẩn hóa (đúng → +1, sai → giữ bước, `needsStudentInput` → chờ); AI không được tự nhảy bước hay đưa đáp án sớm |
+| Gia sư AI "từng bước" hoạt động thế nào? | Server giữ `current_step` và `awaiting_input`; AI trả JSON; server chuẩn hóa (đúng → +1, sai → giữ bước, `needsStudentInput` → `awaiting_input = 1` rồi chờ dữ liệu); AI không được tự nhảy bước hay đưa đáp án sớm |
 | Nếu AI trả sai/lỗi/chậm thì sao? | Thử lại tối đa theo quy tắc; báo lỗi thân thiện; chức năng không dùng AI vẫn chạy; giáo viên duyệt đề và điểm (BR-08, BR-09) |
 | Vì sao gọi AI ngoài transaction? | Không giữ kết nối DB trong lúc chờ mạng; tránh cạn pool; phần ghi DB gom vào một transaction ngắn sau khi AI trả lời |

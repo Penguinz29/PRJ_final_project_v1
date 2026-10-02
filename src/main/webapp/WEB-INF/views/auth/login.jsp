@@ -337,7 +337,7 @@
                                 <%-- DEMO: xóa khi nộp bài --%>
                                     <div class="demo-box">
                                         <strong><i class="bi bi-info-circle me-1"></i>Tài khoản demo (mật khẩu:
-                                            123456)</strong>
+                                            EduTutor@123)</strong>
                                         admin &nbsp;·&nbsp; teacher1 &nbsp;·&nbsp; student1
                                     </div>
                                     <%-- /DEMO --%>

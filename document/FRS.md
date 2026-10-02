@@ -7,6 +7,7 @@
 | Đồ án | PRJ301 — Spring MVC 6 + Spring Data JPA (Hibernate) + SQL Server + Gemini API |
 | Phiên bản | 2.1.0 (chuyển tầng dữ liệu sang JPA; bổ sung Bean Validation, đối chiếu rubric) |
 | Liên quan | `EduTutor_SRS.md` (yêu cầu), `EduTutor_Database.sql` (CSDL) |
+| Quy ước tham chiếu | Bộ tài liệu gốc đặt trong `docs/`. Trong repo hiện tại: `document/SRS.md` ≙ `EduTutor_SRS.md`, `document/FRS.md` ≙ `EduTutor_FRS.md`, `document/sql/01…06_*.sql` ≙ `EduTutor_Database.sql`. Tài khoản mẫu `admin`, `teacher1`, `student1`…, mật khẩu **`EduTutor@123`** |
 
 Mã FR trong ngoặc ở mỗi use case (UC) trỏ về SRS.
 
@@ -157,6 +158,25 @@ Cấu hình AI (khóa, model, prompt…) **không** nằm ở đây mà ở bả
 
 Thông báo lỗi đặt trong `messages.properties` (tiếng Việt, UTF-8) và hiển thị tại từng trường bằng `<form:errors>`.
 
+### 1.7. Cấu trúc dữ liệu bổ sung và trạng thái (đồng bộ với SRS 6.1 / 6.2)
+
+Kiến trúc chuẩn gồm **10 bảng / 10 Entity**. Các thuộc tính sau là bắt buộc trong DDL và Entity (script `document/sql/06_target_schema_additions.sql` bổ sung vào CSDL hiện có; tên cột thực tế dùng PascalCase, vd. `questions.is_active` ≙ `Questions.IsActive`):
+
+| Bảng | Cột bổ sung | Kiểu / mặc định | Dùng ở |
+|---|---|---|---|
+| `questions` | `is_active` | `BIT NOT NULL DEFAULT 1` | BR-05, UC-TEA-04, mọi truy vấn danh sách / quiz |
+| `lessons` | `order_index` | `INT NOT NULL DEFAULT 1` | UC-TEA-02, sắp xếp bài học |
+| `lessons`, `topics` | `is_active` | `BIT NOT NULL DEFAULT 1` | BR-05 (xóa mềm khi còn lịch sử) |
+| `topics` | `order_index` | `INT NOT NULL DEFAULT 1` | UC-TEA-01 |
+| `lesson_materials` | `order_index`, `created_by` | `INT NOT NULL DEFAULT 1`, `INT NOT NULL` FK → `users` | UC-TEA-03, BR-03 |
+| `submissions` | `ai_feedback`, `suggested_correction`, `teacher_comment`, `reviewed_at`; `status` | `NVARCHAR(MAX) NULL` ×3, `DATETIME2 NULL`; `VARCHAR(20)` ∈ {`GRADED`,`AI_GRADED`,`REVIEWED`} | UC-STU-04, UC-OCR-02, UC-TEA-07 |
+| `tutor_sessions` | `title`; `awaiting_input`; `input_hint` | `NVARCHAR(100) NOT NULL`; `BIT NOT NULL DEFAULT 0`; `NVARCHAR(255) NULL` | UC-TUT-01…03 |
+| Mọi bảng | `created_at`, `updated_at` | `DATETIME2 NOT NULL DEFAULT SYSDATETIME()`, `DATETIME2 NULL` (`@CreationTimestamp` / `@UpdateTimestamp`); `submissions` dùng `submitted_at` làm thời điểm tạo | Kiểm toán, sắp xếp |
+
+**Trạng thái bài làm (`submissions.status`):** `GRADED` — trắc nghiệm, chấm tức thì (`final_score` = 10 hoặc 0), không cần duyệt • `AI_GRADED` — tự luận AI đã chấm, `ai_score` là đề xuất, chờ giáo viên • `REVIEWED` — giáo viên đã duyệt / chỉnh `final_score` (giữ nguyên `ai_score`).
+
+**Trạng thái tài khoản (`users.status`):** `ACTIVE`, `SUSPENDED` (khóa tạm, mở khóa được), `INACTIVE` (xóa mềm, không mở khóa được) — chi tiết ở UC-ADM-04.
+
 ---
 
 ## 2. PHÂN QUYỀN — `AuthInterceptor` (FR-AUTH-06)
@@ -290,8 +310,16 @@ Nếu kết quả = 0 và thay đổi làm mất Admin → 409 "Phải còn ít 
 
 | URL | Hành động |
 |---|---|
-| `POST /admin/users/{id}/status` (`status=ACTIVE\|SUSPENDED`) | Khóa hoặc mở khóa |
-| `POST /admin/users/{id}/delete` | Xóa |
+| `POST /admin/users/{id}/status` (`status=ACTIVE\|SUSPENDED`) | Khóa (`ACTIVE → SUSPENDED`) hoặc mở khóa (`SUSPENDED → ACTIVE`) |
+| `POST /admin/users/{id}/delete` | Xóa (xóa cứng hoặc xóa mềm, xem bên dưới) |
+
+**Quy ước trạng thái tài khoản (BR-01, BR-06):**
+
+| Trạng thái | Ý nghĩa | Đăng nhập | Thao tác của Admin |
+|---|---|---|---|
+| `ACTIVE` | Đang hoạt động | Được | Khóa → `SUSPENDED`; Xóa |
+| `SUSPENDED` | Khóa tạm thời | Không | **Mở khóa** → `ACTIVE`; Xóa |
+| `INACTIVE` | Đã xóa mềm (do có dữ liệu liên kết) | Không | **Không áp dụng "Mở khóa"**: giao diện ẩn nút, `POST …/status` với tài khoản `INACTIVE` trả 409 "Tài khoản đã bị xóa, không thể mở khóa". Chỉ khôi phục được bằng can thiệp trực tiếp vào CSDL |
 
 **Xóa:** kiểm tra có dữ liệu liên quan (`topics/lessons/questions/lesson_materials.created_by`, `submissions.student_id`, `tutor_sessions.student_id`, `ai_configs.updated_by`) bằng các hàm `existsByCreatedBy(userId)`, `existsByStudentId(userId)`… trên từng Repository.
 - Không có → `DELETE FROM users WHERE user_id = ?`.
@@ -321,7 +349,8 @@ Nếu kết quả = 0 và thay đổi làm mất Admin → 409 "Phải còn ít 
 | `MAX_OUTPUT_TOKENS` | `2048` | 256–8192 (VAL-14) |
 | `TUTOR_MIN_STEPS` / `TUTOR_MAX_STEPS` | `3` / `6` | 2–10, MIN ≤ MAX (VAL-15) |
 | `AI_TIMEOUT_SECONDS` | `30` | 5–120 (VAL-16); ảnh dùng gấp đôi |
-| `AI_RATE_LIMIT_PER_HOUR` | `60` | 1–1000 |
+| `AI_RATE_LIMIT_PER_HOUR` | `60` | 1–1000; hạn mức **học sinh** (gia sư + chấm ảnh) |
+| `AI_RATE_LIMIT_TEACHER_PER_HOUR` | `300` | 1–5000; hạn mức **giáo viên** (sinh câu hỏi bằng AI) |
 | `TUTOR_SYSTEM_PROMPT`, `QUIZ_GEN_PROMPT`, `GRADING_PROMPT` | Xem script SQL | ≤ 8.000 ký tự; phải còn đủ placeholder (VAL-17) |
 
 **Luồng chính**
@@ -357,21 +386,28 @@ WHERE config_key = ?
 4. Thất bại → `{ "success": false, "message": "<lý do thân thiện>" }` với ánh xạ: 400/401/403 → "Khóa API hoặc model không hợp lệ"; 404 → "Model không tồn tại hoặc đã ngừng hỗ trợ"; 429 → "Hết hạn mức"; timeout → "Quá thời gian chờ"; mất mạng → "Không kết nối được tới Google".
 
 #### UC-ADM-08 — Dashboard quản trị (FR-ADM-08)
-`GET /admin/dashboard` hiển thị: số người dùng theo vai trò/trạng thái, tổng số câu hỏi (trong đó do AI sinh), tổng lượt làm bài 7 ngày gần nhất, số phiên tutor, số bài tự luận chờ duyệt.
+`GET /admin/dashboard` hiển thị các số liệu **lấy từ dữ liệu lưu bền vững trong CSDL** (không dùng bộ đếm trong RAM nên không mất khi khởi động lại): số người dùng theo vai trò/trạng thái, tổng số câu hỏi đang hoạt động (trong đó do AI sinh), tổng lượt làm bài 7 ngày gần nhất, **số phiên gia sư AI đã tạo**, **số câu hỏi do AI sinh**, **số bài tự luận đã chấm qua AI** và số bài tự luận chờ duyệt. Dashboard **không** thống kê "tổng số request AI thô"; bộ đếm của `RateLimiter` (4.5) chỉ phục vụ giới hạn tần suất.
 ```sql
 SELECT role, status, COUNT(*) AS n FROM users GROUP BY role, status;
 SELECT COUNT(*) AS total, SUM(CAST(is_ai_generated AS INT)) AS ai FROM questions WHERE is_active = 1;
 SELECT CAST(submitted_at AS DATE) AS d, COUNT(*) AS n FROM submissions
 WHERE submitted_at >= DATEADD(DAY, -7, SYSDATETIME()) GROUP BY CAST(submitted_at AS DATE) ORDER BY d;
+SELECT COUNT(*) AS tutor_sessions FROM tutor_sessions;                                   -- phiên gia sư AI đã tạo
+SELECT COUNT(*) AS ai_questions   FROM questions   WHERE is_ai_generated = 1;            -- câu hỏi do AI sinh
+SELECT COUNT(*) AS ai_graded_essays FROM submissions WHERE submission_type = 'ESSAY';    -- tự luận đã chấm qua AI
+SELECT COUNT(*) AS pending_essays FROM submissions
+WHERE submission_type = 'ESSAY' AND status = 'AI_GRADED';                                -- chờ giáo viên duyệt
 ```
 
 ---
 
 ### 3.3. MODULE 3 — NỘI DUNG VÀ NGÂN HÀNG ĐỀ (TEACHER)
 
-Quyền: `TEACHER` và `ADMIN`. Quy tắc sở hữu BR-03: giáo viên chỉ sửa/xóa bản ghi `created_by = mình`; Admin sửa được tất cả. Mọi form có CSRF; POST xong redirect (PRG).
+Quyền: `TEACHER` và `ADMIN`. Quy tắc sở hữu BR-03 áp dụng cho **toàn bộ tài nguyên giáo viên** — chủ đề (`Topic`), bài học (`Lesson`), bài giảng (`LessonMaterial`) và câu hỏi (`Question`): giáo viên chỉ sửa/xóa bản ghi có `created_by = mình` (sai chủ → `ForbiddenException`, 403); Admin có toàn quyền trên toàn hệ thống. Giáo viên vẫn xem được nội dung dùng chung. Mọi form có CSRF; POST xong redirect (PRG).
 
-#### UC-TEA-01 — Quản lý chủ đề (FR-TEA-01)
+#### UC-TEA-01 — Quản lý chủ đề / môn học (FR-TEA-01)
+
+Chủ đề (`topics`) cùng bài học (`lessons`) là hai cấp "chuyên đề / môn học" của Toán 12; giao diện gắn nhãn **"Chuyên đề / Môn học"** (thực thể `Subject` cấp cao hơn là hướng mở rộng, SRS 1.2).
 
 | URL | Chức năng |
 |---|---|
@@ -381,7 +417,7 @@ Quyền: `TEACHER` và `ADMIN`. Quy tắc sở hữu BR-03: giáo viên chỉ s�
 | `POST /teacher/topics/{id}/delete` | Xóa |
 
 - Validate VAL-06; tên chủ đề duy nhất (không phân biệt hoa thường) → 409 nếu trùng.
-- Xóa: `SELECT COUNT(*) FROM lessons WHERE topic_id = ?` > 0 → 409 "Chủ đề còn bài học" (BR-05).
+- Xóa (BR-05): `lessonRepository.countByTopicIdAndIsActiveTrue(topicId) > 0` → 409 "Chủ đề còn bài học". Nếu không còn bài học đang hoạt động: xóa cứng khi chủ đề không còn bài học nào, ngược lại xóa mềm (`topics.is_active = 0`). Danh sách chỉ hiển thị `is_active = 1`.
 
 #### UC-TEA-02 — Quản lý bài học (FR-TEA-02)
 
@@ -392,7 +428,10 @@ Quyền: `TEACHER` và `ADMIN`. Quy tắc sở hữu BR-03: giáo viên chỉ s�
 | `POST /teacher/lessons/{id}/update`, `/{id}/delete` | Sửa, xóa |
 
 - `topicId` phải tồn tại; `contentSummary` cho phép LaTeX (làm sạch bằng `HtmlSanitizer`).
-- Xóa: còn `questions` hoặc `lesson_materials`? Còn câu hỏi → 409 (BR-05). Bài giảng bị xóa theo (`ON DELETE CASCADE`) sau khi có xác nhận ở giao diện.
+- Xóa (BR-05): chỉ chặn khi bài học còn câu hỏi **đang hoạt động** — `questionRepository.countByLessonIdAndIsActiveTrue(lessonId) == 0` (SQL tương đương: `SELECT COUNT(*) FROM questions WHERE lesson_id = ? AND is_active = 1`). Còn → 409 "Bài học còn câu hỏi đang hoạt động".
+  - Nếu bài học **chỉ còn câu hỏi đã xóa mềm** (`is_active = 0`): cho phép xóa. Không còn bài nộp nào liên quan → xóa cứng bài học (câu hỏi và bài giảng xóa theo `ON DELETE CASCADE`). Còn bài nộp liên quan (để bảo toàn lịch sử) → xóa mềm bài học (`lessons.is_active = 0`, ẩn khỏi mọi danh sách).
+  - Bài giảng (`lesson_materials`) bị xóa theo (`ON DELETE CASCADE`) sau khi có xác nhận ở giao diện.
+- Danh sách và truy vấn chọn bài học chỉ lấy `is_active = 1`, sắp theo `order_index`.
 
 #### UC-TEA-03 — Quản lý bài giảng: video / YouTube / link / văn bản (FR-TEA-03)
 
@@ -468,7 +507,7 @@ OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
 
 **Luồng chính** (`AiExamService`, chạy bất đồng bộ — NFR-02)
 1. Validate VAL-11, VAL-12; kiểm tra bài học tồn tại.
-2. `RateLimiter.check(userId)` (áp dụng cả giáo viên; xem 4.5).
+2. `RateLimiter.check(userId, QUIZ_GEN)` (hạn mức giáo viên, xem 4.5).
 3. Nạp `GEMINI_API_KEY`, `DEFAULT_MODEL`, `QUIZ_TEMPERATURE`, `MAX_OUTPUT_TOKENS`, `QUIZ_GEN_PROMPT` từ `AiConfigService`.
 4. `PromptBuilder` thay placeholder `{{COUNT}} {{TOPIC}} {{LESSON}} {{DIFFICULTY}}` và nối **phần chốt cố định** (4.4): bắt buộc JSON, LaTeX trong `$…$`.
 5. `GeminiClient.generate(...)` với `responseMimeType = application/json`.
@@ -519,11 +558,12 @@ WHERE submission_id = ? AND submission_type = 'ESSAY'
 - Giáo viên có thể bấm "Duyệt giữ nguyên điểm AI" (đặt `final_score = ai_score`).
 
 #### UC-TEA-08 — Xem kết quả học sinh (FR-TEA-08)
-`GET /teacher/results?lessonId=&page=&size=`: bảng theo câu hỏi — số lượt làm, tỉ lệ đúng, điểm trung bình (giúp phát hiện câu quá khó/sai đề).
+`GET /teacher/results?lessonId=&page=&size=`: bảng theo câu hỏi — số lượt làm, **tỉ lệ đúng** (`correct_pct`) và **điểm trung bình thang 10** (`avg_score = correct_pct / 10`, vì trắc nghiệm đúng = 10 điểm, sai = 0; BR-07), hiển thị song song (giúp phát hiện câu quá khó/sai đề).
 ```sql
 SELECT q.question_id, q.question_text,
        COUNT(s.submission_id) AS attempts,
-       AVG(CAST(s.is_correct AS FLOAT)) * 100 AS correct_pct
+       AVG(CAST(s.is_correct AS FLOAT)) * 100 AS correct_pct,
+       AVG(CAST(s.is_correct AS FLOAT)) * 10  AS avg_score          -- = correct_pct / 10
 FROM questions q
 LEFT JOIN submissions s ON s.question_id = q.question_id AND s.submission_type = 'MULTIPLE_CHOICE'
 WHERE q.lesson_id = ? AND q.question_type = 'MULTIPLE_CHOICE' AND q.is_active = 1
@@ -644,7 +684,16 @@ JOIN topics    t ON t.topic_id    = l.topic_id
 WHERE lt.rn = 1
 GROUP BY t.topic_id, t.topic_name
 ```
-Hiển thị thanh tiến độ `correct/answered` và điểm trung bình tự luận (`final_score` của bài ESSAY).
+**Hai mức hiển thị tiến độ:**
+- `GET /student/dashboard`: tiến độ tổng hợp **theo Chủ đề** (câu SQL trên), thanh tiến độ `correct/answered` và điểm trung bình tự luận (`final_score` của bài ESSAY).
+- `GET /student/topics/{topicId}/progress`: bấm vào một chủ đề để xem tiến độ bóc tách **theo từng Bài học** (cùng CTE, nhóm theo `lesson_id`, lọc `t.topic_id = ?`):
+```sql
+-- thay phần SELECT / GROUP BY của câu trên bằng:
+SELECT l.lesson_id, l.lesson_name, COUNT(*) AS answered,
+       SUM(CASE WHEN lt.is_correct = 1 THEN 1 ELSE 0 END) AS correct
+-- ... FROM latest lt JOIN questions q ... JOIN lessons l ... WHERE lt.rn = 1 AND l.topic_id = ?
+GROUP BY l.lesson_id, l.lesson_name
+```
 
 #### UC-STU-07 — Chọn câu tự luận để luyện (FR-STU-07)
 `GET /student/essay?lessonId={id}` liệt kê câu `ESSAY` đang hoạt động của bài (kèm lần chấm gần nhất nếu có); chọn một câu → `GET /student/essay/{questionId}` hiển thị đề (KaTeX) và vùng **chọn ảnh/chụp ảnh** (`<input type="file" accept="image/*" capture="environment">`), có xem trước ảnh trước khi gửi. Gửi ảnh xử lý ở UC-OCR-01.
@@ -671,15 +720,16 @@ Controller: `TutorApiController` (`/api/tutor/**`) và `TutorPageController` (`/
 
 **Luồng chính**
 1. Validate; kiểm tra quyền sở hữu (`submissionId` phải của chính học sinh; `questionId` phải có bài nộp sai của học sinh) → nếu không, 403.
-2. `RateLimiter.check(studentId)`.
+2. `RateLimiter.check(studentId, TUTOR)` (hạn mức học sinh, 4.5).
 3. Dựng prompt hệ thống (5.1) với trạng thái "KHỞI ĐẦU": phân tích bài toán, đặt `totalSteps` trong `[TUTOR_MIN_STEPS, TUTOR_MAX_STEPS]`, đưa **chỉ câu hỏi của bước 1**.
 4. Gọi Gemini (`AiTutorService` → `GeminiClient`). Kiểm tra phản hồi: `isSessionCompleted = false`, `currentStep = 1`, `totalSteps` được ép vào khoảng cho phép. Không đạt → thử lại (4.3).
-5. **Sau khi AI thành công**, trong một transaction (bean `TutorPersistence`, `@Transactional`): `INSERT tutor_sessions` (`title` = 80 ký tự đầu của đề, `problem_text`, `total_steps`, `current_step = 1`, `status = 'ACTIVE'`, `lesson_id`/`question_id` nếu có) rồi `INSERT tutor_messages` (AI, `step_number = 1`). *(Tạo phiên sau khi AI trả lời để không để lại phiên rỗng khi AI lỗi.)*
+5. **Sau khi AI thành công**, trong một transaction (bean `TutorPersistence`, `@Transactional`): `INSERT tutor_sessions` (`title` = tối đa 100 ký tự đầu của đề, `problem_text`, `total_steps`, `current_step = 1`, `status = 'ACTIVE'`, `awaiting_input` và `input_hint` theo kết quả AI (nếu AI trả `needsStudentInput = true` ngay lượt khởi đầu thì `awaiting_input = 1`, ngược lại 0), `lesson_id`/`question_id` nếu có) rồi `INSERT tutor_messages` (AI, `step_number = 1`). *(Tạo phiên sau khi AI trả lời để không để lại phiên rỗng khi AI lỗi.)*
 6. Trả `TutorStepResponse` kèm `sessionId`.
 
 ```sql
-INSERT INTO tutor_sessions (student_id, lesson_id, question_id, title, problem_text, total_steps, current_step, status)
-VALUES (?, ?, ?, ?, ?, ?, 1, 'ACTIVE')
+INSERT INTO tutor_sessions (student_id, lesson_id, question_id, title, problem_text, total_steps, current_step, status,
+                            awaiting_input, input_hint)
+VALUES (?, ?, ?, ?, ?, ?, 1, 'ACTIVE', ?, ?)
 ```
 
 #### UC-TUT-02 — Trả lời từng bước (FR-TUT-02, FR-TUT-03)
@@ -691,22 +741,23 @@ VALUES (?, ?, ?, ?, ?, ?, 1, 'ACTIVE')
 | Response (`TutorStepResponse`) | xem bên dưới |
 
 **Luồng chính**
-1. Validate VAL-19. Nạp phiên; không thuộc học sinh → 403 (BR-14); không `ACTIVE` → 409.
-2. `RateLimiter.check(studentId)`.
-3. Nạp **tối đa 20 tin nhắn gần nhất** (`ORDER BY message_id DESC` rồi đảo lại) để dựng `contents`: `USER → role "user"`, `AI → role "model"`; thêm lượt mới của học sinh. (Đề bài luôn có trong system instruction nên không mất ngữ cảnh khi cắt lịch sử.)
-4. System instruction = `TUTOR_SYSTEM_PROMPT` đã thay placeholder + **khối TRẠNG THÁI** (đề bài, bước hiện tại, tổng số bước) + phần chốt cố định (4.4, 5.1).
+1. Validate VAL-19. Nạp phiên; không thuộc học sinh → 403 (BR-14); không `ACTIVE` → 409. Đọc `awaiting_input` / `input_hint` của phiên (trạng thái do **server** lưu, không tin dữ liệu client).
+2. `RateLimiter.check(studentId, TUTOR)`.
+3. Nạp **tối đa 20 tin nhắn gần nhất** (`ORDER BY message_id DESC` rồi đảo lại) để dựng `contents`: `USER → role "user"`, `AI → role "model"`; thêm lượt mới của học sinh: nếu `awaiting_input = 0` gắn nhãn *"Câu trả lời của học sinh cho bước {current_step}"*; nếu `awaiting_input = 1` gắn nhãn *"Dữ liệu học sinh cung cấp cho bước {current_step} (theo yêu cầu: {input_hint})"*. (Đề bài luôn có trong system instruction nên không mất ngữ cảnh khi cắt lịch sử.)
+4. System instruction = `TUTOR_SYSTEM_PROMPT` đã thay placeholder + **khối TRẠNG THÁI** (đề bài, bước hiện tại, tổng số bước, lượt này là `HỌC SINH TRẢ LỜI BƯỚC n` hay `HỌC SINH CUNG CẤP DỮ LIỆU CHO BƯỚC n`) + phần chốt cố định (4.4, 5.1).
 5. Gọi Gemini, parse JSON `TutorAiResult`.
 6. **Chuẩn hóa kết quả phía server** (không tin AI tuyệt đối):
 
 | Điều kiện từ AI | Server xử lý |
 |---|---|
-| `needsStudentInput = true` | Giữ nguyên bước, `isStepCorrect = null` (xem UC-TUT-03) |
+| `needsStudentInput = true` | Giữ nguyên bước, `isStepCorrect = null`; **`awaiting_input = 1`**, `input_hint = inputRequestHint` (cắt ≤ 255 ký tự) (xem UC-TUT-03) |
+| Lượt có `awaiting_input = 1` (học sinh đang cung cấp dữ liệu) | Không chấm đúng/sai và không chuyển bước; nếu AI không yêu cầu thêm dữ liệu → **`awaiting_input = 0`**, `input_hint = NULL`; nếu AI lại trả `needsStudentInput = true` (còn thiếu dữ kiện) → giữ `awaiting_input = 1` và cập nhật `input_hint` |
 | `isStepCorrect = true` | `newStep = current_step + 1`; nếu `newStep > total_steps` → phiên `COMPLETED` |
 | `isStepCorrect = false` | Giữ nguyên `current_step`, bắt buộc có gợi ý trong `feedbackToStudent` |
 | `isSessionCompleted = true` nhưng chưa qua bước cuối | **Bỏ qua** cờ này (chống AI bỏ qua các bước) |
 | `totalSteps` đổi giữa chừng | Bỏ qua; giữ `total_steps` đã lưu |
 
-7. Một transaction: `INSERT` tin nhắn USER (`step_number = bước trước khi xử lý`), `INSERT` tin nhắn AI (`step_number = bước mới`, `is_step_correct`, `content_text = feedback + "\n\n" + nextPrompt`), `UPDATE tutor_sessions SET current_step=?, status=?, updated_at=SYSDATETIME()`.
+7. Một transaction: `INSERT` tin nhắn USER (`step_number = bước trước khi xử lý`), `INSERT` tin nhắn AI (`step_number = bước mới`, `is_step_correct`, `content_text = feedback + "\n\n" + nextPrompt`), `UPDATE tutor_sessions SET current_step=?, status=?, awaiting_input=?, input_hint=?, updated_at=SYSDATETIME()`.
 8. Trả `TutorStepResponse` (client render bằng KaTeX và cập nhật thanh tiến trình `currentStep/totalSteps`).
 
 ```json
@@ -731,10 +782,18 @@ Khi hoàn thành: `status = "COMPLETED"`, `finalSummary` tóm tắt cách giải
 
 Áp dụng khi đề bài thiếu dữ kiện hoặc một bước cần học sinh tự chọn/đưa ra giá trị (ví dụ "Giải phương trình bậc hai" mà chưa có hệ số; hoặc "chọn một giá trị $m$ để thử").
 
-1. AI trả `needsStudentInput = true`, `inputRequestHint` mô tả cần nhập gì (vd. "Nhập các hệ số a, b, c"), `isStepCorrect = null`.
-2. Server giữ nguyên bước, lưu tin nhắn AI; giao diện hiển thị ô nhập nổi bật với nhãn từ `inputRequestHint`, **khóa việc xem tiếp lời giải** cho tới khi học sinh nhập.
-3. Lượt kế tiếp, nội dung học sinh nhập được hiểu là *dữ liệu*; AI dùng dữ liệu đó để triển khai các bước (không tự bịa số liệu — TC-AI-05).
-4. Quy tắc này nằm trong prompt hệ thống (mục 5.1) nên Admin chỉnh được hành vi từ giao diện (R4, R5).
+**Máy trạng thái của phiên** (lưu ở CSDL, nên đóng trình duyệt hoặc mở lại phiên cũ vẫn đúng):
+
+| Trạng thái (`awaiting_input`) | Sự kiện | Chuyển sang |
+|---|---|---|
+| `0` (đang hỏi đáp thường) | AI trả `needsStudentInput = true` | `1` — lưu `input_hint = inputRequestHint` |
+| `1` (chờ dữ liệu) | Học sinh gửi lượt kế tiếp | Lượt này là *dữ liệu*; server đưa vào prompt, AI triển khai bước; nếu AI không cần thêm dữ liệu → `0`, `input_hint = NULL` |
+| `1` | AI vẫn thiếu dữ kiện (`needsStudentInput = true`) | giữ `1`, cập nhật `input_hint` |
+
+1. AI trả `needsStudentInput = true`, `inputRequestHint` mô tả cần nhập gì (vd. "Nhập các hệ số a, b, c"), `isStepCorrect = null`. Server ghi `tutor_sessions.awaiting_input = 1` và `input_hint = inputRequestHint` trong cùng transaction lưu tin nhắn.
+2. Server giữ nguyên bước, lưu tin nhắn AI; giao diện hiển thị ô nhập nổi bật với nhãn từ `input_hint`, **khóa việc xem tiếp lời giải** cho tới khi học sinh nhập. Khi mở lại phiên (`GET /student/tutor/{sessionId}`), giao diện đọc `awaiting_input` và `input_hint` để dựng lại đúng trạng thái này.
+3. Ở lượt kế tiếp, vì `awaiting_input = 1` nên server nhận diện nội dung học sinh nhập là *dữ liệu đầu vào cho bước giải* (không phải câu trả lời cần chấm), chuyển vào prompt cho AI (nhãn "Dữ liệu học sinh cung cấp…"), sau đó **đặt lại `awaiting_input = 0`, `input_hint = NULL`** (trừ khi AI lại yêu cầu thêm dữ liệu). AI dùng dữ liệu đó để triển khai các bước, không tự bịa số liệu (TC-AI-05).
+4. Quy tắc này nằm trong prompt hệ thống (mục 5.1) nên Admin chỉnh được hành vi từ giao diện (R4, R5); trạng thái `awaiting_input` do server quản lý nên hành vi nhất quán dù AI sai sót.
 
 #### UC-TUT-04 — Danh sách, tiếp tục và kết thúc phiên (FR-TUT-05)
 
@@ -766,7 +825,7 @@ OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
 **Luồng chính** (`EssayService`, bất đồng bộ — NFR-02)
 1. Kiểm tra `questionId` tồn tại, `ESSAY`, `is_active = 1`.
 2. Kiểm tra file theo VAL-18: kích thước ≤ 5 MB, MIME, *magic bytes* (JPEG `FF D8 FF`; PNG `89 50 4E 47`; WebP `RIFF….WEBP`), đọc được bằng `ImageIO` và ≤ 4096×4096. Sai → 400 (TC-OCR-01, 02).
-3. `RateLimiter.check(studentId)`.
+3. `RateLimiter.check(studentId, GRADING)` (hạn mức học sinh, 4.5).
 4. (Khuyến nghị) thu nhỏ ảnh có cạnh dài > 2000 px về 2000 px, xuất JPEG chất lượng 85 để giảm thời gian và token.
 5. Chuyển sang UC-OCR-02 (chấm). **Chưa lưu file** cho tới khi AI đọc được ảnh.
 
@@ -884,10 +943,17 @@ QUY TẮC CỐ ĐỊNH (ưu tiên cao nhất):
 
 ### 4.5. Giới hạn tần suất (`RateLimiter`)
 
-- Cửa sổ trượt 60 phút theo `userId`, lưu trong `ConcurrentHashMap<Integer, Deque<Instant>>`.
-- `check()` loại mốc cũ; nếu số lượt ≥ `AI_RATE_LIMIT_PER_HOUR` → `AiRateLimitException` → HTTP 429 kèm "Bạn đã dùng hết lượt AI trong giờ này, thử lại sau X phút".
-- Áp dụng cho: tutor (start + next-step), chấm ảnh, sinh đề. Test kết nối của Admin không tính.
-- Lưu trong bộ nhớ nên reset khi khởi động lại ứng dụng (chấp nhận được ở quy mô đồ án).
+- Cửa sổ trượt 60 phút theo khóa **`(userId, nhóm hành động)`**, lưu trong `ConcurrentHashMap<RateKey, Deque<Instant>>` (`RateKey` = `userId` + `Action`).
+- Phạm vi áp dụng theo vai trò / hành động (đồng bộ với SRS BR-13, NFR-06):
+
+| Vai trò | Nhóm hành động | Hạn mức mỗi giờ | Cấu hình |
+|---|---|---|---|
+| `STUDENT` | `TUTOR` (start + next-step) và `GRADING` (chấm ảnh tự luận) dùng chung một hạn mức | 60 | `AI_RATE_LIMIT_PER_HOUR` |
+| `TEACHER` (và `ADMIN` khi dùng chức năng giáo viên) | `QUIZ_GEN` (sinh câu hỏi bằng AI) | 300 | `AI_RATE_LIMIT_TEACHER_PER_HOUR` |
+| `ADMIN` | Test kết nối API (`ping`) | **Miễn giới hạn** | — |
+
+- `check(userId, action)` loại mốc cũ; nếu số lượt ≥ hạn mức của nhóm tương ứng → `AiRateLimitException` → HTTP 429 kèm "Bạn đã dùng hết lượt AI trong giờ này, thử lại sau X phút". Hạn mức học sinh và giáo viên độc lập nhau.
+- Lưu trong bộ nhớ nên reset khi khởi động lại ứng dụng (chấp nhận được ở quy mô đồ án). Vì vậy bộ đếm này **không** dùng làm số liệu Dashboard (xem UC-ADM-08).
 
 ### 4.6. Bất đồng bộ (NFR-02)
 
@@ -1123,7 +1189,7 @@ Quy tắc: trang HTML → view lỗi; request `/api/**` hoặc `Accept: applicat
 ## 9. CHECKLIST TRƯỚC KHI BẢO VỆ
 
 - [ ] Khởi động ứng dụng: Hibernate không báo lỗi mapping; bật log SQL một lần, mở `/student/quiz` kiểm tra không có N+1 (TC-DB-03).
-- [ ] Chạy `EduTutor_Database.sql` trên SQL Server sạch; đăng nhập thử `admin / teacher1 / student1` (mật khẩu `123456`).
+- [ ] Chạy `EduTutor_Database.sql` trên SQL Server sạch; đăng nhập thử `admin / teacher1 / student1` (mật khẩu **`EduTutor@123`**, đạt VAL-02).
 - [ ] Dán khóa Gemini hợp lệ, **kiểm tra tên model còn được hỗ trợ** (trang deprecations của `ai.google.dev`), bấm *Test kết nối*.
 - [ ] Chuẩn bị 2 ảnh tự luận mẫu: một bài đúng, một bài sai cận tích phân; một ảnh không phải bài toán (kiểm tra `legible=false`).
 - [ ] Chạy hết bộ test ở SRS mục 9.2, đặc biệt TC-SEC-01, 08 và TC-AI-03, 05.

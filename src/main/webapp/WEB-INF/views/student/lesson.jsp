@@ -61,7 +61,7 @@
                             </div>
 
                             <div class="col-lg-4">
-                                <c:if test="${not empty lesson.youtubeUrl}">
+                                <c:if test="${not empty lesson.embedUrl}">
                                     <div class="card shadow-sm border-0 mb-4"
                                         style="position:sticky;top:calc(var(--navbar-h) + 1rem);">
                                         <div class="card-header bg-white py-3">
@@ -71,7 +71,7 @@
                                             <%-- Assuming lesson.youtubeUrl contains the embed URL here via FileUtil
                                                 mapping --%>
                                                 <div class="ratio ratio-16x9">
-                                                    <iframe src="${lesson.youtubeUrl}" allowfullscreen
+                                                    <iframe src="${lesson.embedUrl}" allowfullscreen
                                                         class="rounded"></iframe>
                                                 </div>
                                         </div>

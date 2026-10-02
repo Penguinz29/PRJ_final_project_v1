@@ -66,10 +66,11 @@ PRJ_final_project_v1/
 ├── document/                              # SRS, FRS, Claude.md (quy tắc kỹ thuật)
 │   └── sql/                               # Kịch bản SQL Server (chạy theo thứ tự)
 │       ├── 01_schema.sql                  # Tạo CSDL MathTutorDB và các bảng gốc
-│       ├── 02_seed.sql                    # Dữ liệu mẫu (mật khẩu BCrypt của 123456)
+│       ├── 02_seed.sql                    # Dữ liệu mẫu (mật khẩu BCrypt của EduTutor@123)
 │       ├── 03_ai_configs.sql              # Bảng cấu hình AI
 │       ├── 04_update_submissions.sql      # Cột Score & AiFeedback
 │       └── 05_tutor_and_explanation.sql   # TutorSessions, TutorMessages, Questions.ExplanationLatex
+│       └── 06_target_schema_additions.sql # Cột/bảng bổ sung theo SRS/FRS (IsActive, trạng thái bài làm, AwaitingInput, LessonMaterials...) - idempotent
 └── src/
     ├── main/
     │   ├── java/com/edututor/
@@ -103,7 +104,7 @@ PRJ_final_project_v1/
 - Maven đi kèm NetBeans (hoặc Maven 3.9+ độc lập).
 
 ### Bước 2: Thiết lập Cơ sở Dữ liệu
-Chạy lần lượt trong SSMS các file trong `document/sql/`: `01_schema.sql` -> `02_seed.sql` -> `03_ai_configs.sql` -> `04_update_submissions.sql` -> `05_tutor_and_explanation.sql`. (`01_schema.sql` **xóa và tạo lại** CSDL `MathTutorDB`.)
+Chạy lần lượt trong SSMS các file trong `document/sql/`: `01_schema.sql` -> `02_seed.sql` -> `03_ai_configs.sql` -> `04_update_submissions.sql` -> `05_tutor_and_explanation.sql` -> `06_target_schema_additions.sql` (bổ sung cột/bảng theo thiết kế chuẩn 10 bảng; không bắt buộc để chạy ứng dụng hiện tại). (`01_schema.sql` **xóa và tạo lại** CSDL `MathTutorDB`.)
 
 > Nếu chạy bằng `sqlcmd`, thêm cờ `-x` (tắt thay thế biến) vì dữ liệu mẫu chứa ký tự `$(`: `sqlcmd -S localhost -U sa -P 123 -C -x -f 65001 -i 02_seed.sql`.
 
@@ -135,7 +136,7 @@ Bộ kiểm thử tích hợp **xóa bài làm, phiên gia sư và đặt lại 
 
 ## 🔑 6. Tài khoản Thử nghiệm (Demo Accounts)
 
-Tất cả các tài khoản mặc định có mật khẩu là: **`123456`**
+Tất cả các tài khoản mặc định có mật khẩu là: **`EduTutor@123`**
 
 | Vai trò | Tên đăng nhập | Email | Mục đích kiểm thử |
 |---------|---------------|-------|-------------------|
@@ -148,7 +149,7 @@ Tất cả các tài khoản mặc định có mật khẩu là: **`123456`**
 ---
 
 ## ⚙️ 7. Lưu ý Kỹ thuật quan trọng
-- **Mật khẩu:** tài khoản seed dùng BCrypt (`123456`). Tài khoản cũ còn băm SHA-256 vẫn đăng nhập được và tự được băm lại bằng BCrypt ở lần đăng nhập thành công đầu tiên.
+- **Mật khẩu:** tài khoản seed dùng BCrypt (`EduTutor@123`). Tài khoản cũ còn băm SHA-256 vẫn đăng nhập được và tự được băm lại bằng BCrypt ở lần đăng nhập thành công đầu tiên.
 - **Tầng dữ liệu:** Entity JPA ánh xạ **1-1 với 9 bảng hiện có** (không đổi cấu trúc CSDL). Mọi quan hệ `LAZY`; Service map Entity sang DTO bên trong `@Transactional`; không bật Open-Session-In-View; câu hỏi làm bài chỉ chọn cột được phép (không lộ đáp án/lời giải trước khi nộp).
 - **Giao dịch & AI:** các lời gọi Gemini nằm **ngoài** transaction; phần ghi DB của gia sư AI nằm ở bean riêng `TutorPersistence`. Các endpoint `/api/tutor/next-step`, `/api/teacher/generate-questions`, `/api/student/submit-essay-ocr`, `/api/admin/ai-config/test-connection` trả `CompletableFuture`, chạy trên thread pool `aiExecutor` nên không chặn luồng Tomcat.
 - **Phản hồi API thống nhất:** mọi `/api/**` trả `{"success", "message", "data", "errors"}`; `GlobalExceptionHandler` ánh xạ lỗi sang mã HTTP (400 dữ liệu sai, 401, 403, 404, 409 xung đột, 422 AI trả dữ liệu không dùng được, 502/503/504 lỗi AI, 500 kèm mã tham chiếu `ERR-yyyyMMdd-xxxx`) và chuyển về trang trước kèm thông báo cho trang thường.

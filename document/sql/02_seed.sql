@@ -2,8 +2,8 @@
 USE MathTutorDB;
 GO
 
--- Mật khẩu mặc định: '123456' -> BCrypt (cost 10)
-DECLARE @pwd VARCHAR(64) = '$2a$10$9pvQuc/9Fxk7W.EUva2zd.zb4XalKDWwkwQJs9FFtzLUI5M2Kq9BO';
+-- Mật khẩu mặc định của mọi tài khoản mẫu: 'EduTutor@123' (đạt VAL-02: 8-64 ký tự, có chữ và số) -> BCrypt (cost 10)
+DECLARE @pwd VARCHAR(64) = '$2a$10$SDlc5quQbF2SEkWHLURXrO.BFntJFVhN.uAol0AyitPEEDyIlLs5y';
 
 -- 1. Users
 INSERT INTO Users (Username, PasswordHash, FullName, Email, [Role], IsActive, TeacherId) VALUES
@@ -36,7 +36,7 @@ DECLARE @tp2 INT = (SELECT TOP 1 TopicId FROM Topics WHERE TopicName = N'Hàm s�
 INSERT INTO Lessons (TopicId, Title, Summary, Content, YoutubeUrl) VALUES
 (@tp1, N'Bài 1: Sự đồng biến, nghịch biến của hàm số', N'Tìm hiểu đk đồng biến nghịch biến.', N'<p>Lý thuyết: Hàm số $y=f(x)$ đồng biến trên $K \Leftrightarrow f''(x) \ge 0, \forall x \in K$</p>', 'https://www.youtube.com/embed/dQw4w9WgXcQ'),
 (@tp1, N'Bài 2: Cực trị của hàm số', N'Cực đại, cực tiểu.', N'<p>Cực tiểu khi $f''(x_0) < 0$ và đổi dấu...</p>', NULL),
-(@tp2, N'Bài 1: Lũy thừa', N'Tính chất của lũy thừa', N'<p>Công thức: $a^m \cdot a^n = a^{m+n}$</p>', NULL);
+(@tp2, N'Bài 1: Lũy thừa', N'Tính chất của lũy thừa', N'<p>Công thức: $a^m \cdot a^n = a^{m+n}$</p>', 'https://www.youtube.com/embed/zSnMIO2D4oE');
 
 DECLARE @ls1 INT = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 1: Sự đồng biến, nghịch biến của hàm số');
 DECLARE @ls2 INT = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 2: Cực trị của hàm số');

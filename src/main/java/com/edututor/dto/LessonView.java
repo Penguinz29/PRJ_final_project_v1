@@ -60,6 +60,11 @@ public class LessonView implements Serializable {
         this.content = content;
     }
 
+    /** Link nhúng iframe (youtube.com/embed/ID) suy ra từ link YouTube đã lưu; null nếu không phải link YouTube hợp lệ. */
+    public String getEmbedUrl() {
+        return com.edututor.util.YoutubeUtil.getEmbedUrl(youtubeUrl);
+    }
+
     public String getYoutubeUrl() {
         return youtubeUrl;
     }
