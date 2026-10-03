@@ -5,7 +5,7 @@
 | Thông tin | Nội dung |
 |---|---|
 | Đồ án | PRJ301 — Spring MVC 6 + Spring Data JPA (Hibernate) + SQL Server + Gemini API |
-| Phiên bản | 2.1.0 (chuyển tầng dữ liệu sang JPA; bổ sung Bean Validation, đối chiếu rubric) |
+| Phiên bản | 2.1.1 (BR-05: xóa mềm chỉ ẩn ở phía quản lý, học sinh vẫn ôn tập được; nút Xóa báo trước kết quả). 2.1.0: chuyển tầng dữ liệu sang JPA; bổ sung Bean Validation, đối chiếu rubric |
 | Liên quan | `EduTutor_SRS.md` (yêu cầu), `EduTutor_Database.sql` (CSDL) |
 | Quy ước tham chiếu | Bộ tài liệu gốc đặt trong `docs/`. Trong repo hiện tại: `document/SRS.md` ≙ `EduTutor_SRS.md`, `document/FRS.md` ≙ `EduTutor_FRS.md`, `document/sql/01…06_*.sql` ≙ `EduTutor_Database.sql`. Tài khoản mẫu `admin`, `teacher1`, `student1`…, mật khẩu **`EduTutor@123`** |
 
@@ -164,9 +164,9 @@ Kiến trúc chuẩn gồm **10 bảng / 10 Entity**. Các thuộc tính sau là
 
 | Bảng | Cột bổ sung | Kiểu / mặc định | Dùng ở |
 |---|---|---|---|
-| `questions` | `is_active` | `BIT NOT NULL DEFAULT 1` | BR-05, UC-TEA-04, mọi truy vấn danh sách / quiz |
+| `questions` | `is_active` | `BIT NOT NULL DEFAULT 1` | BR-05, UC-TEA-04: lọc ở mọi truy vấn **phía quản lý**; phía học sinh (quiz, tự luận, gia sư) không lọc |
 | `lessons` | `order_index` | `INT NOT NULL DEFAULT 1` | UC-TEA-02, sắp xếp bài học |
-| `lessons`, `topics` | `is_active` | `BIT NOT NULL DEFAULT 1` | BR-05 (xóa mềm khi còn lịch sử) |
+| `lessons`, `topics` | `is_active` | `BIT NOT NULL DEFAULT 1` | BR-05 (xóa mềm khi còn lịch sử; chỉ ẩn ở phía quản lý) |
 | `topics` | `order_index` | `INT NOT NULL DEFAULT 1` | UC-TEA-01 |
 | `lesson_materials` | `order_index`, `created_by` | `INT NOT NULL DEFAULT 1`, `INT NOT NULL` FK → `users` | UC-TEA-03, BR-03 |
 | `submissions` | `ai_feedback`, `suggested_correction`, `teacher_comment`, `reviewed_at`; `status` | `NVARCHAR(MAX) NULL` ×3, `DATETIME2 NULL`; `VARCHAR(20)` ∈ {`GRADED`,`AI_GRADED`,`REVIEWED`} | UC-STU-04, UC-OCR-02, UC-TEA-07 |
@@ -406,6 +406,11 @@ WHERE submission_type = 'ESSAY' AND status = 'AI_GRADED';                       
 
 Quyền: `TEACHER` và `ADMIN`. Quy tắc sở hữu BR-03 áp dụng cho **toàn bộ tài nguyên giáo viên** — chủ đề (`Topic`), bài học (`Lesson`), bài giảng (`LessonMaterial`) và câu hỏi (`Question`): giáo viên chỉ sửa/xóa bản ghi có `created_by = mình` (sai chủ → `ForbiddenException`, 403); Admin có toàn quyền trên toàn hệ thống. Giáo viên vẫn xem được nội dung dùng chung. Mọi form có CSRF; POST xong redirect (PRG).
 
+**Xóa và xóa mềm (BR-05, áp dụng cho UC-TEA-01, 02, 04):**
+- Việc xóa luôn do giáo viên / Admin **chủ động** bấm Xóa và xác nhận; hệ thống chỉ quyết định *cách* xóa (xóa hẳn hay xóa mềm) theo lịch sử dữ liệu. "Có lịch sử" = có bài nộp (`submissions`) hoặc phiên gia sư (`tutor_sessions.question_id`) liên quan.
+- **Phạm vi ẩn:** bản ghi `is_active = 0` chỉ bị ẩn ở **phía quản lý** — danh sách chủ đề / bài học / ngân hàng câu hỏi, form sửa và thao tác xóa (bản ghi đã xóa mềm coi như không tồn tại → 404), danh sách chọn bài học khi soạn câu hỏi / sinh đề AI / thêm bài giảng, số liệu dashboard giáo viên và Admin. **Phía học sinh không lọc `is_active`**: học sinh vẫn thấy chủ đề / bài học, xem bài giảng, luyện trắc nghiệm, nộp tự luận và hỏi gia sư trên nội dung đã xóa mềm để **ôn tập**; lịch sử làm bài giữ nguyên.
+- **Báo trước kết quả:** khi hiển thị danh sách quản lý, server tính sẵn `deleteMode` cho từng dòng bằng các truy vấn gộp `IN` (không N+1): `HARD` (chưa có lịch sử → hộp xác nhận báo "xóa hẳn, không hoàn tác được"), `SOFT` (có lịch sử → báo "chỉ ẩn khỏi trang quản lý, học sinh vẫn ôn tập được"), `BLOCKED` (còn mục con đang hoạt động → nút Xóa bị khóa, hiện lý do). Thành phần dùng lại: `WEB-INF/tags/delete-button.tag` (mọi chuỗi đưa vào thuộc tính HTML qua `fn:escapeXml`). Server vẫn kiểm tra lại khi nhận request xóa.
+
 #### UC-TEA-01 — Quản lý chủ đề / môn học (FR-TEA-01)
 
 Chủ đề (`topics`) cùng bài học (`lessons`) là hai cấp "chuyên đề / môn học" của Toán 12; giao diện gắn nhãn **"Chuyên đề / Môn học"** (thực thể `Subject` cấp cao hơn là hướng mở rộng, SRS 1.2).
@@ -418,7 +423,7 @@ Chủ đề (`topics`) cùng bài học (`lessons`) là hai cấp "chuyên đề
 | `POST /teacher/topics/{id}/delete` | Xóa |
 
 - Validate VAL-06; tên chủ đề duy nhất (không phân biệt hoa thường) → 409 nếu trùng.
-- Xóa (BR-05): `lessonRepository.countByTopicIdAndIsActiveTrue(topicId) > 0` → 409 "Chủ đề còn bài học". Nếu không còn bài học đang hoạt động: xóa cứng khi chủ đề không còn bài học nào, ngược lại xóa mềm (`topics.is_active = 0`). Danh sách chỉ hiển thị `is_active = 1`.
+- Xóa (BR-05): `lessonRepository.countByTopicIdAndIsActiveTrue(topicId) > 0` → 409 "Chủ đề còn bài học". Nếu không còn bài học đang hoạt động: xóa cứng khi chủ đề không còn bài học nào, ngược lại xóa mềm (`topics.is_active = 0`). Danh sách quản lý chỉ hiển thị `is_active = 1` (phía học sinh vẫn thấy). Tên chủ đề chỉ cần duy nhất trong các chủ đề đang hoạt động.
 
 #### UC-TEA-02 — Quản lý bài học (FR-TEA-02)
 
@@ -430,9 +435,9 @@ Chủ đề (`topics`) cùng bài học (`lessons`) là hai cấp "chuyên đề
 
 - `topicId` phải tồn tại; `contentSummary` cho phép LaTeX (làm sạch bằng `HtmlSanitizer`).
 - Xóa (BR-05): chỉ chặn khi bài học còn câu hỏi **đang hoạt động** — `questionRepository.countByLessonIdAndIsActiveTrue(lessonId) == 0` (SQL tương đương: `SELECT COUNT(*) FROM questions WHERE lesson_id = ? AND is_active = 1`). Còn → 409 "Bài học còn câu hỏi đang hoạt động".
-  - Nếu bài học **chỉ còn câu hỏi đã xóa mềm** (`is_active = 0`): cho phép xóa. Không còn bài nộp nào liên quan → xóa cứng bài học (câu hỏi và bài giảng xóa theo `ON DELETE CASCADE`). Còn bài nộp liên quan (để bảo toàn lịch sử) → xóa mềm bài học (`lessons.is_active = 0`, ẩn khỏi mọi danh sách).
+  - Nếu bài học **chỉ còn câu hỏi đã xóa mềm** (`is_active = 0`): cho phép xóa. Không còn bài nộp / phiên gia sư nào liên quan → xóa cứng bài học (câu hỏi và bài giảng xóa theo `ON DELETE CASCADE`). Còn (để bảo toàn lịch sử) → xóa mềm bài học (`lessons.is_active = 0`, ẩn khỏi trang quản lý; học sinh vẫn ôn tập được).
   - Bài giảng (`lesson_materials`) bị xóa theo (`ON DELETE CASCADE`) sau khi có xác nhận ở giao diện.
-- Danh sách và truy vấn chọn bài học chỉ lấy `is_active = 1`, sắp theo `order_index`.
+- Danh sách quản lý và truy vấn chọn bài học khi soạn nội dung chỉ lấy `is_active = 1`, sắp theo `order_index`.
 
 #### UC-TEA-03 — Quản lý bài giảng: video / YouTube / link / văn bản (FR-TEA-03)
 
@@ -481,7 +486,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, 0)         -- JPA: save(question); questionId gán 
 INSERT INTO question_options (question_id, option_label, option_text, is_correct) VALUES (?, ?, ?, ?)
 ```
 **Sửa:** cập nhật `questions`, rồi xóa và chèn lại 4 phương án (nếu câu đã có `submissions` thì **giữ nguyên `option_id`**: cập nhật trực tiếp từng `QuestionOption` theo `optionLabel` thay vì xóa/chèn).
-**Xóa:** nếu đã có bài nộp → `UPDATE questions SET is_active = 0` (BR-05); chưa có → `DELETE` (phương án xóa theo cascade).
+**Xóa:** nếu đã có bài nộp hoặc phiên gia sư mở từ câu này → `UPDATE questions SET is_active = 0` (BR-05, ẩn khỏi ngân hàng câu hỏi; học sinh vẫn ôn tập được); chưa có → `DELETE` (phương án xóa theo cascade).
 **Danh sách:**
 ```sql
 SELECT q.question_id, q.question_text, q.question_type, q.difficulty_level, q.is_ai_generated,
@@ -595,11 +600,11 @@ Quyền: `STUDENT`. Mọi truy vấn dùng `student_id` lấy từ session.
 | `limit` | 5–30 (mặc định 10) |
 
 **Luồng chính**
-1. Chọn ngẫu nhiên `limit` câu `MULTIPLE_CHOICE`, `is_active = 1` của bài, lọc độ khó nếu có:
+1. Chọn ngẫu nhiên `limit` câu `MULTIPLE_CHOICE` của bài (kể cả câu giáo viên đã xóa mềm, để ôn tập — BR-05), lọc độ khó nếu có:
 ```sql
 SELECT TOP (?) question_id, question_text, difficulty_level
 FROM questions
-WHERE lesson_id = ? AND question_type = 'MULTIPLE_CHOICE' AND is_active = 1
+WHERE lesson_id = ? AND question_type = 'MULTIPLE_CHOICE'
   AND (? IS NULL OR difficulty_level = ?)
 ORDER BY NEWID()
 ```
@@ -620,7 +625,7 @@ FROM question_options WHERE question_id IN (?, ?, …) ORDER BY question_id, opt
 | Request | `{ "questionId": 102, "selectedOptionId": 408 }` |
 
 **Luồng chính**
-1. Kiểm tra câu hỏi tồn tại, `MULTIPLE_CHOICE`, `is_active = 1`.
+1. Kiểm tra câu hỏi tồn tại, `MULTIPLE_CHOICE` (không lọc `is_active`: học sinh vẫn ôn tập câu đã xóa mềm — BR-05).
 2. **Kiểm tra `selectedOptionId` thuộc `questionId`** (chống gửi option của câu khác):
 ```sql
 SELECT option_id, option_label, is_correct FROM question_options WHERE question_id = ?
@@ -824,7 +829,7 @@ OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
 | URL | `POST /api/student/submit-essay-ocr` — `multipart/form-data`: `questionId`, `essayImage` |
 
 **Luồng chính** (`EssayService`, bất đồng bộ — NFR-02)
-1. Kiểm tra `questionId` tồn tại, `ESSAY`, `is_active = 1`.
+1. Kiểm tra `questionId` tồn tại, `ESSAY` (không lọc `is_active`, BR-05).
 2. Kiểm tra file theo VAL-18: kích thước ≤ 5 MB, MIME, *magic bytes* (JPEG `FF D8 FF`; PNG `89 50 4E 47`; WebP `RIFF….WEBP`), đọc được bằng `ImageIO` và ≤ 4096×4096. Sai → 400 (TC-OCR-01, 02).
 3. `RateLimiter.check(studentId, GRADING)` (hạn mức học sinh, 4.5).
 4. (Khuyến nghị) thu nhỏ ảnh có cạnh dài > 2000 px về 2000 px, xuất JPEG chất lượng 85 để giảm thời gian và token.
