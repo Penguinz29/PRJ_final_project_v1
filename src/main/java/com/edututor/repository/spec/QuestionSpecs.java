@@ -22,6 +22,7 @@ public final class QuestionSpecs {
     public static Specification<Question> search(int topicId, int lessonId, QuestionType type, int level) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.isTrue(root.get("active"))); // BR-05: không hiển thị câu đã xóa mềm
             if (topicId > 0) {
                 predicates.add(cb.equal(root.get("lesson").get("topic").get("topicId"), topicId));
             }

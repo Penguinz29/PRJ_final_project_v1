@@ -2,6 +2,7 @@ package com.edututor.repository;
 
 import com.edututor.model.QuestionType;
 import com.edututor.model.Submission;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -36,6 +37,17 @@ public interface SubmissionRepository extends JpaRepository<Submission, Integer>
     long countByQuestionTypeAndReviewed(QuestionType type, boolean reviewed);
 
     long countByQuestion_QuestionId(Integer questionId);
+
+    /** Câu hỏi nào trong danh sách đã có bài nộp (dự báo xóa mềm ở trang quản lý, một truy vấn IN). */
+    @Query("select distinct s.question.questionId from Submission s where s.question.questionId in :ids")
+    List<Integer> findQuestionIdsWithSubmissions(@Param("ids") Collection<Integer> ids);
+
+    /** Bài học nào trong danh sách đã có bài nộp cho câu hỏi của nó. */
+    @Query("select distinct s.question.lesson.lessonId from Submission s where s.question.lesson.lessonId in :ids")
+    List<Integer> findLessonIdsWithSubmissions(@Param("ids") Collection<Integer> ids);
+
+    /** Có bài nộp nào cho các câu hỏi của bài học không (quyết định xóa cứng hay xóa mềm bài học, BR-05). */
+    boolean existsByQuestion_Lesson_LessonId(Integer lessonId);
 
     /** Số bài học đã luyện trắc nghiệm của học sinh. */
     @Query("select count(distinct s.lesson.lessonId) from Submission s "

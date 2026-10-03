@@ -28,7 +28,7 @@ public class StudentEssayController {
     @GetMapping("/student/essay")
     public String essay(@RequestParam(defaultValue = "0") int lessonId,
                         @RequestParam(defaultValue = "0") int questionId, Model model) {
-        LessonView lesson = lessonService.getLessonById(lessonId);
+        LessonView lesson = lessonService.getLessonForStudent(lessonId);
         if (lesson == null) {
             return "redirect:/student/topics";
         }

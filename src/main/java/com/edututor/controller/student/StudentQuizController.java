@@ -34,7 +34,7 @@ public class StudentQuizController {
     /** Lấy đề thi trắc nghiệm kèm 4 phương án của mỗi câu — KHÔNG kèm đáp án đúng hay lời giải (BR-11). */
     @GetMapping("/student/quiz")
     public String quiz(@RequestParam(defaultValue = "0") int lessonId, Model model) {
-        LessonView lesson = lessonService.getLessonById(lessonId);
+        LessonView lesson = lessonService.getLessonForStudent(lessonId);
         if (lesson == null) {
             return "redirect:/student/topics";
         }
@@ -49,7 +49,7 @@ public class StudentQuizController {
     public String submit(@RequestParam(defaultValue = "0") int lessonId,
                          @RequestParam Map<String, String> params,
                          @SessionAttribute(AuthInterceptor.SESSION_USER) SessionUser user, Model model) {
-        LessonView lesson = lessonService.getLessonById(lessonId);
+        LessonView lesson = lessonService.getLessonForStudent(lessonId);
         if (lesson == null) {
             return "redirect:/student/topics";
         }

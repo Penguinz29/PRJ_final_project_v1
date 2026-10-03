@@ -55,7 +55,7 @@ public class StudentController {
 
     @GetMapping("/student/lesson")
     public String lesson(@RequestParam(defaultValue = "0") int id, Model model) {
-        LessonView lesson = lessonService.getLessonById(id);
+        LessonView lesson = lessonService.getLessonForStudent(id);
         if (lesson == null) {
             return "redirect:/student/topics";
         }

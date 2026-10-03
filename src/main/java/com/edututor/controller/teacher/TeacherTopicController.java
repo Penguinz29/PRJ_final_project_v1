@@ -50,8 +50,9 @@ public class TeacherTopicController {
                     redirect.addFlashAttribute("flash", "Cập nhật chủ đề thành công.");
                 }
                 case "delete" -> {
-                    topicService.deleteTopic(form.getId(), user.getUserId(), admin);
-                    redirect.addFlashAttribute("flash", "Xóa chủ đề thành công.");
+                    boolean hard = topicService.deleteTopic(form.getId(), user.getUserId(), admin);
+                    redirect.addFlashAttribute("flash", hard ? "Xóa chủ đề thành công."
+                            : "Đã ẩn chủ đề (xóa mềm) vì còn lịch sử học tập liên quan.");
                 }
                 default -> throw new IllegalArgumentException("Thao tác không hợp lệ.");
             }

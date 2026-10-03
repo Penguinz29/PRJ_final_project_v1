@@ -90,5 +90,10 @@ public class LessonView implements Serializable {
     public void setQuestionCount(int questionCount) {
         this.questionCount = questionCount;
     }
-}
 
+    /** Kết quả nếu giáo viên bấm Xóa: HARD (xóa hẳn) | SOFT (ẩn, giữ lịch sử) | BLOCKED (còn mục con đang hoạt động). */
+    private String deleteMode;
+
+    public String getDeleteMode() { return deleteMode; }
+    public void setDeleteMode(String deleteMode) { this.deleteMode = deleteMode; }
+}

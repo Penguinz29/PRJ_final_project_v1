@@ -339,6 +339,9 @@ class EduTutorIT {
         exec("DELETE FROM Topics WHERE TopicName LIKE N'it[_]%'");
         exec("DELETE FROM Users WHERE Username LIKE 'it[_]%'");
         exec("UPDATE Questions SET ExplanationLatex = NULL");
+        exec("UPDATE Questions SET IsActive = 1");
+        exec("UPDATE Lessons SET IsActive = 1");
+        exec("UPDATE Topics SET IsActive = 1");
         // mật khẩu seed '123456' dạng SHA-256 và tài khoản đang hoạt động
         exec("UPDATE Users SET PasswordHash = '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92', "
                 + "IsActive = 1, [Status] = 'ACTIVE'");
@@ -1309,10 +1312,22 @@ class EduTutorIT {
         c.form("/teacher/questions", Map.of("action", "delete", "id", "" + qid));
         assertEquals(0, count("SELECT COUNT(*) FROM Questions WHERE QuestionId = ?", qid));
         assertEquals(0, count("SELECT COUNT(*) FROM QuestionOptions WHERE QuestionId = ?", qid));
-        // không xóa câu đã có bài làm
+        // BR-05: câu đã có bài làm → xóa mềm (giữ bản ghi + lịch sử), ẩn khỏi trang quản lý của giáo viên
+        c.get("/teacher/questions"); // đọc flash còn tồn đọng
         c.form("/teacher/questions", Map.of("action", "delete", "id", "1"));
         assertEquals(1, count("SELECT COUNT(*) FROM Questions WHERE QuestionId = 1"));
-        assertTrue(c.get("/teacher/questions").has("không thể xóa"));
+        assertEquals(0, count("SELECT CAST(IsActive AS INT) FROM Questions WHERE QuestionId = 1"));
+        assertTrue(count("SELECT COUNT(*) FROM Submissions WHERE QuestionId = 1") > 0, "lịch sử còn nguyên");
+        assertTrue(c.get("/teacher/questions").has("xóa mềm"));
+        assertFalse(c.get("/teacher/questions?lessonId=1&type=MCQ").has("x^3 - 3x"), "câu đã xóa mềm bị ẩn");
+        Resp editDeleted = c.get("/teacher/questions?action=edit&id=1");
+        assertFalse(editDeleted.status() == 200 && editDeleted.has("x^3 - 3x"), "không mở form sửa câu đã xóa mềm");
+        Client st = new Client();
+        st.login("student1", "123456");
+        assertEquals(200, st.json("/api/student/submit-quiz-answer", "{\"questionId\":1,\"selectedOptionId\":1}").status(),
+                "học sinh vẫn ôn tập được câu đã xóa mềm");
+        assertTrue(st.get("/student/quiz?lessonId=1").has("x^3 - 3x"), "câu đã xóa mềm vẫn có trong đề ôn tập");
+        exec("UPDATE Questions SET IsActive = 1 WHERE QuestionId = 1");
 
         // phân trang: tạo thêm nhiều câu hỏi tự luận
         for (int i = 0; i < 11; i++) {
@@ -1323,6 +1338,110 @@ class EduTutorIT {
         assertEquals(200, p2.status());
         assertTrue(p2.has("page-link"));
         exec("DELETE FROM Questions WHERE Content LIKE N'it[_]%'");
+    }
+
+    /**
+     * BR-05 / TC-TEA-01 / TC-TEA-03: chặn khi còn bản ghi đang hoạt động; còn lịch sử thì xóa mềm và ẩn khỏi trang
+     * quản lý của giáo viên. Học sinh vẫn xem / ôn tập được nội dung đã xóa mềm (quyết định của nhóm, lệch BR-05).
+     */
+    @Test
+    @Order(56)
+    void softDeleteKeepsHistoryAndHidesRecords() throws Exception {
+        Client t = new Client();
+        t.login("teacher1", "123456");
+        t.form("/teacher/topics", Map.of("action", "create", "topicName", "it_Chủ đề xóa mềm", "description", ""));
+        int topicId = count("SELECT TopicId FROM Topics WHERE TopicName = N'it_Chủ đề xóa mềm'");
+        t.form("/teacher/lessons", Map.of("action", "create", "topicId", "" + topicId, "title", "it_Bài xóa mềm",
+                "summary", "s", "content", "c", "youtubeUrl", ""));
+        int lessonId = count("SELECT LessonId FROM Lessons WHERE Title = N'it_Bài xóa mềm'");
+        Map<String, String> q = new LinkedHashMap<>();
+        q.put("action", "create");
+        q.put("lessonId", "" + lessonId);
+        q.put("type", "MCQ");
+        q.put("level", "1");
+        q.put("content", "it_Câu xóa mềm");
+        q.put("explanation", "g");
+        q.put("correctOption", "A");
+        for (String l : new String[]{"A", "B", "C", "D"}) {
+            q.put("opt_" + l, "pa " + l);
+        }
+        t.form("/teacher/questions", q);
+        int qid = count("SELECT QuestionId FROM Questions WHERE Content = N'it_Câu xóa mềm'");
+        int wrongOpt = count("SELECT OptionId FROM QuestionOptions WHERE QuestionId = ? AND OptionLetter = 'B'", qid);
+
+        // Học sinh làm sai câu này → có lịch sử
+        Client st = new Client();
+        st.login("student1", "123456");
+        assertEquals(200, st.json("/api/student/submit-quiz-answer",
+                "{\"questionId\":" + qid + ",\"selectedOptionId\":" + wrongOpt + "}").status());
+
+        // đọc các flash thành công còn tồn đọng (flash gắn với đúng URL đích của lần redirect)
+        t.get("/teacher/topics");
+        t.get("/teacher/lessons?topicId=" + topicId);
+        t.get("/teacher/questions");
+        // Trang quản lý báo trước kết quả nút Xóa (giáo viên vẫn là người quyết định có xóa hay không)
+        assertTrue(t.get("/teacher/topics").has("Không thể xóa: chủ đề còn 1 bài học"), "chủ đề: nút xóa bị khóa, nêu lý do");
+        assertTrue(t.get("/teacher/lessons?topicId=" + topicId).has("Không thể xóa: bài học còn 1 câu hỏi"));
+        assertTrue(t.get("/teacher/questions?lessonId=" + lessonId).has("chỉ được ẩn khỏi trang quản lý"),
+                "câu đã có bài làm: báo trước là xóa mềm");
+        // TC-TEA-03 (1): bài học còn câu hỏi đang hoạt động → chặn
+        t.form("/teacher/lessons", Map.of("action", "delete", "id", "" + lessonId));
+        assertEquals(1, count("SELECT CAST(IsActive AS INT) FROM Lessons WHERE LessonId = ?", lessonId));
+        assertTrue(t.get("/teacher/lessons").has("câu hỏi đang hoạt động"));
+        // TC-TEA-01: chủ đề còn bài học đang hoạt động → chặn
+        t.form("/teacher/topics", Map.of("action", "delete", "id", "" + topicId));
+        assertEquals(1, count("SELECT CAST(IsActive AS INT) FROM Topics WHERE TopicId = ?", topicId));
+        t.get("/teacher/topics");
+
+        // Câu hỏi có bài nộp → xóa mềm
+        t.form("/teacher/questions", Map.of("action", "delete", "id", "" + qid));
+        assertEquals(0, count("SELECT CAST(IsActive AS INT) FROM Questions WHERE QuestionId = ?", qid));
+        t.get("/teacher/questions");
+        // TC-TEA-03 (2): chỉ còn câu đã xóa mềm → được xóa; còn bài nộp nên bài học bị xóa mềm
+        t.form("/teacher/lessons", Map.of("action", "delete", "id", "" + lessonId));
+        assertEquals(0, count("SELECT CAST(IsActive AS INT) FROM Lessons WHERE LessonId = ?", lessonId));
+        assertTrue(t.get("/teacher/lessons").has("xóa mềm"));
+        assertFalse(t.get("/teacher/lessons").has("it_Bài xóa mềm"), "bài học đã xóa mềm bị ẩn");
+        assertTrue(st.get("/student/topics").has("it_Bài xóa mềm"), "học sinh vẫn thấy bài đã xóa mềm để ôn tập");
+        assertEquals(200, st.get("/student/lesson?id=" + lessonId).status(), "học sinh vẫn mở được bài đã xóa mềm");
+        assertTrue(st.get("/student/quiz?lessonId=" + lessonId).has("it_Câu xóa mềm"), "vẫn luyện lại được");
+        // Chủ đề chỉ còn bài học đã xóa mềm → xóa mềm chủ đề
+        t.form("/teacher/topics", Map.of("action", "delete", "id", "" + topicId));
+        assertEquals(0, count("SELECT CAST(IsActive AS INT) FROM Topics WHERE TopicId = ?", topicId));
+        assertFalse(t.get("/teacher/topics").has("it_Chủ đề xóa mềm"));
+        assertTrue(st.get("/student/topics").has("it_Chủ đề xóa mềm"), "học sinh vẫn thấy chủ đề đã xóa mềm");
+        // Lịch sử của học sinh vẫn còn
+        assertEquals(1, count("SELECT COUNT(*) FROM Submissions WHERE QuestionId = ?", qid));
+        // Tên chuyên đề đã xóa mềm được dùng lại
+        assertEquals(302, t.form("/teacher/topics", Map.of("action", "create", "topicName", "it_Chủ đề xóa mềm",
+                "description", "")).status());
+        assertEquals(2, count("SELECT COUNT(*) FROM Topics WHERE TopicName = N'it_Chủ đề xóa mềm'"));
+
+        // Không còn lịch sử → xóa cứng
+        int topic2 = count("SELECT TopicId FROM Topics WHERE TopicName = N'it_Chủ đề xóa mềm' AND IsActive = 1");
+        t.form("/teacher/lessons", Map.of("action", "create", "topicId", "" + topic2, "title", "it_Bài xóa cứng",
+                "summary", "s", "content", "c", "youtubeUrl", ""));
+        assertTrue(t.get("/teacher/lessons?topicId=" + topic2).has("sẽ bị xóa hẳn và không hoàn tác được"),
+                "chưa có học sinh làm: báo trước là xóa hẳn");
+        int lesson2 = count("SELECT LessonId FROM Lessons WHERE Title = N'it_Bài xóa cứng'");
+        t.form("/teacher/lessons", Map.of("action", "delete", "id", "" + lesson2));
+        assertEquals(0, count("SELECT COUNT(*) FROM Lessons WHERE LessonId = ?", lesson2));
+        t.form("/teacher/topics", Map.of("action", "delete", "id", "" + topic2));
+        assertEquals(0, count("SELECT COUNT(*) FROM Topics WHERE TopicId = ?", topic2));
+
+        // TC-SEC-05: tên chủ đề chứa dấu nháy không phá được thuộc tính HTML của nút xóa
+        t.form("/teacher/topics", Map.of("action", "create", "topicName", "it_x\" onmouseover=\"alert(1)", "description", ""));
+        Resp xss = t.get("/teacher/topics");
+        assertTrue(count("SELECT COUNT(*) FROM Topics WHERE TopicName LIKE N'it[_]x%'") == 0
+                || xss.has("it_x&#034; onmouseover=&#034;alert(1)"), "tên được escape trong thuộc tính");
+        assertFalse(xss.has("it_x\" onmouseover=\"alert(1)"), "không có thuộc tính onmouseover lọt ra HTML");
+        exec("DELETE FROM Topics WHERE TopicName LIKE N'it[_]x%'");
+
+        // Dọn dữ liệu thử
+        exec("DELETE FROM Submissions WHERE QuestionId = ?", qid);
+        exec("DELETE FROM Questions WHERE QuestionId = ?", qid);
+        exec("DELETE FROM Lessons WHERE LessonId = ?", lessonId);
+        exec("DELETE FROM Topics WHERE TopicId = ?", topicId);
     }
 
     @Test

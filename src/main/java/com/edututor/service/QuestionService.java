@@ -16,14 +16,17 @@ import com.edututor.repository.LessonRepository;
 import com.edututor.repository.QuestionOptionRepository;
 import com.edututor.repository.QuestionRepository;
 import com.edututor.repository.SubmissionRepository;
+import com.edututor.repository.TutorSessionRepository;
 import com.edututor.repository.UserRepository;
 import com.edututor.repository.spec.QuestionSpecs;
 import com.edututor.util.HtmlSanitizer;
 import com.edututor.util.Pager;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -39,15 +42,17 @@ public class QuestionService {
     private final QuestionOptionRepository optionRepository;
     private final LessonRepository lessonRepository;
     private final SubmissionRepository submissionRepository;
+    private final TutorSessionRepository tutorSessionRepository;
     private final UserRepository userRepository;
 
     public QuestionService(QuestionRepository questionRepository, QuestionOptionRepository optionRepository,
                            LessonRepository lessonRepository, SubmissionRepository submissionRepository,
-                           UserRepository userRepository) {
+                           TutorSessionRepository tutorSessionRepository, UserRepository userRepository) {
         this.questionRepository = questionRepository;
         this.optionRepository = optionRepository;
         this.lessonRepository = lessonRepository;
         this.submissionRepository = submissionRepository;
+        this.tutorSessionRepository = tutorSessionRepository;
         this.userRepository = userRepository;
     }
 
@@ -57,7 +62,18 @@ public class QuestionService {
         Page<Question> result = questionRepository.findAll(
                 QuestionSpecs.search(topicId, lessonId, parseType(type), level),
                 Pager.pageRequest(page, size, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("questionId"))));
-        return PageResult.of(result, ViewMapper::toView);
+        // Dự báo kết quả nút Xóa (BR-05): đã có bài nộp / phiên gia sư → xóa mềm, chưa có → xóa hẳn
+        Set<Integer> withHistory = new HashSet<>();
+        List<Integer> ids = result.getContent().stream().map(Question::getQuestionId).toList();
+        if (!ids.isEmpty()) {
+            withHistory.addAll(submissionRepository.findQuestionIdsWithSubmissions(ids));
+            withHistory.addAll(tutorSessionRepository.findQuestionIdsWithSessions(ids));
+        }
+        return PageResult.of(result, q -> {
+            QuestionView v = ViewMapper.toView(q);
+            v.setDeleteMode(withHistory.contains(q.getQuestionId()) ? "SOFT" : "HARD");
+            return v;
+        });
     }
 
     private QuestionType parseType(String type) {
@@ -67,7 +83,7 @@ public class QuestionService {
         return "ESSAY".equals(type) ? QuestionType.ESSAY : null;
     }
 
-    /** Câu tự luận của bài học cho học sinh chọn: không kèm lời giải (BR-11). */
+    /** Câu tự luận của bài học cho học sinh chọn (kể cả câu đã xóa mềm): không kèm lời giải (BR-11). */
     @Transactional(readOnly = true)
     public List<QuestionView> getEssayQuestions(int lessonId) {
         return questionRepository
@@ -82,7 +98,7 @@ public class QuestionService {
     /** Câu hỏi kèm phương án (có cờ đúng) để giáo viên sửa; null nếu không tồn tại. */
     @Transactional(readOnly = true)
     public QuestionView getQuestionForEdit(int questionId) {
-        return questionRepository.findWithOptionsByQuestionId(questionId).map(q -> {
+        return questionRepository.findWithOptionsByQuestionIdAndActiveTrue(questionId).map(q -> {
             QuestionView v = ViewMapper.toView(q);
             List<OptionView> options = new ArrayList<>();
             for (QuestionOption o : q.getOptions()) {
@@ -116,7 +132,7 @@ public class QuestionService {
     /** Sửa câu hỏi; phương án được cập nhật tại chỗ theo ký hiệu (giữ nguyên option_id). */
     @Transactional
     public void updateQuestion(QuestionForm form, int actingUserId, boolean admin) {
-        Question q = questionRepository.findWithOptionsByQuestionId(form.getId())
+        Question q = questionRepository.findWithOptionsByQuestionIdAndActiveTrue(form.getId())
                 .orElseThrow(() -> new NotFoundException("Câu hỏi không tồn tại."));
         requireOwner(q, actingUserId, admin);
         applyQuestion(q, form);
@@ -150,17 +166,24 @@ public class QuestionService {
         optionRepository.deleteAll(removed);
     }
 
-    /** BR-05: câu hỏi đã có bài làm của học sinh thì không xóa để bảo toàn lịch sử. */
+    /**
+     * BR-05: câu hỏi đã có bài làm (hoặc phiên gia sư) → xóa mềm (IsActive = 0) để bảo toàn lịch sử;
+     * chưa có → xóa cứng (phương án xóa theo ON DELETE CASCADE của CSDL).
+     *
+     * @return true nếu xóa cứng, false nếu xóa mềm
+     */
     @Transactional
-    public void deleteQuestion(int questionId, int actingUserId, boolean admin) {
-        Question q = questionRepository.findWithLessonByQuestionId(questionId)
+    public boolean deleteQuestion(int questionId, int actingUserId, boolean admin) {
+        Question q = questionRepository.findWithLessonByQuestionIdAndActiveTrue(questionId)
                 .orElseThrow(() -> new NotFoundException("Câu hỏi không tồn tại."));
         requireOwner(q, actingUserId, admin);
-        if (submissionRepository.countByQuestion_QuestionId(questionId) > 0) {
-            throw new ConflictException(
-                    "Câu hỏi này đã có bài làm của học sinh nên không thể xóa để bảo toàn lịch sử.");
+        if (submissionRepository.countByQuestion_QuestionId(questionId) > 0
+                || tutorSessionRepository.existsByQuestion_QuestionId(questionId)) {
+            q.setActive(false);
+            return false;
         }
-        questionRepository.delete(q); // các phương án bị xóa theo ON DELETE CASCADE của CSDL
+        questionRepository.delete(q);
+        return true;
     }
 
     /** BR-03: giáo viên chỉ sửa/xóa câu hỏi do mình tạo; Admin sửa được tất cả. */
@@ -178,7 +201,7 @@ public class QuestionService {
      */
     @Transactional
     public int batchSaveAiQuestions(int teacherId, int lessonId, List<QuestionGenerationDTO> items) {
-        if (lessonId <= 0 || !lessonRepository.existsById(lessonId)) {
+        if (lessonId <= 0 || !lessonRepository.existsByLessonIdAndActiveTrue(lessonId)) {
             throw new IllegalArgumentException("Bài học không hợp lệ.");
         }
         if (items == null || items.isEmpty()) {
@@ -235,7 +258,7 @@ public class QuestionService {
     }
 
     private void applyQuestion(Question q, QuestionForm form) {
-        Lesson lesson = lessonRepository.findById(form.getLessonId())
+        Lesson lesson = lessonRepository.findByLessonIdAndActiveTrue(form.getLessonId())
                 .orElseThrow(() -> new IllegalArgumentException("Vui lòng chọn bài học hợp lệ."));
         q.setLesson(lesson);
         q.setQuestionType(QuestionType.valueOf(form.getType()));

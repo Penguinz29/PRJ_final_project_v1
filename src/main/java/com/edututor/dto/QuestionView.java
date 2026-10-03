@@ -117,5 +117,10 @@ public class QuestionView implements Serializable {
     public void setOptions(List<OptionView> options) {
         this.options = options;
     }
-}
 
+    /** Kết quả nếu giáo viên bấm Xóa: HARD (xóa hẳn) | SOFT (ẩn, giữ lịch sử) | BLOCKED (còn mục con đang hoạt động). */
+    private String deleteMode;
+
+    public String getDeleteMode() { return deleteMode; }
+    public void setDeleteMode(String deleteMode) { this.deleteMode = deleteMode; }
+}

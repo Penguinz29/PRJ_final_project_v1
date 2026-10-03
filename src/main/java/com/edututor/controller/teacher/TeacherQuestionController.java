@@ -124,8 +124,9 @@ public class TeacherQuestionController {
                     redirect.addFlashAttribute("flash", "Cập nhật câu hỏi thành công.");
                 }
                 case "delete" -> {
-                    questionService.deleteQuestion(form.getId(), user.getUserId(), user.isAdmin());
-                    redirect.addFlashAttribute("flash", "Xóa câu hỏi thành công.");
+                    boolean hard = questionService.deleteQuestion(form.getId(), user.getUserId(), user.isAdmin());
+                    redirect.addFlashAttribute("flash", hard ? "Xóa câu hỏi thành công."
+                            : "Đã ẩn câu hỏi (xóa mềm) vì đã có bài làm của học sinh; lịch sử được giữ nguyên.");
                     return "redirect:/teacher/questions";
                 }
                 default -> throw new IllegalArgumentException("Thao tác không hợp lệ.");

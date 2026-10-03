@@ -88,11 +88,10 @@
                                                                 <input type="hidden" name="action" value="delete">
                                                                 <input type="hidden" name="id" value="${t.topicId}">
                                                             </form>
-                                                            <button class="btn btn-sm btn-outline-danger"
-                                                                data-confirm="true" data-form="#delT${t.topicId}"
-                                                                data-confirm-message="Xóa chủ đề '${t.topicName}'?">
-                                                                <i class="bi bi-trash3"></i>
-                                                            </button>
+                                                            <ui:delete-button form="#delT${t.topicId}" mode="${t.deleteMode}"
+                                                                question="Xóa chủ đề '${t.topicName}'?"
+                                                                softNote="Chủ đề còn bài học đã ẩn có lịch sử học tập nên chỉ được ẩn khỏi trang quản lý (xóa mềm); học sinh vẫn ôn tập được."
+                                                                blockedReason="Không thể xóa: chủ đề còn ${t.lessonCount} bài học. Hãy xóa các bài học trước." />
                                                         </td>
                                                     </tr>
                                                 </c:forEach>

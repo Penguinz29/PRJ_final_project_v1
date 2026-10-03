@@ -9,10 +9,14 @@ import com.edututor.model.Topic;
 import com.edututor.repository.IdCount;
 import com.edututor.repository.LessonRepository;
 import com.edututor.repository.QuestionRepository;
+import com.edututor.repository.SubmissionRepository;
 import com.edututor.repository.TopicRepository;
+import com.edututor.repository.TutorSessionRepository;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,27 +27,41 @@ public class LessonService {
     private final LessonRepository lessonRepository;
     private final TopicRepository topicRepository;
     private final QuestionRepository questionRepository;
+    private final SubmissionRepository submissionRepository;
+    private final TutorSessionRepository tutorSessionRepository;
 
     public LessonService(LessonRepository lessonRepository, TopicRepository topicRepository,
-                         QuestionRepository questionRepository) {
+                         QuestionRepository questionRepository, SubmissionRepository submissionRepository,
+                         TutorSessionRepository tutorSessionRepository) {
         this.lessonRepository = lessonRepository;
         this.topicRepository = topicRepository;
         this.questionRepository = questionRepository;
+        this.submissionRepository = submissionRepository;
+        this.tutorSessionRepository = tutorSessionRepository;
     }
 
     @Transactional(readOnly = true)
     public List<LessonView> getAllLessons() {
-        return toViews(lessonRepository.findAllByOrderByCreatedAtDescLessonIdDesc());
+        return toViews(lessonRepository.findByActiveTrueOrderByCreatedAtDescLessonIdDesc());
     }
 
     @Transactional(readOnly = true)
     public List<LessonView> getLessonsByTopic(int topicId) {
-        return toViews(lessonRepository.findByTopic_TopicIdOrderByDisplayOrderAscLessonIdAsc(topicId));
+        return toViews(lessonRepository.findByTopic_TopicIdAndActiveTrueOrderByDisplayOrderAscLessonIdAsc(topicId));
     }
 
     /** @return bài học, hoặc null nếu không tồn tại */
     @Transactional(readOnly = true)
     public LessonView getLessonById(int lessonId) {
+        return lessonRepository.findWithTopicByLessonIdAndActiveTrue(lessonId).map(l -> {
+            long n = questionRepository.countByLesson_LessonIdAndActiveTrue(lessonId);
+            return ViewMapper.toView(l, (int) n);
+        }).orElse(null);
+    }
+
+    /** Học sinh mở bài học để học / luyện / ôn tập: kể cả bài giáo viên đã xóa mềm; null nếu không tồn tại. */
+    @Transactional(readOnly = true)
+    public LessonView getLessonForStudent(int lessonId) {
         return lessonRepository.findWithTopicByLessonId(lessonId).map(l -> {
             long n = questionRepository.countByLesson_LessonId(lessonId);
             return ViewMapper.toView(l, (int) n);
@@ -59,7 +77,19 @@ public class LessonService {
                 counts.put(c.getId(), (int) c.getTotal());
             }
         }
-        return lessons.stream().map(l -> ViewMapper.toView(l, counts.getOrDefault(l.getLessonId(), 0))).toList();
+        // Dự báo kết quả nút Xóa (BR-05): còn câu đang hoạt động → chặn; có bài nộp / phiên gia sư → xóa mềm
+        Set<Integer> withHistory = new HashSet<>();
+        if (!lessons.isEmpty()) {
+            List<Integer> ids = lessons.stream().map(Lesson::getLessonId).toList();
+            withHistory.addAll(submissionRepository.findLessonIdsWithSubmissions(ids));
+            withHistory.addAll(tutorSessionRepository.findLessonIdsWithSessions(ids));
+        }
+        return lessons.stream().map(l -> {
+            int active = counts.getOrDefault(l.getLessonId(), 0);
+            LessonView v = ViewMapper.toView(l, active);
+            v.setDeleteMode(active > 0 ? "BLOCKED" : withHistory.contains(l.getLessonId()) ? "SOFT" : "HARD");
+            return v;
+        }).toList();
     }
 
     @Transactional
@@ -72,7 +102,7 @@ public class LessonService {
 
     @Transactional
     public void updateLesson(LessonForm form) {
-        Lesson l = lessonRepository.findById(form.getId())
+        Lesson l = lessonRepository.findByLessonIdAndActiveTrue(form.getId())
                 .orElseThrow(() -> new NotFoundException("Bài học không tồn tại."));
         apply(l, form);
         if (form.getDisplayOrder() != null) {
@@ -80,19 +110,31 @@ public class LessonService {
         }
     }
 
-    /** BR-05: không xóa bài học còn câu hỏi. */
+    /**
+     * BR-05: chỉ chặn khi bài học còn câu hỏi ĐANG HOẠT ĐỘNG (409). Chỉ còn câu đã xóa mềm thì được xóa:
+     * không còn bài nộp / phiên gia sư liên quan → xóa cứng (câu hỏi, bài giảng xóa theo ON DELETE CASCADE);
+     * còn → xóa mềm bài học (IsActive = 0) để giữ lịch sử.
+     *
+     * @return true nếu xóa cứng, false nếu xóa mềm
+     */
     @Transactional
-    public void deleteLesson(int lessonId) {
-        Lesson l = lessonRepository.findById(lessonId)
+    public boolean deleteLesson(int lessonId) {
+        Lesson l = lessonRepository.findByLessonIdAndActiveTrue(lessonId)
                 .orElseThrow(() -> new NotFoundException("Bài học không tồn tại."));
-        if (questionRepository.countByLesson_LessonId(lessonId) > 0) {
-            throw new ConflictException("Bài học còn câu hỏi nên không thể xóa. Hãy xóa các câu hỏi trước.");
+        if (questionRepository.countByLesson_LessonIdAndActiveTrue(lessonId) > 0) {
+            throw new ConflictException("Bài học còn câu hỏi đang hoạt động nên không thể xóa. Hãy xóa các câu hỏi trước.");
+        }
+        if (submissionRepository.existsByQuestion_Lesson_LessonId(lessonId)
+                || tutorSessionRepository.existsByQuestion_Lesson_LessonId(lessonId)) {
+            l.setActive(false);
+            return false;
         }
         lessonRepository.delete(l);
+        return true;
     }
 
     private void apply(Lesson l, LessonForm form) {
-        Topic topic = topicRepository.findById(form.getTopicId())
+        Topic topic = topicRepository.findByTopicIdAndActiveTrue(form.getTopicId())
                 .orElseThrow(() -> new IllegalArgumentException("Chủ đề không hợp lệ."));
         l.setTopic(topic);
         l.setTitle(form.getTitle());

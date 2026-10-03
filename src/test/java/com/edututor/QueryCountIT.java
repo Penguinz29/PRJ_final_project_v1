@@ -111,10 +111,10 @@ class QueryCountIT {
     void listScreensDoNotRunOneQueryPerRow() {
         assertAtMost(2, statements(() -> ctx.getBean(SubmissionService.class).getStudentHistory(4, "ALL", 1, 10)),
                 "lịch sử: 1 câu lấy trang (đã JOIN question/lesson/student) + 1 câu COUNT");
-        assertAtMost(2, statements(() -> ctx.getBean(QuestionService.class).search(0, 0, "", 0, 1, 10)),
-                "ngân hàng câu hỏi: trang + COUNT");
-        assertEquals(2, statements(() -> ctx.getBean(LessonService.class).getAllLessons()),
-                "bài học: danh sách + một truy vấn gộp số câu hỏi theo IN");
+        assertAtMost(4, statements(() -> ctx.getBean(QuestionService.class).search(0, 0, "", 0, 1, 10)),
+                "ngân hàng câu hỏi: trang + COUNT + 2 truy vấn IN dự báo nút Xóa (bài nộp, phiên gia sư)");
+        assertEquals(4, statements(() -> ctx.getBean(LessonService.class).getAllLessons()),
+                "bài học: danh sách + IN số câu hỏi + 2 truy vấn IN dự báo nút Xóa (bài nộp, phiên gia sư)");
         assertEquals(2, statements(() -> ctx.getBean(TopicService.class).getAllTopicsWithLessons()),
                 "chủ đề kèm bài học: 2 truy vấn (chủ đề, rồi bài học bằng IN)");
         assertAtMost(3, statements(() -> ctx.getBean(UserService.class).getUsersByRole("STUDENT", 1, 10)),

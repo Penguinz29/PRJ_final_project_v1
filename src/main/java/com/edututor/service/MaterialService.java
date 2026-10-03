@@ -42,7 +42,7 @@ public class MaterialService {
     /** Tạo bài giảng; thiếu thứ tự thì xếp cuối danh sách. */
     @Transactional
     public void create(int lessonId, MaterialForm form, int teacherId) {
-        if (!lessonRepository.existsById(lessonId)) {
+        if (!lessonRepository.existsByLessonIdAndActiveTrue(lessonId)) {
             throw new NotFoundException("Bài học không tồn tại.");
         }
         LessonMaterial m = new LessonMaterial();

@@ -182,12 +182,9 @@
                                                                             <input type="hidden" name="id"
                                                                                 value="${q.questionId}">
                                                                         </form>
-                                                                        <button class="btn btn-sm btn-outline-danger"
-                                                                            data-confirm="true"
-                                                                            data-form="#delQ${q.questionId}"
-                                                                            data-confirm-message="Xóa câu hỏi này?">
-                                                                            <i class="bi bi-trash3"></i>
-                                                                        </button>
+                                                                        <ui:delete-button form="#delQ${q.questionId}" mode="${q.deleteMode}"
+                                                                            question="Xóa câu hỏi này?"
+                                                                            softNote="Câu hỏi đã có học sinh làm nên chỉ được ẩn khỏi trang quản lý (xóa mềm); học sinh vẫn ôn tập được, lịch sử giữ nguyên." />
                                                                     </td>
                                                                 </tr>
                                                             </c:forEach>

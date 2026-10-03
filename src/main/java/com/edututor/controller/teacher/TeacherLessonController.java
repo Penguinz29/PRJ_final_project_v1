@@ -78,8 +78,9 @@ public class TeacherLessonController {
                     redirect.addFlashAttribute("flash", "Cập nhật bài giảng thành công.");
                 }
                 case "delete" -> {
-                    lessonService.deleteLesson(form.getId());
-                    redirect.addFlashAttribute("flash", "Xóa bài giảng thành công.");
+                    boolean hard = lessonService.deleteLesson(form.getId());
+                    redirect.addFlashAttribute("flash", hard ? "Xóa bài giảng thành công."
+                            : "Đã ẩn bài giảng (xóa mềm) vì còn bài làm của học sinh liên quan; lịch sử được giữ nguyên.");
                 }
                 default -> throw new IllegalArgumentException("Thao tác không hợp lệ.");
             }

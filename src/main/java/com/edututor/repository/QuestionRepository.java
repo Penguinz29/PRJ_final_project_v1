@@ -22,18 +22,29 @@ public interface QuestionRepository extends JpaRepository<Question, Integer>, Jp
     @EntityGraph(attributePaths = "lesson")
     Page<Question> findAll(Specification<Question> spec, Pageable pageable);
 
+    /** Học sinh: câu hỏi của bài học, kể cả đã xóa mềm (vẫn ôn tập được). */
     @EntityGraph(attributePaths = "lesson")
     List<Question> findByLesson_LessonIdAndQuestionTypeOrderByCreatedAtAscQuestionIdAsc(Integer lessonId,
                                                                                          QuestionType type);
 
+    /** Học sinh: làm bài, nộp bài, gia sư (kể cả câu đã xóa mềm). */
     @EntityGraph(attributePaths = "lesson")
     Optional<Question> findWithLessonByQuestionId(Integer questionId);
 
+    /** Giáo viên: chỉ câu đang hoạt động (sửa / xóa). */
+    @EntityGraph(attributePaths = "lesson")
+    Optional<Question> findWithLessonByQuestionIdAndActiveTrue(Integer questionId);
+
     /** Nạp câu hỏi kèm phương án (một câu, không phân trang nên fetch collection an toàn). */
     @EntityGraph(attributePaths = {"lesson", "options"})
-    Optional<Question> findWithOptionsByQuestionId(Integer questionId);
+    Optional<Question> findWithOptionsByQuestionIdAndActiveTrue(Integer questionId);
+
+    /** BR-05: số câu hỏi ĐANG HOẠT ĐỘNG của bài học; còn > 0 thì không được xóa bài học. */
+    long countByLesson_LessonIdAndActiveTrue(Integer lessonId);
 
     long countByLesson_LessonId(Integer lessonId);
+
+    long countByActiveTrue();
 
     /** Câu trắc nghiệm hiển thị khi làm bài: chỉ chọn cột được phép (không lời giải), tránh nạp Entity đầy đủ. */
     @Query("select new com.edututor.dto.QuizQuestionView(q.questionId, q.content, q.level, q.aiGenerated) "
@@ -42,7 +53,7 @@ public interface QuestionRepository extends JpaRepository<Question, Integer>, Jp
     List<QuizQuestionView> findQuizQuestions(@Param("lessonId") Integer lessonId);
 
     @Query("select q.lesson.lessonId as id, count(q) as total from Question q "
-            + "where q.lesson.lessonId in :lessonIds group by q.lesson.lessonId")
+            + "where q.lesson.lessonId in :lessonIds and q.active = true group by q.lesson.lessonId")
     List<IdCount> countByLessonIds(@Param("lessonIds") Collection<Integer> lessonIds);
 
     boolean existsByTeacher_UserId(Integer teacherId);
