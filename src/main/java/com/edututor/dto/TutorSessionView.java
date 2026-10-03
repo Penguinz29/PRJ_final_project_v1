@@ -12,6 +12,11 @@ public class TutorSessionView implements Serializable {
     private Integer lessonId;
     private String title;
     private String status; // ACTIVE, COMPLETED, ABANDONED
+    private Integer questionId;
+    private int currentStep;
+    private int totalSteps;
+    private boolean awaitingInput;
+    private String inputHint;
     private Date createdAt;
 
     // Mở rộng cho UI
@@ -27,6 +32,16 @@ public class TutorSessionView implements Serializable {
     public void setTitle(String title) { this.title = title; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public Integer getQuestionId() { return questionId; }
+    public void setQuestionId(Integer questionId) { this.questionId = questionId; }
+    public int getCurrentStep() { return currentStep; }
+    public void setCurrentStep(int currentStep) { this.currentStep = currentStep; }
+    public int getTotalSteps() { return totalSteps; }
+    public void setTotalSteps(int totalSteps) { this.totalSteps = totalSteps; }
+    public boolean isAwaitingInput() { return awaitingInput; }
+    public void setAwaitingInput(boolean awaitingInput) { this.awaitingInput = awaitingInput; }
+    public String getInputHint() { return inputHint; }
+    public void setInputHint(String inputHint) { this.inputHint = inputHint; }
     public Date getCreatedAt() { return createdAt; }
     public void setCreatedAt(Date createdAt) { this.createdAt = createdAt; }
     public String getLessonTitle() { return lessonTitle; }

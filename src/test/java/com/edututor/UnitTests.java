@@ -15,7 +15,9 @@ import com.edututor.dto.QuestionGenerationDTO;
 import com.edututor.dto.QuizAnswerResponse;
 import com.edututor.dto.RegisterForm;
 import com.edututor.dto.SessionUser;
+import com.edututor.dto.TutorAiResult;
 import com.edututor.dto.TutorStepResponse;
+import com.edututor.service.AiTutorService;
 import com.edututor.exception.AiRateLimitException;
 import com.edututor.interceptor.AuthInterceptor;
 import com.edututor.interceptor.CsrfInterceptor;
@@ -75,19 +77,79 @@ class UnitTests {
 
     @Test
     void tutorStepResponseUsesDocumentedJsonKeys() throws Exception {
-        TutorStepResponse r = new TutorStepResponse(7, true, 2, 4, "Giỏi!", "Bước 2: ...", false);
+        TutorStepResponse r = new TutorStepResponse(7, 2, 4, true, "Giỏi!", "Bước 2: ...", false, null, "ACTIVE", null);
         JsonNode n = mapper.readTree(mapper.writeValueAsString(r));
-        assertTrue(n.has("isStepCorrect"));
-        assertTrue(n.has("isSessionCompleted"));
+        for (String key : new String[]{"sessionId", "currentStep", "totalSteps", "isStepCorrect", "feedbackToStudent",
+                "nextPromptOrQuestion", "needsStudentInput", "inputRequestHint", "status", "finalSummary",
+                "isSessionCompleted"}) {
+            assertTrue(n.has(key), "UC-TUT-02: thiếu khóa " + key);
+        }
         assertFalse(n.has("stepCorrect"), "không được xuất hiện khóa phụ stepCorrect");
         assertEquals(2, n.get("currentStep").asInt());
+        assertFalse(n.get("isSessionCompleted").asBoolean());
 
-        TutorStepResponse parsed = mapper.readValue(
-                "{\"isStepCorrect\":true,\"currentStep\":1,\"totalSteps\":4,\"feedbackToStudent\":\"a\","
-                        + "\"nextPromptOrQuestion\":\"b\",\"isSessionCompleted\":false,\"thua\":1}",
-                TutorStepResponse.class);
-        assertTrue(parsed.isStepCorrect());
+        TutorAiResult parsed = mapper.readValue(
+                "{\"isStepCorrect\":null,\"currentStep\":1,\"totalSteps\":4,\"feedbackToStudent\":\"a\","
+                        + "\"nextPromptOrQuestion\":\"b\",\"needsStudentInput\":true,\"inputRequestHint\":\"Nhập a, b, c\","
+                        + "\"isSessionCompleted\":false,\"thua\":1}",
+                TutorAiResult.class);
+        assertNull(parsed.isStepCorrect());
+        assertTrue(parsed.needsStudentInput());
         assertEquals(4, parsed.totalSteps());
+    }
+
+    private static TutorAiResult ai(Boolean correct, int total, boolean needsInput, boolean completed) {
+        return new TutorAiResult(correct, 9, total, "Nhận xét", "Câu hỏi", needsInput,
+                needsInput ? "Nhập các hệ số a, b, c" : null, completed, completed ? "Đáp số $x=1$" : null);
+    }
+
+    /** Bảng chuẩn hóa UC-TUT-02 / BR-12 / BR-15: server quyết định bước, không tin AI tuyệt đối. */
+    @Test
+    void tutorNormalizationFollowsServerRules() {
+        AiTutorService.TurnKind start = AiTutorService.TurnKind.START;
+        AiTutorService.TurnKind answer = AiTutorService.TurnKind.ANSWER;
+        AiTutorService.TurnKind data = AiTutorService.TurnKind.DATA;
+
+        // Khởi đầu: bước 1, isStepCorrect = null, tổng số bước ép vào [min, max]
+        TutorStepResponse s = AiTutorService.normalize(ai(true, 20, false, false), start, 1, 0, 3, 6);
+        assertEquals(1, s.currentStep());
+        assertEquals(6, s.totalSteps());
+        assertNull(s.isStepCorrect());
+        assertEquals("ACTIVE", s.status());
+
+        // Sai: giữ bước; AI đổi totalSteps giữa chừng bị bỏ qua
+        s = AiTutorService.normalize(ai(false, 9, false, false), answer, 2, 4, 3, 6);
+        assertEquals(2, s.currentStep());
+        assertEquals(4, s.totalSteps());
+        assertEquals(Boolean.FALSE, s.isStepCorrect());
+
+        // Đúng: +1; AI báo hoàn thành khi chưa qua bước cuối → bỏ qua cờ, không lộ finalSummary
+        s = AiTutorService.normalize(ai(true, 4, false, true), answer, 2, 4, 3, 6);
+        assertEquals(3, s.currentStep());
+        assertEquals("ACTIVE", s.status());
+        assertNull(s.finalSummary());
+
+        // Đúng ở bước cuối → hoàn thành, có tổng kết
+        s = AiTutorService.normalize(ai(true, 4, false, true), answer, 4, 4, 3, 6);
+        assertEquals("COMPLETED", s.status());
+        assertTrue(s.isSessionCompleted());
+        assertEquals("Đáp số $x=1$", s.finalSummary());
+
+        // AI yêu cầu dữ liệu: giữ bước, không chấm, lưu gợi ý
+        s = AiTutorService.normalize(ai(true, 4, true, false), answer, 2, 4, 3, 6);
+        assertEquals(2, s.currentStep());
+        assertNull(s.isStepCorrect());
+        assertTrue(s.needsStudentInput());
+        assertEquals("Nhập các hệ số a, b, c", s.inputRequestHint());
+
+        // Lượt học sinh cung cấp dữ liệu: không chấm, không chuyển bước dù AI báo đúng/sai; hết chờ dữ liệu
+        s = AiTutorService.normalize(ai(false, 4, false, false), data, 2, 4, 3, 6);
+        assertEquals(2, s.currentStep());
+        assertNull(s.isStepCorrect());
+        assertFalse(s.needsStudentInput());
+        assertNull(s.inputRequestHint());
+        s = AiTutorService.normalize(ai(true, 4, false, true), data, 4, 4, 3, 6);
+        assertEquals("ACTIVE", s.status(), "lượt dữ liệu không được kết thúc phiên");
     }
 
     @Test

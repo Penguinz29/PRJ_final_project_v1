@@ -35,9 +35,27 @@ public class TutorSession {
     @JoinColumn(name = "LessonId")
     private Lesson lesson;
 
+    /** Câu hỏi xuất phát (phiên mở từ câu trắc nghiệm làm sai hoặc bài tự luận vừa chấm). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "QuestionId")
+    private Question question;
+
     @Nationalized
     @Column(name = "Title", nullable = false, length = 255)
     private String title;
+
+    /** Đề bài của phiên, luôn được đưa vào prompt (khối TRẠNG THÁI). */
+    @Nationalized
+    @Column(name = "ProblemText", columnDefinition = "NVARCHAR(MAX)")
+    private String problemText;
+
+    /** Bước hiện tại: server là nguồn sự thật, không tin giá trị client hay AI gửi. */
+    @Column(name = "CurrentStep", nullable = false)
+    private int currentStep = 1;
+
+    /** Tổng số bước AI đặt ở lượt khởi đầu, giữ nguyên cả phiên (0 = chưa xác định, phiên cũ). */
+    @Column(name = "TotalSteps", nullable = false)
+    private int totalSteps;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "`Status`", nullable = false, length = 20)
@@ -70,6 +88,14 @@ public class TutorSession {
     public void setTitle(String title) { this.title = title; }
     public TutorStatus getStatus() { return status; }
     public void setStatus(TutorStatus status) { this.status = status; }
+    public Question getQuestion() { return question; }
+    public void setQuestion(Question question) { this.question = question; }
+    public String getProblemText() { return problemText; }
+    public void setProblemText(String problemText) { this.problemText = problemText; }
+    public int getCurrentStep() { return currentStep; }
+    public void setCurrentStep(int currentStep) { this.currentStep = currentStep; }
+    public int getTotalSteps() { return totalSteps; }
+    public void setTotalSteps(int totalSteps) { this.totalSteps = totalSteps; }
     public boolean isAwaitingInput() { return awaitingInput; }
     public void setAwaitingInput(boolean awaitingInput) { this.awaitingInput = awaitingInput; }
     public String getInputHint() { return inputHint; }

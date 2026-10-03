@@ -28,9 +28,16 @@ public class StudentTutorController {
         this.topicService = topicService;
     }
 
+    /**
+     * @param mode       QUESTION | SUBMISSION: trang tự gọi POST /api/tutor/start để mở phiên từ câu trắc nghiệm
+     *                   vừa làm sai (questionId) hoặc bài tự luận vừa chấm (submissionId). Quyền được kiểm tra ở API.
+     */
     @GetMapping("/student/ai-tutor")
     public String tutor(@RequestParam(required = false) Integer sessionId,
                         @RequestParam(required = false) Integer lessonId,
+                        @RequestParam(required = false) String mode,
+                        @RequestParam(required = false) Integer questionId,
+                        @RequestParam(required = false) Integer submissionId,
                         @SessionAttribute(AuthInterceptor.SESSION_USER) SessionUser user, Model model) {
         model.addAttribute("topics", topicService.getAllTopicsWithLessons());
         model.addAttribute("sessions", tutorService.getRecentSessions(user.getUserId()));
@@ -38,12 +45,15 @@ public class StudentTutorController {
         if (sessionId != null) {
             TutorSessionView session = tutorService.getSession(user.getUserId(), sessionId);
             List<TutorMessageView> messages = tutorService.getMessages(user.getUserId(), sessionId);
-            int step = messages.stream().filter(m -> "AI".equals(m.getSenderType()))
-                    .reduce((a, b) -> b).map(TutorMessageView::getStepNumber).orElse(0);
             model.addAttribute("tutorSession", session);
             model.addAttribute("messages", messages);
-            model.addAttribute("currentStep", step);
             model.addAttribute("lessonId", session.getLessonId());
+        } else if ("QUESTION".equals(mode) && questionId != null) {
+            model.addAttribute("startMode", mode);
+            model.addAttribute("startQuestionId", questionId);
+        } else if ("SUBMISSION".equals(mode) && submissionId != null) {
+            model.addAttribute("startMode", mode);
+            model.addAttribute("startSubmissionId", submissionId);
         }
         return "student/ai-tutor";
     }

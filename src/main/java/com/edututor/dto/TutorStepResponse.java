@@ -1,18 +1,26 @@
 package com.edututor.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 /**
- * Kết quả một bước của gia sư AI. Các trường isStepCorrect...isSessionCompleted trùng schema JSON
- * mà Gemini phải trả về; sessionId do server bổ sung.
+ * Kết quả một lượt gia sư gửi cho client (UC-TUT-02), đã được server chuẩn hóa.
+ * isStepCorrect = null ở lượt khởi đầu và ở lượt chờ / nhận dữ liệu (BR-15).
+ * status: ACTIVE | COMPLETED; finalSummary chỉ có khi hoàn thành.
  */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public record TutorStepResponse(Integer sessionId, @JsonProperty("isStepCorrect") boolean isStepCorrect, int currentStep, int totalSteps,
-                                String feedbackToStudent, String nextPromptOrQuestion, @JsonProperty("isSessionCompleted") boolean isSessionCompleted) {
+public record TutorStepResponse(Integer sessionId, int currentStep, int totalSteps,
+                                @JsonProperty("isStepCorrect") Boolean isStepCorrect,
+                                String feedbackToStudent, String nextPromptOrQuestion,
+                                boolean needsStudentInput, String inputRequestHint,
+                                String status, String finalSummary) {
+
+    /** Giữ khóa isSessionCompleted cho giao diện cũ. */
+    @JsonProperty("isSessionCompleted")
+    public boolean isSessionCompleted() {
+        return "COMPLETED".equals(status);
+    }
 
     public TutorStepResponse withSessionId(int id) {
-        return new TutorStepResponse(id, isStepCorrect, currentStep, totalSteps,
-                feedbackToStudent, nextPromptOrQuestion, isSessionCompleted);
+        return new TutorStepResponse(id, currentStep, totalSteps, isStepCorrect, feedbackToStudent,
+                nextPromptOrQuestion, needsStudentInput, inputRequestHint, status, finalSummary);
     }
 }

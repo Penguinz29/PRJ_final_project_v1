@@ -2,6 +2,7 @@ package com.edututor.repository;
 
 import com.edututor.model.QuestionType;
 import com.edututor.model.Submission;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -48,4 +49,10 @@ public interface SubmissionRepository extends JpaRepository<Submission, Integer>
     Double averageMcqPercent(@Param("studentId") Integer studentId);
 
     boolean existsByStudent_UserId(Integer studentId);
+
+    /** Các lần làm SAI một câu của học sinh, mới nhất trước (điều kiện mở gia sư chế độ QUESTION, UC-TUT-01). */
+    @Query("select s from Submission s where s.student.userId = :studentId and s.question.questionId = :questionId "
+            + "and s.isCorrect = false order by s.submittedAt desc, s.submissionId desc")
+    List<Submission> findWrongAttempts(@Param("studentId") Integer studentId, @Param("questionId") Integer questionId,
+                                       Pageable pageable);
 }

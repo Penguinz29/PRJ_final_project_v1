@@ -157,6 +157,11 @@ final class ViewMapper {
         v.setLessonTitle(s.getLesson() == null ? null : s.getLesson().getTitle());
         v.setTitle(s.getTitle());
         v.setStatus(s.getStatus().name());
+        v.setQuestionId(s.getQuestion() == null ? null : s.getQuestion().getQuestionId());
+        v.setCurrentStep(s.getCurrentStep());
+        v.setTotalSteps(s.getTotalSteps());
+        v.setAwaitingInput(s.isAwaitingInput());
+        v.setInputHint(s.getInputHint());
         v.setCreatedAt(toDate(s.getCreatedAt()));
         return v;
     }

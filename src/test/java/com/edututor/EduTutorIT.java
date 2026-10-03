@@ -2,6 +2,7 @@ package com.edututor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -43,7 +44,8 @@ import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 /**
  * Kiểm thử tích hợp end-to-end (tên *IT: không chạy trong {@code mvn package}): Tomcat nhúng + toàn bộ Spring MVC +
  * Spring Data JPA/Hibernate + SQL Server thật + Gemini giả (mock HTTP).
- * Cần CSDL đã nạp document/sql/01..07 (06 tạo bảng LessonMaterials, 07 bổ sung khóa ai_configs); chạy riêng:
+ * Cần CSDL đã nạp document/sql/01..08 (06 tạo bảng LessonMaterials, 07 khóa ai_configs, 08 trạng thái phiên gia sư);
+ * chạy riêng:
  * <pre>
  * mvn verify -Pintegration -Dit.db.url="jdbc:sqlserver://localhost:1433;databaseName=MathTutorDB_verify;encrypt=true;trustServerCertificate=true"
  *            -Dit.db.user=sa -Dit.db.pass=123
@@ -235,6 +237,14 @@ class EduTutorIT {
         return "{\"isStepCorrect\":" + correct + ",\"currentStep\":" + step + ",\"totalSteps\":" + total
                 + ",\"feedbackToStudent\":\"Nhận xét bước\",\"nextPromptOrQuestion\":\"Câu hỏi bước " + step
                 + " $x^2$\",\"isSessionCompleted\":" + done + "}";
+    }
+
+    /** Phản hồi gia sư đầy đủ (có needsStudentInput / finalSummary). correct = null → JSON null. */
+    static String tutorJsonFull(Boolean correct, int step, int total, boolean done, boolean needsInput, String hint) {
+        return "{\"isStepCorrect\":" + correct + ",\"currentStep\":" + step + ",\"totalSteps\":" + total
+                + ",\"feedbackToStudent\":\"Nhận xét bước\",\"nextPromptOrQuestion\":\"Câu hỏi bước " + step + "\""
+                + ",\"needsStudentInput\":" + needsInput + ",\"inputRequestHint\":" + (hint == null ? "null" : "\"" + hint + "\"")
+                + ",\"isSessionCompleted\":" + done + ",\"finalSummary\":" + (done ? "\"Kết luận $x=2$\"" : "null") + "}";
     }
 
     static final byte[] PNG = java.util.Base64.getDecoder().decode(
@@ -653,6 +663,96 @@ class EduTutorIT {
         script.clear();
     }
 
+    /** FR-TUT-04 / BR-15 / TC-AI-05: AI dừng chờ dữ liệu; trạng thái lưu ở CSDL; lượt dữ liệu không bị chấm. */
+    @Test
+    @Order(22)
+    void tutorWaitsForStudentDataAndKeepsServerState() throws Exception {
+        Client c = new Client();
+        c.login("student1", "123456");
+        script.clear();
+        // Lượt khởi đầu: đề thiếu hệ số → AI yêu cầu dữ liệu ngay
+        script.add(new String[]{"200", tutorJsonFull(null, 1, 3, false, true, "Nhập các hệ số a, b, c")});
+        Resp r1 = c.json("/api/tutor/start", "{\"mode\":\"FREE\",\"problemText\":\"Giải phương trình bậc hai\"}");
+        assertEquals(200, r1.status(), r1.body());
+        JsonNode j1 = JSON.readTree(r1.body()).get("data");
+        int sid = j1.get("sessionId").asInt();
+        assertTrue(j1.get("needsStudentInput").asBoolean());
+        assertTrue(j1.get("isStepCorrect").isNull());
+        assertEquals(1, count("SELECT CAST(AwaitingInput AS INT) FROM TutorSessions WHERE SessionId = ?", sid));
+        assertEquals("Nhập các hệ số a, b, c", scalar("SELECT InputHint FROM TutorSessions WHERE SessionId = ?", sid));
+        assertEquals(3, count("SELECT TotalSteps FROM TutorSessions WHERE SessionId = ?", sid));
+        assertEquals("Giải phương trình bậc hai", scalar("SELECT ProblemText FROM TutorSessions WHERE SessionId = ?", sid));
+        String sys = JSON.readTree(lastRequestBody).path("system_instruction").path("parts").path(0).path("text").asText();
+        assertTrue(sys.contains("TRẠNG THÁI PHIÊN") && sys.contains("KHỞI ĐẦU"), sys);
+
+        // Mở lại phiên: giao diện dựng lại đúng trạng thái chờ dữ liệu từ CSDL
+        Resp page = c.get("/student/ai-tutor?sessionId=" + sid);
+        assertTrue(page.has("Gia sư cần bạn cung cấp dữ liệu") && page.has("Nhập các hệ số a, b, c"));
+
+        // Lượt dữ liệu: AI (sai sót) báo "sai" và nhảy bước → server KHÔNG chấm, KHÔNG chuyển bước, hết chờ dữ liệu
+        script.add(new String[]{"200", tutorJsonFull(false, 3, 5, false, false, null)});
+        JsonNode j2 = JSON.readTree(c.json("/api/tutor/next-step",
+                "{\"sessionId\":" + sid + ",\"studentInput\":\"a=1, b=-3, c=2\",\"currentStep\":3}").body()).get("data");
+        assertTrue(lastRequestBody.contains("Dữ liệu học sinh cung cấp cho bước 1"), "lượt mới gắn nhãn dữ liệu");
+        assertTrue(j2.get("isStepCorrect").isNull());
+        assertEquals(1, j2.get("currentStep").asInt());
+        assertEquals(3, j2.get("totalSteps").asInt(), "tổng số bước giữ nguyên");
+        assertEquals(0, count("SELECT CAST(AwaitingInput AS INT) FROM TutorSessions WHERE SessionId = ?", sid));
+        assertNull(scalar("SELECT InputHint FROM TutorSessions WHERE SessionId = ?", sid));
+
+        // Lượt trả lời đúng → bước 2; AI báo hoàn thành sớm → bị bỏ qua
+        script.add(new String[]{"200", tutorJsonFull(true, 2, 3, true, false, null)});
+        JsonNode j3 = JSON.readTree(c.json("/api/tutor/next-step",
+                "{\"sessionId\":" + sid + ",\"studentInput\":\"Delta = 1\"}").body()).get("data");
+        assertTrue(lastRequestBody.contains("Câu trả lời của học sinh cho bước 1"));
+        assertEquals(2, j3.get("currentStep").asInt());
+        assertEquals("ACTIVE", j3.get("status").asText());
+        assertTrue(j3.get("finalSummary").isNull(), "chưa được nêu đáp án cuối");
+        assertEquals(2, count("SELECT CurrentStep FROM TutorSessions WHERE SessionId = ?", sid));
+
+        // UC-TUT-04: học sinh khác không kết thúc được; chủ phiên kết thúc → ABANDONED, không trả lời tiếp được
+        Client other = new Client();
+        other.login("student2", "123456");
+        assertEquals(403, other.json("/api/tutor/" + sid + "/abandon", "{}").status());
+        Resp ab = c.json("/api/tutor/" + sid + "/abandon", "{}");
+        assertEquals(200, ab.status(), ab.body());
+        assertEquals("ABANDONED", scalar("SELECT [Status] FROM TutorSessions WHERE SessionId = ?", sid));
+        assertEquals(409, c.json("/api/tutor/" + sid + "/abandon", "{}").status());
+        assertEquals(409, c.json("/api/tutor/next-step", "{\"sessionId\":" + sid + ",\"studentInput\":\"x\"}").status());
+        script.clear();
+    }
+
+    /** FR-STU-05 / FR-TUT-01 (c): mở gia sư từ câu trắc nghiệm vừa làm sai; chưa làm sai thì 403. */
+    @Test
+    @Order(23)
+    void tutorStartsFromWrongMultipleChoiceQuestion() throws Exception {
+        Client c = new Client();
+        c.login("student2", "123456");
+        int studentId = count("SELECT UserId FROM Users WHERE Username = 'student2'");
+        exec("DELETE FROM Submissions WHERE StudentId = ? AND QuestionId = 1", studentId);
+        exec("UPDATE Questions SET ExplanationLatex = N'Lời giải nội bộ it' WHERE QuestionId = 1");
+        script.clear();
+        try {
+            assertEquals(403, c.json("/api/tutor/start", "{\"mode\":\"QUESTION\",\"questionId\":1}").status(),
+                    "chưa có bài nộp sai câu này");
+            assertEquals(200, c.json("/api/student/submit-quiz-answer", "{\"questionId\":1,\"selectedOptionId\":2}").status());
+            script.add(new String[]{"200", tutorJsonFull(null, 1, 4, false, false, null)});
+            Resp r = c.json("/api/tutor/start", "{\"mode\":\"QUESTION\",\"questionId\":1}");
+            assertEquals(200, r.status(), r.body());
+            int sid = JSON.readTree(r.body()).get("data").get("sessionId").asInt();
+            assertEquals(1, count("SELECT QuestionId FROM TutorSessions WHERE SessionId = ?", sid));
+            assertTrue(((String) scalar("SELECT ProblemText FROM TutorSessions WHERE SessionId = ?", sid))
+                    .contains("Học sinh đã chọn: B."), "đề kèm phương án học sinh đã chọn");
+            String sys = JSON.readTree(lastRequestBody).path("system_instruction").path("parts").path(0).path("text").asText();
+            assertTrue(sys.contains("Lời giải nội bộ it") && sys.contains("KHÔNG tiết lộ"), "lời giải là tài liệu nội bộ");
+            // Trang kết quả có nút mở gia sư cho câu sai
+            assertTrue(c.get("/student/ai-tutor?mode=QUESTION&questionId=1").has("pendingStart = {"));
+        } finally {
+            exec("UPDATE Questions SET ExplanationLatex = NULL WHERE QuestionId = 1");
+            script.clear();
+        }
+    }
+
     @Test
     @Order(30)
     void essayOcrGradesImageAndStoresSubmission() throws Exception {
@@ -748,6 +848,34 @@ class EduTutorIT {
         Resp ok = c.json("/api/tutor/next-step", "{\"studentInput\":\"bài mới\"}");
         assertEquals(200, ok.status(), ok.body());
         assertEquals(2, geminiCalls - before);
+        script.clear();
+    }
+
+    /** FR-OCR-04 / FR-TUT-01 (d): mở gia sư từ bài tự luận vừa chấm; bài của người khác → 403. */
+    @Test
+    @Order(31)
+    void tutorStartsFromGradedEssaySubmission() throws Exception {
+        int essayId = count("SELECT TOP 1 s.SubmissionId FROM Submissions s JOIN Users u ON u.UserId = s.StudentId "
+                + "WHERE u.Username = 'student1' AND s.QuestionType = 'ESSAY' ORDER BY s.SubmissionId DESC");
+        assertTrue(essayId > 0, "cần bài tự luận từ bài test chấm OCR");
+        Client other = new Client();
+        other.login("student2", "123456");
+        assertEquals(403, other.json("/api/tutor/start",
+                "{\"mode\":\"SUBMISSION\",\"submissionId\":" + essayId + "}").status());
+
+        Client c = new Client();
+        c.login("student1", "123456");
+        script.clear();
+        script.add(new String[]{"200", tutorJsonFull(null, 1, 3, false, false, null)});
+        Resp r = c.json("/api/tutor/start", "{\"mode\":\"SUBMISSION\",\"submissionId\":" + essayId + "}");
+        assertEquals(200, r.status(), r.body());
+        int sid = JSON.readTree(r.body()).get("data").get("sessionId").asInt();
+        String problem = (String) scalar("SELECT ProblemText FROM TutorSessions WHERE SessionId = ?", sid);
+        assertTrue(problem.contains("Bài làm của học sinh") && problem.contains("Nhận xét khi chấm bài"), problem);
+        assertTrue(count("SELECT QuestionId FROM TutorSessions WHERE SessionId = ?", sid) > 0);
+        // Chế độ không hợp lệ / thiếu dữ liệu → 400
+        assertEquals(400, c.json("/api/tutor/start", "{\"mode\":\"HACK\",\"problemText\":\"x\"}").status());
+        assertEquals(400, c.json("/api/tutor/start", "{\"mode\":\"FREE\"}").status());
         script.clear();
     }
 

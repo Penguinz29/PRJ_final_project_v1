@@ -12,7 +12,7 @@ public interface TutorSessionRepository extends JpaRepository<TutorSession, Inte
     @EntityGraph(attributePaths = {"lesson"})
     List<TutorSession> findByStudent_UserId(Integer studentId, Pageable pageable);
 
-    @EntityGraph(attributePaths = {"lesson", "student"})
+    @EntityGraph(attributePaths = {"lesson", "student", "question"})
     Optional<TutorSession> findWithLessonBySessionId(Integer sessionId);
 
     boolean existsByStudent_UserId(Integer studentId);

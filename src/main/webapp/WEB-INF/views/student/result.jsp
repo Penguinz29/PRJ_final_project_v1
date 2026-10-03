@@ -141,6 +141,13 @@
                                                                     </div>
                                                                 </div>
                                                             </c:if>
+                                                            <%-- FR-STU-05: câu làm sai → mở gia sư AI với đề bài và phương án đã chọn --%>
+                                                            <c:if test="${not item.isCorrect}">
+                                                                <a class="btn btn-ai btn-sm mt-3"
+                                                                    href="${pageContext.request.contextPath}/student/ai-tutor?mode=QUESTION&questionId=${item.question.questionId}">
+                                                                    <i class="bi bi-robot me-1"></i>Hỏi gia sư AI
+                                                                </a>
+                                                            </c:if>
                                                         </div>
                                                     </div>
                                                 </div>

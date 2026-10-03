@@ -1,8 +1,9 @@
 <%-- File: WEB-INF/views/student/ai-tutor.jsp
-    Controller: StudentTutorController (GET /student/ai-tutor[?sessionId=&lessonId=])
-    Attributes: topics(List<Topic> kèm lessons), sessions(List<TutorSession>), lessonId(Integer),
-                tutorSession(TutorSession), messages(List<TutorMessage>), currentStep(int)
-    API: POST /api/tutor/next-step {sessionId, lessonId, studentInput, currentStep} --%>
+    Controller: StudentTutorController (GET /student/ai-tutor[?sessionId=|lessonId=|mode=QUESTION&questionId=|mode=SUBMISSION&submissionId=])
+    Attributes: topics, sessions(List<TutorSessionView>), lessonId, tutorSession(TutorSessionView),
+                messages(List<TutorMessageView>), startMode/startQuestionId/startSubmissionId (mở phiên tự động)
+    API: POST /api/tutor/start {mode, problemText, lessonId, questionId, submissionId}
+         POST /api/tutor/next-step {sessionId, studentInput}   POST /api/tutor/{id}/abandon --%>
 <%@ page contentType="text/html;charset=UTF-8" pageEncoding="UTF-8" %>
 <%@ taglib prefix="ui" tagdir="/WEB-INF/tags" %>
 <%@ taglib prefix="c" uri="jakarta.tags.core" %>
@@ -25,7 +26,7 @@
                 <div>
                     <h2 class="mb-0 fs-3"><i class="bi bi-robot me-2 text-ai"></i>Gia sư Toán AI</h2>
                     <p class="text-muted mb-0" style="font-size:0.9rem;">
-                        Nêu bài toán, AI sẽ dẫn dắt bạn giải từng bước (3-6 bước) bằng câu hỏi gợi mở.</p>
+                        Nêu bài toán, AI sẽ dẫn dắt bạn giải từng bước bằng câu hỏi gợi mở.</p>
                 </div>
                 <a href="${pageContext.request.contextPath}/student/ai-tutor" class="btn btn-outline-primary btn-sm">
                     <i class="bi bi-plus-lg me-1"></i>Bài toán mới
@@ -47,7 +48,7 @@
                                             <c:choose>
                                                 <c:when test="${s.status == 'COMPLETED'}">Hoàn thành</c:when>
                                                 <c:when test="${s.status == 'ABANDONED'}">Bỏ dở</c:when>
-                                                <c:otherwise>Đang học</c:otherwise>
+                                                <c:otherwise>Đang học<c:if test="${s.totalSteps > 0}"> · Bước ${s.currentStep}/${s.totalSteps}</c:if></c:otherwise>
                                             </c:choose>
                                         </span>
                                         <fmt:formatDate value="${s.createdAt}" pattern="dd/MM HH:mm" />
@@ -92,6 +93,12 @@
                                 <div class="progress flex-grow-1" style="height:8px;">
                                     <div class="progress-bar bg-success" id="stepBar" style="width:0%"></div>
                                 </div>
+                                <c:if test="${not empty tutorSession and tutorSession.status == 'ACTIVE'}">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btnAbandon"
+                                        title="Kết thúc phiên này">
+                                        <i class="bi bi-stop-circle me-1"></i>Kết thúc
+                                    </button>
+                                </c:if>
                             </div>
                         </div>
 
@@ -120,9 +127,15 @@
 
                         <div class="chat-input-area p-3 bg-white border-top">
                             <div id="tutorError" class="alert alert-danger py-2 d-none" role="alert"></div>
+                            <%-- BR-15: AI đang dừng chờ học sinh nhập số liệu (trạng thái lưu ở CSDL nên mở lại phiên vẫn đúng) --%>
+                            <div id="inputHintBox" class="alert alert-warning py-2 d-flex align-items-start gap-2 ${tutorSession.awaitingInput ? '' : 'd-none'}" role="status">
+                                <i class="bi bi-pencil-square fs-5"></i>
+                                <div><strong>Gia sư cần bạn cung cấp dữ liệu:</strong>
+                                    <span id="inputHintText" class="latex-content"><c:out value="${tutorSession.inputHint}" /></span></div>
+                            </div>
                             <form id="chatForm">
                                 <div class="input-group">
-                                    <textarea class="form-control" id="chatInput" rows="2" maxlength="4000"
+                                    <textarea class="form-control" id="chatInput" rows="2" maxlength="2000"
                                         placeholder="Nhập bài toán của bạn (Enter để gửi, Shift+Enter xuống dòng)..."></textarea>
                                     <button class="btn btn-ai px-4 d-flex align-items-center" type="submit" id="btnSendChat">
                                         <i class="bi bi-send-fill fs-5"></i>
@@ -148,13 +161,30 @@
             const btnSend = document.getElementById('btnSendChat');
             const stepLabel = document.getElementById('stepLabel');
             const stepBar = document.getElementById('stepBar');
+            const hintBox = document.getElementById('inputHintBox');
+            const hintText = document.getElementById('inputHintText');
+            const btnAbandon = document.getElementById('btnAbandon');
 
+            // Trạng thái lấy từ server (TutorSessions); client chỉ hiển thị, không quyết định bước
             const state = {
                 sessionId: ${empty tutorSession ? 'null' : tutorSession.sessionId},
-                currentStep: ${empty currentStep ? 0 : currentStep},
-                totalSteps: 0,
-                completed: ${not empty tutorSession and tutorSession.status != 'ACTIVE' ? 'true' : 'false'}
+                currentStep: ${empty tutorSession ? 0 : tutorSession.currentStep},
+                totalSteps: ${empty tutorSession ? 0 : tutorSession.totalSteps},
+                awaiting: ${not empty tutorSession and tutorSession.awaitingInput ? 'true' : 'false'},
+                status: '${empty tutorSession ? 'NEW' : tutorSession.status}'
             };
+            <c:choose>
+                <c:when test="${not empty startMode}">
+            const pendingStart = {
+                mode: '${startMode}',
+                questionId: ${empty startQuestionId ? 'null' : startQuestionId},
+                submissionId: ${empty startSubmissionId ? 'null' : startSubmissionId}
+            };
+                </c:when>
+                <c:otherwise>
+            const pendingStart = null;
+                </c:otherwise>
+            </c:choose>
             const MATH = {
                 delimiters: [
                     { left: '$$', right: '$$', display: true },
@@ -198,10 +228,14 @@
                 scrollToBottom();
             }
 
+            function isClosed() { return state.status === 'COMPLETED' || state.status === 'ABANDONED'; }
+
             function updateProgress() {
-                if (state.completed) {
+                if (state.status === 'COMPLETED') {
                     stepLabel.textContent = 'Hoàn thành';
                     stepBar.style.width = '100%';
+                } else if (state.status === 'ABANDONED') {
+                    stepLabel.textContent = 'Đã kết thúc';
                 } else if (state.currentStep > 0) {
                     stepLabel.textContent = state.totalSteps > 0
                         ? 'Bước ' + state.currentStep + ' / ' + state.totalSteps : 'Bước ' + state.currentStep;
@@ -209,17 +243,54 @@
                         ? Math.round((state.currentStep - 1) / state.totalSteps * 100) + '%' : '10%';
                 }
                 if (state.sessionId !== null) {
-                    chatInput.placeholder = state.completed
-                        ? 'Phiên đã hoàn thành. Bấm "Bài toán mới" để tiếp tục.'
-                        : 'Nhập câu trả lời cho bước ' + state.currentStep + '...';
+                    chatInput.placeholder = isClosed()
+                        ? 'Phiên đã kết thúc. Bấm "Bài toán mới" để tiếp tục.'
+                        : state.awaiting
+                            ? 'Nhập dữ liệu: ' + hintText.textContent
+                            : 'Nhập câu trả lời cho bước ' + state.currentStep + '...';
                 }
-                chatInput.disabled = state.completed;
-                btnSend.disabled = state.completed;
+                hintBox.classList.toggle('d-none', !state.awaiting || isClosed());
+                chatInput.classList.toggle('border-warning', state.awaiting && !isClosed());
+                chatInput.disabled = isClosed();
+                btnSend.disabled = isClosed();
+                if (btnAbandon) btnAbandon.classList.toggle('d-none', isClosed());
             }
 
             function showError(msg) {
                 errorBox.textContent = msg;
                 errorBox.classList.remove('d-none');
+            }
+
+            /** Áp kết quả TutorStepResponse của server vào giao diện. */
+            function applyStep(d, firstTurn) {
+                state.sessionId = d.sessionId;
+                state.currentStep = d.currentStep;
+                state.totalSteps = d.totalSteps;
+                state.awaiting = d.needsStudentInput;
+                state.status = d.status;
+                hintText.textContent = d.inputRequestHint || '';
+                renderMath(hintBox);
+                if (lessonSelect) lessonSelect.disabled = true;
+
+                const parts = [];
+                if (d.feedbackToStudent) parts.push(d.feedbackToStudent);
+                if (d.nextPromptOrQuestion) parts.push(d.nextPromptOrQuestion);
+                if (d.finalSummary) parts.push(d.finalSummary);
+                const cls = (!firstTurn && d.isStepCorrect === false) ? 'border border-warning' : '';
+                addMessage('bot', parts.join('\n\n'), cls);
+                if (d.status === 'COMPLETED') {
+                    addMessage('bot', 'Chúc mừng bạn đã hoàn thành bài toán! Bấm "Bài toán mới" để luyện tiếp.');
+                }
+            }
+
+            async function postJson(url, payload) {
+                const res = await csrfFetch(ctx + url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json().catch(() => ({ message: 'Phản hồi không hợp lệ (HTTP ' + res.status + ').' }));
+                return { ok: res.ok, data: data };
             }
 
             // Render công thức cho lịch sử đã có sẵn
@@ -237,7 +308,7 @@
             chatForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const text = chatInput.value.trim();
-                if (!text || state.completed) return;
+                if (!text || isClosed()) return;
 
                 errorBox.classList.add('d-none');
                 chatInput.value = '';
@@ -247,42 +318,19 @@
                 chatInput.disabled = true;
                 btnSend.disabled = true;
 
-                const payload = {
-                    sessionId: state.sessionId,
-                    lessonId: (state.sessionId === null && lessonSelect && lessonSelect.value)
-                        ? parseInt(lessonSelect.value, 10) : null,
-                    studentInput: text,
-                    currentStep: state.currentStep
-                };
-
+                const firstTurn = state.sessionId === null;
+                const lessonId = (firstTurn && lessonSelect && lessonSelect.value) ? parseInt(lessonSelect.value, 10) : null;
                 try {
-                    const res = await csrfFetch(ctx + '/api/tutor/next-step', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-                    const data = await res.json().catch(() => ({ message: 'Phản hồi không hợp lệ (HTTP ' + res.status + ').' }));
+                    const r = firstTurn
+                        ? await postJson('/api/tutor/start', { mode: lessonId ? 'LESSON' : 'FREE', problemText: text, lessonId: lessonId })
+                        : await postJson('/api/tutor/next-step', { sessionId: state.sessionId, studentInput: text });
                     chatLoading.style.display = 'none';
-                    if (!res.ok) {
-                        showError(data.message || 'Có lỗi xảy ra, vui lòng thử lại.');
+                    if (!r.ok) {
+                        showError(r.data.message || 'Có lỗi xảy ra, vui lòng thử lại.');
                         chatInput.value = text; // cho phép gửi lại
                     } else {
-                        const d = data.data;
-                        const firstTurn = state.sessionId === null;
-                        state.sessionId = d.sessionId;
-                        state.currentStep = d.currentStep;
-                        state.totalSteps = d.totalSteps;
-                        state.completed = d.isSessionCompleted;
-                        if (lessonSelect) lessonSelect.disabled = true;
-
-                        const parts = [];
-                        if (d.feedbackToStudent) parts.push(d.feedbackToStudent);
-                        if (d.nextPromptOrQuestion) parts.push(d.nextPromptOrQuestion);
-                        const cls = (!firstTurn && !d.isStepCorrect) ? 'border border-warning' : '';
-                        addMessage('bot', parts.join('\n\n'), cls);
-                        if (d.isSessionCompleted) {
-                            addMessage('bot', 'Chúc mừng bạn đã hoàn thành bài toán! Bấm "Bài toán mới" để luyện tiếp.');
-                        }
+                        applyStep(r.data.data, firstTurn);
+                        if (firstTurn) history.replaceState(null, '', ctx + '/student/ai-tutor?sessionId=' + state.sessionId);
                     }
                 } catch (err) {
                     chatLoading.style.display = 'none';
@@ -290,13 +338,59 @@
                     chatInput.value = text;
                 } finally {
                     updateProgress();
-                    if (!state.completed) {
+                    if (!isClosed()) {
                         chatInput.disabled = false;
                         btnSend.disabled = false;
                         chatInput.focus();
                     }
                 }
             });
+
+            // UC-TUT-04: kết thúc phiên sớm
+            if (btnAbandon) {
+                btnAbandon.addEventListener('click', async () => {
+                    btnAbandon.disabled = true;
+                    try {
+                        const r = await postJson('/api/tutor/' + state.sessionId + '/abandon', {});
+                        if (r.ok) {
+                            state.status = 'ABANDONED';
+                            state.awaiting = false;
+                            addMessage('bot', 'Đã kết thúc phiên. Bạn có thể xem lại hoặc bắt đầu bài toán mới.');
+                        } else {
+                            showError(r.data.message || 'Không kết thúc được phiên.');
+                        }
+                    } catch (err) {
+                        showError('Mất kết nối mạng hoặc lỗi hệ thống. Vui lòng thử lại.');
+                    } finally {
+                        btnAbandon.disabled = false;
+                        updateProgress();
+                    }
+                });
+            }
+
+            // FR-STU-05 / FR-OCR-04: mở phiên từ câu trắc nghiệm vừa sai hoặc bài tự luận vừa chấm
+            if (pendingStart) {
+                addMessage('user', pendingStart.mode === 'QUESTION'
+                    ? 'Em vừa làm sai một câu trắc nghiệm, hãy hướng dẫn em.'
+                    : 'Em muốn hiểu lỗi sai trong bài tự luận vừa chấm.');
+                chatLoading.style.display = 'flex';
+                chatInput.disabled = true;
+                btnSend.disabled = true;
+                postJson('/api/tutor/start', pendingStart).then(r => {
+                    chatLoading.style.display = 'none';
+                    if (r.ok) {
+                        // Tải lại trang theo sessionId để hiện đầy đủ hội thoại do server lưu
+                        window.location.replace(ctx + '/student/ai-tutor?sessionId=' + r.data.data.sessionId);
+                    } else {
+                        showError(r.data.message || 'Không mở được phiên gia sư.');
+                        chatInput.disabled = false;
+                        btnSend.disabled = false;
+                    }
+                }).catch(() => {
+                    chatLoading.style.display = 'none';
+                    showError('Mất kết nối mạng hoặc lỗi hệ thống. Vui lòng tải lại trang.');
+                });
+            }
         });
     </script>
 </body>

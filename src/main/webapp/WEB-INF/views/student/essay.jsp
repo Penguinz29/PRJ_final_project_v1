@@ -151,6 +151,9 @@
                                                     <div class="p-3 bg-light rounded latex-content mb-4" id="essayFeedback" style="white-space:pre-wrap;"></div>
                                                     <h6 class="fw-bold">Lời giải đúng gợi ý</h6>
                                                     <div class="p-3 bg-light rounded latex-content mb-3" id="essayCorrection" style="white-space:pre-wrap;"></div>
+                                                    <%-- FR-OCR-04: mở gia sư AI từ bài tự luận vừa chấm (href gán sau khi chấm xong) --%>
+                                                    <a href="#" id="btnAskTutor" class="btn btn-ai btn-sm me-2">
+                                                        <i class="bi bi-robot me-1"></i>Hỏi gia sư AI về lỗi sai</a>
                                                     <a href="${pageContext.request.contextPath}/student/history?type=ESSAY"
                                                         class="btn btn-outline-primary btn-sm">Xem lịch sử bài tự luận</a>
                                                 </div>
@@ -259,6 +262,8 @@
                                         document.getElementById('essayExtracted').textContent = data.data.extractedText || '(không có)';
                                         document.getElementById('essayFeedback').textContent = data.data.detailedFeedback || '';
                                         document.getElementById('essayCorrection').textContent = data.data.suggestedCorrection || '';
+                                        document.getElementById('btnAskTutor').href = document.body.dataset.ctx
+                                            + '/student/ai-tutor?mode=SUBMISSION&submissionId=' + encodeURIComponent(data.data.submissionId);
                                         resultBox.classList.remove('d-none');
                                         if (window.renderMathInElement) {
                                             renderMathInElement(resultBox, {
