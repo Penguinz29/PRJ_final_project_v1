@@ -39,7 +39,9 @@ public class TeacherLessonController {
                        @RequestParam(defaultValue = "0") int topicId,
                        @SessionAttribute(AuthInterceptor.SESSION_USER) SessionUser user,
                        HttpServletRequest request, Model model) {
-        model.addAttribute("topics", topicService.getTopicsByTeacher(user.getUserId()));
+        // BR-03: Admin có toàn quyền trên mọi chủ đề; giáo viên chỉ thấy chủ đề của mình.
+        model.addAttribute("topics", user.isAdmin() ? topicService.getAllTopics()
+                : topicService.getTopicsByTeacher(user.getUserId()));
 
         boolean formPage = request.getServletPath().equals("/teacher/lesson/form")
                 || "create".equals(action) || "edit".equals(action);
