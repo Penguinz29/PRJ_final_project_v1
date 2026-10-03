@@ -66,7 +66,7 @@ PRJ_final_project_v1/
 ├── document/                              # SRS, FRS, Claude.md (quy tắc kỹ thuật)
 │   └── sql/                               # Kịch bản SQL Server
 │       ├── 01_schema.sql                  # Tạo CSDL MathTutorDB, 10 bảng + toàn bộ ràng buộc (XÓA CSDL cũ cùng tên)
-│       └── 02_data.sql                    # Dữ liệu mẫu (mật khẩu BCrypt của EduTutor@123, 15 khóa cấu hình AI)
+│       └── 02_data.sql                    # Dữ liệu mẫu phong phú (mật khẩu BCrypt của EduTutor@123, 15 khóa cấu hình AI)
 └── src/
     ├── main/
     │   ├── java/com/edututor/
@@ -103,6 +103,8 @@ PRJ_final_project_v1/
 **Cài mới:** chạy trong SSMS 2 file trong `document/sql/`: `01_schema.sql` (tạo CSDL `MathTutorDB`, 10 bảng và ràng buộc — **xóa và tạo lại** nếu CSDL đã tồn tại) rồi `02_data.sql` (dữ liệu mẫu, mật khẩu mọi tài khoản `EduTutor@123`).
 
 **Đã có CSDL cũ** (ví dụ từ bản Ant): chạy lại 2 file trên để tạo CSDL mới đúng cấu trúc hiện tại (**dữ liệu cũ sẽ bị xóa**, thay bằng dữ liệu mẫu). Stop Tomcat trước khi chạy; sau đó vào **Cấu hình AI** nhập lại khóa Gemini.
+
+**Dữ liệu mẫu** trong `02_data.sql` đủ để xem hết các màn hình: 3 giáo viên, 12 học sinh (có tài khoản bị khóa, xóa mềm), 7 chủ đề / 15 bài học (có mục đã ẩn và bài học còn trống), bài giảng đủ 4 loại, 46 câu hỏi, ~150 bài làm trải 14 ngày (có làm lại cùng câu), bài tự luận chờ duyệt / đã duyệt và các phiên gia sư. Ảnh bài tự luận là URL minh họa `placehold.co` (cần mạng), URL video là ví dụ.
 
 > Nếu chạy bằng `sqlcmd`, thêm cờ `-x` (tắt thay thế biến) vì dữ liệu mẫu chứa ký tự `$(`: `sqlcmd -S localhost -U sa -P 123 -C -x -f 65001 -i 02_data.sql`.
 

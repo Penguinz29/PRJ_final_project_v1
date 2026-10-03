@@ -1754,7 +1754,8 @@ class EduTutorIT {
         // lessons-by-topic
         Resp l = c.getAjax("/api/teacher/lessons-by-topic?topicId=1");
         assertEquals(200, l.status());
-        assertEquals(2, JSON.readTree(l.body()).get("data").size());
+        assertEquals(count("SELECT COUNT(*) FROM Lessons WHERE TopicId = 1 AND IsActive = 1"),
+                JSON.readTree(l.body()).get("data").size());
         exec("DELETE FROM Questions WHERE Content LIKE N'it[_]%'");
     }
 

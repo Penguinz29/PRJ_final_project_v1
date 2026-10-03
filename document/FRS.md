@@ -5,7 +5,7 @@
 | Thông tin | Nội dung |
 |---|---|
 | Đồ án | PRJ301 — Spring MVC 6 + Spring Data JPA (Hibernate) + SQL Server + Gemini API |
-| Phiên bản | 2.1.3 (rà soát tài liệu so với mã nguồn: cập nhật 1.1, UC-ADM-04/08, UC-TEA-05, UC-STU-07, 4.3, 6.1 và viết lại mục 10 theo hiện trạng). 2.1.2 (đồng bộ với mã nguồn: script SQL `01_schema.sql` + `02_data.sql`, BR-03 bài học, OCR `legible`/WebP, BR-09 tách điểm, hồ sơ cá nhân, kết quả theo câu, tiến độ BR-10, dashboard Admin, trắc nghiệm ngẫu nhiên + chấm từng câu; thêm mục 10 "Hiện trạng triển khai"). 2.1.1: BR-05 xóa mềm chỉ ẩn ở phía quản lý, học sinh vẫn ôn tập được; nút Xóa báo trước kết quả. 2.1.0: chuyển tầng dữ liệu sang JPA; bổ sung Bean Validation, đối chiếu rubric |
+| Phiên bản | 2.1.4 (khớp FRS với mã nguồn sau đợt rà soát backend: upload (không kiểm MIME), quy tắc `/uploads/**`, mã lỗi AI 6.1, UC-STU-04, UC-ADM-08, tên lớp / DTO, 1.7 ánh xạ tên cột và kiểu dữ liệu, bổ sung mục 10; dữ liệu mẫu phong phú nằm trong `02_data.sql`). 2.1.3 (rà soát tài liệu so với mã nguồn: cập nhật 1.1, UC-ADM-04/08, UC-TEA-05, UC-STU-07, 4.3, 6.1 và viết lại mục 10 theo hiện trạng). 2.1.2 (đồng bộ với mã nguồn: script SQL `01_schema.sql` + `02_data.sql`, BR-03 bài học, OCR `legible`/WebP, BR-09 tách điểm, hồ sơ cá nhân, kết quả theo câu, tiến độ BR-10, dashboard Admin, trắc nghiệm ngẫu nhiên + chấm từng câu; thêm mục 10 "Hiện trạng triển khai"). 2.1.1: BR-05 xóa mềm chỉ ẩn ở phía quản lý, học sinh vẫn ôn tập được; nút Xóa báo trước kết quả. 2.1.0: chuyển tầng dữ liệu sang JPA; bổ sung Bean Validation, đối chiếu rubric |
 | Liên quan | `EduTutor_SRS.md` (yêu cầu), `EduTutor_Database.sql` (CSDL) |
 | Quy ước tham chiếu | Bộ tài liệu gốc đặt trong `docs/`. Trong repo hiện tại: `document/SRS.md` ≙ `EduTutor_SRS.md`, `document/FRS.md` ≙ `EduTutor_FRS.md`, `document/sql/01_schema.sql` + `02_data.sql` ≙ `EduTutor_Database.sql` (cấu trúc + dữ liệu mẫu, xem mục 1.7). Tài khoản mẫu `admin`, `teacher1`, `student1`…, mật khẩu **`EduTutor@123`** |
 
@@ -30,9 +30,9 @@ com.edututor
 │                 FileStorageService, ViewMapper (Entity → DTO)
 ├── ai            GeminiClient, PromptBuilder, AiJsonParser, RateLimiter
 ├── repository    Interface Spring Data JPA: UserRepository, TopicRepository, LessonRepository,
-│                 MaterialRepository, QuestionRepository, SubmissionRepository, AiConfigRepository,
+│                 LessonMaterialRepository, QuestionRepository, QuestionOptionRepository, SubmissionRepository, AiConfigRepository,
 │                 TutorSessionRepository, TutorMessageRepository
-│   └── spec      UserSpecs, QuestionSpecs, SubmissionSpecs … (Specification cho tìm kiếm/lọc động)
+│   └── spec      UserSpecs, QuestionSpecs (Specification cho tìm kiếm/lọc động)
 ├── model         Entity JPA (@Entity): User, Topic, Lesson, LessonMaterial, Question, QuestionOption,
 │                 Submission, AiConfig, TutorSession, TutorMessage + enum (Role, UserStatus, …)
 ├── dto           Form/Request/Response DTO (tách riêng khỏi Entity; Form có chú thích Bean Validation)
@@ -57,9 +57,11 @@ webapp/static          css/ js/ (katex, app.js) img/
 
 ```json
 { "success": true,  "message": "OK", "data": { }, "errors": null }
-{ "success": false, "message": "Dữ liệu không hợp lệ", "data": null,
+{ "success": false, "message": "Dữ liệu không hợp lệ: Số câu phải từ 1 đến 10", "data": null,
   "errors": [ { "field": "count", "message": "Số câu phải từ 1 đến 10" } ] }
 ```
+
+Với lỗi validation, `message` là "Dữ liệu không hợp lệ" nối thêm các thông báo lỗi (cách nhau bằng `;`); `errors[]` giữ chi tiết từng trường.
 
 | HTTP | Khi nào |
 |---|---|
@@ -91,7 +93,7 @@ webapp/static          css/ js/ (katex, app.js) img/
 | XSS | Hiển thị bằng `<c:out>`; nội dung giàu (đề, lời giải, tin nhắn AI) được `HtmlSanitizer` (JSoup safelist rất hẹp) làm sạch **ở server** trước khi trả, rồi mới để KaTeX auto-render ở client. Không dùng `innerHTML` với dữ liệu chưa làm sạch. |
 | SQL Injection | JPA/Hibernate gửi mọi giá trị dưới dạng tham số (`PreparedStatement`); cấm nối chuỗi JPQL/SQL (1.1); `LIKE` dùng tham số `"%"+kw+"%"` sau khi escape `%`, `_`, `[`. |
 | Mass assignment | Bind request vào Form/DTO riêng; Service tự gán từng trường vào Entity. Không bao giờ nhận `role`, `status`, `studentId`, `isCorrect` từ client ở nơi không cho phép. |
-| Upload | Kiểm tra: kích thước ≤ 5 MB, MIME ∈ {image/jpeg, image/png, image/webp}, **magic bytes** khớp, kích thước ảnh ≤ 4096×4096; lưu tên `UUID.ext` ngoài thư mục web; không bao giờ dùng tên file người dùng gửi. |
+| Upload | Kiểm tra: kích thước ≤ 5 MB, định dạng JPEG / PNG / WebP xác định bằng **magic bytes** (không tin MIME hay đuôi tệp do client gửi), kích thước ảnh ≤ 4096×4096; lưu tên `UUID.ext` trong `${app.upload-dir}/essays/{studentId}/`, ngoài thư mục web; không bao giờ dùng tên file người dùng gửi. |
 | Dữ liệu nhạy cảm | Không log khóa API, mật khẩu, nội dung bài làm; che khóa khi hiển thị. |
 | Quyền sở hữu | Mọi truy vấn dữ liệu cá nhân có điều kiện `student_id = ?` lấy từ **session**, không từ tham số client. |
 
@@ -147,7 +149,7 @@ Cấu hình AI (khóa, model, prompt…) **không** nằm ở đây mà ở bả
 | `INSERT` câu hỏi + 4 phương án (UC-TEA-04, 06) | `save(question)` với `cascade = PERSIST`; một `@Transactional`; id sinh sau `persist` |
 | Sửa phương án mà giữ `option_id` (UC-TEA-04) | Nạp `Question` kèm options (`findWithOptionsById`), sửa từng `QuestionOption` theo `optionLabel` (dirty checking) |
 | `UPDATE ai_configs` (UC-ADM-06) | Nạp theo `configKey`, gán giá trị, `updatedBy` trong một `@Transactional` (dirty checking) |
-| `findStatusById` (AuthInterceptor) | `@Query("select u.status from User u where u.userId = :id")` |
+| `findActiveById` (AuthInterceptor) | `@Query("select case when u.status = ACTIVE then true else false end from User u where u.userId = :id")` → `Boolean` |
 | Kiểm tra ràng buộc trước khi xóa (BR-02, 05, 06) | `existsByXxx` / `countByXxx` |
 | Duyệt điểm tự luận (UC-TEA-07) | Sửa `finalScore`, `teacherComment`, `status` trên Entity trong `@Transactional`; `aiScore` không bị cập nhật (`updatable = false`) |
 
@@ -166,22 +168,42 @@ Thông báo lỗi đặt trong `messages.properties` (tiếng Việt, UTF-8) và
 
 Kiến trúc chuẩn gồm **10 bảng / 10 Entity**. Các thuộc tính sau là bắt buộc trong DDL và Entity (tên cột thực tế dùng PascalCase, vd. `questions.is_active` ≙ `Questions.IsActive`).
 
-**Script CSDL:** cài mới chỉ cần 2 file — `document/sql/01_schema.sql` (tạo CSDL `MathTutorDB`, 10 bảng với toàn bộ PK / FK (kèm `ON DELETE`) / UNIQUE / CHECK / DEFAULT và chỉ mục, ràng buộc đều được đặt tên; **xóa CSDL cũ cùng tên**) rồi `document/sql/02_data.sql` (dữ liệu mẫu, ID ổn định: admin = 1, câu hỏi 1–3, phương án 1–8). CSDL tạo theo cấu trúc cũ (thiếu các cột ở bảng trên) phải tạo lại bằng 2 file này — nếu không, trang dùng cột còn thiếu sẽ báo lỗi 500 (`Invalid column name …`). Hai file này tương đương chính xác chuỗi script tăng dần trước đây (đã đối chiếu tự động cấu trúc và dữ liệu mẫu), trừ cột cũ `Lessons.YoutubeUrl` đã bỏ vì không còn dùng (link video nằm trong `LessonMaterials`).
+**Script CSDL:** cài mới chỉ cần 2 file — `document/sql/01_schema.sql` (tạo CSDL `MathTutorDB`, 10 bảng với toàn bộ PK / FK (kèm `ON DELETE`) / UNIQUE / CHECK / DEFAULT và chỉ mục, ràng buộc đều được đặt tên; **xóa CSDL cũ cùng tên**) rồi `document/sql/02_data.sql` (dữ liệu mẫu gồm hai phần: phần tối thiểu có ID ổn định — admin = 1, teacher1 = 2, câu hỏi 1–3, phương án 1–8, kiểm thử tích hợp dựa vào đó — và phần demo phong phú để xem hết các màn hình: 3 giáo viên, 12 học sinh (1 bị khóa, 1 xóa mềm), 7 chủ đề / 15 bài học (có mục đã ẩn và bài học trống), bài giảng đủ 4 loại, 46 câu hỏi, ~150 bài trắc nghiệm trải 14 ngày, 12 bài tự luận chờ duyệt / đã duyệt, 6 phiên gia sư; ngày giờ tính theo lúc chạy script). CSDL tạo theo cấu trúc cũ (thiếu các cột ở bảng trên) phải tạo lại bằng 2 file này — nếu không, trang dùng cột còn thiếu sẽ báo lỗi 500 (`Invalid column name …`). Cấu trúc trong `01_schema.sql` tương đương chuỗi script tăng dần trước đây (đã đối chiếu tự động), trừ cột cũ `Lessons.YoutubeUrl` đã bỏ vì không còn dùng (link video nằm trong `LessonMaterials`).
 
 | Bảng | Cột bổ sung | Kiểu / mặc định | Dùng ở |
 |---|---|---|---|
 | `questions` | `is_active` | `BIT NOT NULL DEFAULT 1` | BR-05, UC-TEA-04: lọc ở mọi truy vấn **phía quản lý**; phía học sinh (quiz, tự luận, gia sư) không lọc |
-| `lessons` | `order_index` | `INT NOT NULL DEFAULT 1` | UC-TEA-02, sắp xếp bài học |
+| `lessons` | `order_index` (cột `DisplayOrder`) | `INT NULL DEFAULT 0` (service dùng 0 khi không nhập) | UC-TEA-02, sắp xếp bài học |
 | `lessons`, `topics` | `is_active` | `BIT NOT NULL DEFAULT 1` | BR-05 (xóa mềm khi còn lịch sử; chỉ ẩn ở phía quản lý) |
 | `topics` | `order_index` | `INT NOT NULL DEFAULT 1` | UC-TEA-01 |
 | `lesson_materials` | `order_index`, `created_by` | `INT NOT NULL DEFAULT 1`, `INT NOT NULL` FK → `users` | UC-TEA-03, BR-03 |
-| `lessons` | `created_by` (script 10) | `INT NOT NULL` FK → `users` (dữ liệu cũ: giáo viên sở hữu chủ đề) | UC-TEA-02, BR-03 |
-| `submissions` | `ai_feedback`, `suggested_correction`, `teacher_comment`, `reviewed_by`, `reviewed_at`; `status` | `NVARCHAR(MAX) NULL` ×3, `INT NULL` FK → `users`, `DATETIME2 NULL`; `VARCHAR(20)` ∈ {`GRADED`,`AI_GRADED`,`REVIEWED`} | UC-STU-04, UC-OCR-02, UC-TEA-07 |
-| `submissions` | `ai_score`, `final_score` (script 09: cột cũ `Score` đổi tên thành `FinalScore`) | `DECIMAL(4,2) NULL`, CHECK 0–10; Entity: `aiScore` khai báo `updatable = false` | BR-07, BR-09 |
-| `tutor_sessions` | `title`; `awaiting_input`; `input_hint` | `NVARCHAR(100) NOT NULL`; `BIT NOT NULL DEFAULT 0`; `NVARCHAR(255) NULL` | UC-TUT-01…03 |
-| `tutor_sessions` | `question_id`, `problem_text`, `current_step`, `total_steps` (script 08) | `INT NULL` FK; `NVARCHAR(MAX) NULL`; `INT NOT NULL DEFAULT 1`; `INT NOT NULL DEFAULT 0` (0 = chưa xác định) | UC-TUT-01…04 |
-| `ai_configs` | `is_secret`; `config_value` (script 07) | `BIT NOT NULL DEFAULT 0`; `NVARCHAR(MAX)` (prompt tới 8.000 ký tự) | UC-ADM-06 |
-| Mọi bảng | `created_at`, `updated_at` | `DATETIME2 NOT NULL DEFAULT SYSDATETIME()`, `DATETIME2 NULL` (`@CreationTimestamp` / `@UpdateTimestamp`); `submissions` dùng `submitted_at` làm thời điểm tạo | Kiểm toán, sắp xếp |
+| `lessons` | `created_by` | `INT NOT NULL` FK → `users` (khi tạo = người tạo bài học) | UC-TEA-02, BR-03 |
+| `submissions` | `ai_feedback`, `suggested_correction`, `teacher_comment` (cột `TeacherFeedback`), `reviewed_by`, `reviewed_at`; `status` | `NVARCHAR(MAX) NULL` ×3, `INT NULL` FK → `users`, `DATETIME NULL`; `VARCHAR(20)` ∈ {`GRADED`,`AI_GRADED`,`REVIEWED`} | UC-STU-04, UC-OCR-02, UC-TEA-07 |
+| `submissions` | `ai_score`, `final_score` | `DECIMAL(4,2) NULL`, CHECK 0–10; Entity: `aiScore` khai báo `updatable = false` | BR-07, BR-09 |
+| `tutor_sessions` | `title`; `awaiting_input`; `input_hint` | `NVARCHAR(255) NOT NULL` (ứng dụng cắt còn 100 ký tự); `BIT NOT NULL DEFAULT 0`; `NVARCHAR(255) NULL` | UC-TUT-01…03 |
+| `tutor_sessions` | `question_id`, `problem_text`, `current_step`, `total_steps` | `INT NULL` FK; `NVARCHAR(MAX) NULL`; `INT NOT NULL DEFAULT 1`; `INT NOT NULL DEFAULT 0` (0 = chưa xác định) | UC-TUT-01…04 |
+| `ai_configs` | `is_secret`; `config_value` | `BIT NOT NULL DEFAULT 0`; `NVARCHAR(MAX)` (prompt tới 8.000 ký tự) | UC-ADM-06 |
+| `users` | `email` | `VARCHAR(100) NULL`, UNIQUE (các form đăng ký / hồ sơ / Admin vẫn bắt buộc nhập — VAL-04) | UC-AUTH-02, UC-ADM-02 |
+| Mọi bảng | `created_at`, `updated_at` | `DATETIME NULL DEFAULT GETDATE()` (`NOT NULL` ở `lesson_materials`, `question_options`, `ai_configs`), `DATETIME NULL` (`@CreationTimestamp` / `@UpdateTimestamp`); `submissions` dùng `submitted_at` làm thời điểm tạo | Kiểm toán, sắp xếp |
+
+**Ánh xạ tên logic trong tài liệu (SRS / FRS, snake_case) → tên thực tế trong CSDL và mã nguồn:**
+
+| Trong tài liệu | Thực tế |
+|---|---|
+| `question_text` | `Questions.Content` |
+| `lesson_name` | `Lessons.Title` |
+| `question_type`, `submission_type` (giá trị `MULTIPLE_CHOICE` / `ESSAY`) | cột `QuestionType` của `Questions` và `Submissions`, giá trị `MCQ` / `ESSAY` |
+| `difficulty_level` | `Questions.Level` (1–3, xem mục 10) |
+| `option_label`, `option_text` | `QuestionOptions.OptionLetter`, `QuestionOptions.Content` |
+| `created_by` của `topics`, `questions` | `Topics.TeacherId`, `Questions.TeacherId` (`lessons`, `lesson_materials` dùng `CreatedBy`) |
+| `order_index` của `lessons` | `Lessons.DisplayOrder` |
+| `teacher_comment` | `Submissions.TeacherFeedback` |
+| `extracted_text` | `Submissions.StudentAnswer` (tự luận: văn bản nhận diện từ ảnh hoặc lời giải gõ tay) |
+| `selected_option_id` | **không có cột**: bài trắc nghiệm lưu chữ cái phương án đã chọn (`A`–`D`) trong `StudentAnswer`; phương án đúng suy ra từ `QuestionOptions` |
+| `explanation_latex` | `Questions.ExplanationLatex` |
+| `reference_solution` | không có cột (mục 10: dùng `ExplanationLatex`) |
+
+Các khối SQL trong FRS là đặc tả logic theo tên logic ở trên; truy vấn thực tế dùng tên cột / giá trị ở cột bên phải.
 
 **Trạng thái bài làm (`submissions.status`):** `GRADED` — trắc nghiệm, chấm tức thì (`final_score` = 10 hoặc 0), không cần duyệt • `AI_GRADED` — tự luận AI đã chấm, `ai_score` là đề xuất, chờ giáo viên • `REVIEWED` — giáo viên đã duyệt / chỉnh `final_score` (giữ nguyên `ai_score`).
 
@@ -200,8 +222,8 @@ Lớp: `com.edututor.interceptor.AuthInterceptor implements HandlerInterceptor`,
 | 1 | `/login`, `/register`, `/static/**`, `/error` | Công khai |
 | 2 | `/admin/**`, `/api/admin/**` | Role = `ADMIN` |
 | 3 | `/teacher/**`, `/api/teacher/**` | Role ∈ {`TEACHER`, `ADMIN`} |
-| 4 | `/student/**`, `/api/student/**`, `/api/tutor/**`, `/files/essays/**` | Role = `STUDENT` (riêng `/files/essays/**`: `STUDENT` chủ bài, `TEACHER`, `ADMIN`) |
-| 5 | `/profile/**`, `/logout`, `/` | Chỉ cần đăng nhập |
+| 4 | `/student/**`, `/api/student/**`, `/api/tutor/**` | Role = `STUDENT` |
+| 5 | `/uploads/**`, `/profile/**`, `/logout`, `/` | Chỉ cần đăng nhập. Riêng `/uploads/**` (ảnh bài tự luận) `AuthInterceptor` cho mọi vai trò đã đăng nhập đi qua; `FileController` mới kiểm tra quyền chi tiết: chủ bài, `TEACHER` hoặc `ADMIN` (mục 10) |
 | 6 | Còn lại | Từ chối (404) |
 
 > Điểm khác bản cũ: quy tắc phủ cả `/api/**` — nếu chỉ kiểm tra tiền tố `/admin/` và `/teacher/` thì học sinh vẫn gọi được `/api/teacher/generate-questions`.
@@ -389,6 +411,7 @@ WHERE config_key = ?
 | | |
 |---|---|
 | URL | `POST /api/admin/ai-config/test-connection` (body rỗng hoặc `{ "apiKey": "...", "model": "..." }` để thử giá trị *chưa lưu*) |
+| Controller / Service | `AdminApiController` → `AiConfigService.testConnection()` |
 
 **Luồng chính**
 1. Lấy khóa/model từ body nếu có (và khóa không phải chuỗi che), ngược lại từ DB.
@@ -397,7 +420,7 @@ WHERE config_key = ?
 4. Thất bại → `{ "success": false, "message": "<lý do thân thiện>" }` với ánh xạ: 400/401/403 → "Khóa API hoặc model không hợp lệ"; 404 → "Model không tồn tại hoặc đã ngừng hỗ trợ"; 429 → "Hết hạn mức"; timeout → "Quá thời gian chờ"; mất mạng → "Không kết nối được tới Google".
 
 #### UC-ADM-08 — Dashboard quản trị (FR-ADM-08)
-`GET /admin/dashboard` hiển thị các số liệu **lấy từ dữ liệu lưu bền vững trong CSDL** (không dùng bộ đếm trong RAM nên không mất khi khởi động lại): số người dùng theo vai trò/trạng thái, tổng số câu hỏi đang hoạt động (trong đó do AI sinh), tổng lượt làm bài 7 ngày gần nhất, **số phiên gia sư AI đã tạo**, **số câu hỏi do AI sinh**, **số bài tự luận đã chấm qua AI** và số bài tự luận chờ duyệt. Dashboard **không** thống kê "tổng số request AI thô"; bộ đếm của `RateLimiter` (4.5) chỉ phục vụ giới hạn tần suất.
+`GET /admin/dashboard` hiển thị các số liệu **lấy từ dữ liệu lưu bền vững trong CSDL** (không dùng bộ đếm trong RAM nên không mất khi khởi động lại): số người dùng theo vai trò/trạng thái, tổng số câu hỏi đang hoạt động (trong đó số câu **đang hoạt động** do AI sinh), tổng lượt làm bài 7 ngày gần nhất, **số phiên gia sư AI đã tạo**, **số bài tự luận đã chấm qua AI** và số bài tự luận chờ duyệt. Dashboard **không** thống kê "tổng số request AI thô"; bộ đếm của `RateLimiter` (4.5) chỉ phục vụ giới hạn tần suất.
 *Hiển thị:* 4 ô tổng hợp (người dùng; câu hỏi + số do AI sinh + số chủ đề; phiên gia sư AI; bài tự luận chấm qua AI + số chờ duyệt), bảng **vai trò × trạng thái** (đủ ô, kể cả 0) và biểu đồ cột một màu **lượt làm bài 7 ngày gần nhất** (đủ 7 ngày, ngày trống = 0, rê chuột xem số lượt, kèm bảng ẩn cho trình đọc màn hình). Tối đa 9 câu SQL, không phụ thuộc lượng dữ liệu.
 ```sql
 SELECT role, status, COUNT(*) AS n FROM users GROUP BY role, status;
@@ -405,7 +428,7 @@ SELECT COUNT(*) AS total, SUM(CAST(is_ai_generated AS INT)) AS ai FROM questions
 SELECT CAST(submitted_at AS DATE) AS d, COUNT(*) AS n FROM submissions
 WHERE submitted_at >= DATEADD(DAY, -6, CAST(SYSDATETIME() AS DATE)) GROUP BY CAST(submitted_at AS DATE) ORDER BY d;  -- hôm nay + 6 ngày trước = 7 cột
 SELECT COUNT(*) AS tutor_sessions FROM tutor_sessions;                                   -- phiên gia sư AI đã tạo
-SELECT COUNT(*) AS ai_questions   FROM questions   WHERE is_ai_generated = 1;            -- câu hỏi do AI sinh
+SELECT COUNT(*) AS ai_questions   FROM questions   WHERE is_ai_generated = 1 AND is_active = 1;  -- câu hỏi đang hoạt động do AI sinh
 SELECT COUNT(*) AS ai_graded_essays FROM submissions WHERE submission_type = 'ESSAY';    -- tự luận đã chấm qua AI
 SELECT COUNT(*) AS pending_essays FROM submissions
 WHERE submission_type = 'ESSAY' AND status = 'AI_GRADED';                                -- chờ giáo viên duyệt
@@ -445,7 +468,7 @@ Chủ đề (`topics`) cùng bài học (`lessons`) là hai cấp "chuyên đề
 | `POST /teacher/lessons/{id}/update`, `/{id}/delete` | Sửa, xóa |
 
 - `topicId` phải tồn tại; `contentSummary` cho phép LaTeX (làm sạch bằng `HtmlSanitizer`).
-- **BR-03:** khi tạo, ghi `created_by` = người đang đăng nhập. Chỉ người tạo hoặc Admin được mở form sửa / sửa / xóa (sai chủ → 403); Admin sửa không đổi `created_by`. Giáo viên chỉ được **thêm bài học vào chủ đề do mình tạo** (Admin: mọi chủ đề) — giao diện chỉ liệt kê chủ đề của mình, server vẫn kiểm tra lại. Danh sách chỉ hiện nút Sửa / Xóa cho người tạo hoặc Admin; giáo viên khác vẫn xem được bài học (nội dung dùng chung). Xóa tài khoản giáo viên đã tạo bài học → chỉ xóa mềm (BR-06).
+- **BR-03:** khi tạo, ghi `created_by` = người đang đăng nhập. Chỉ người tạo hoặc Admin được mở form sửa / sửa / xóa (sai chủ → 403); Admin sửa không đổi `created_by`. Giáo viên chỉ được **thêm bài học vào chủ đề do mình tạo** (Admin: mọi chủ đề) — giao diện chỉ liệt kê chủ đề của mình (Admin thấy mọi chủ đề, để sửa bài học của giáo viên khác mà không bị chuyển sang chủ đề khác), server vẫn kiểm tra lại. Danh sách chỉ hiện nút Sửa / Xóa cho người tạo hoặc Admin; giáo viên khác vẫn xem được bài học (nội dung dùng chung). Xóa tài khoản giáo viên đã tạo bài học → chỉ xóa mềm (BR-06).
 - Xóa (BR-05): chỉ chặn khi bài học còn câu hỏi **đang hoạt động** — `questionRepository.countByLessonIdAndIsActiveTrue(lessonId) == 0` (SQL tương đương: `SELECT COUNT(*) FROM questions WHERE lesson_id = ? AND is_active = 1`). Còn → 409 "Bài học còn câu hỏi đang hoạt động".
   - Nếu bài học **chỉ còn câu hỏi đã xóa mềm** (`is_active = 0`): cho phép xóa. Không còn bài nộp / phiên gia sư nào liên quan → xóa cứng bài học (câu hỏi và bài giảng xóa theo `ON DELETE CASCADE`). Còn (để bảo toàn lịch sử) → xóa mềm bài học (`lessons.is_active = 0`, ẩn khỏi trang quản lý; học sinh vẫn ôn tập được).
   - Bài giảng (`lesson_materials`) bị xóa theo (`ON DELETE CASCADE`) sau khi có xác nhận ở giao diện.
@@ -497,7 +520,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, 0)         -- JPA: save(question); questionId gán 
 -- (2) Nếu MULTIPLE_CHOICE: 4 dòng, lưu theo cascade PERSIST từ Question
 INSERT INTO question_options (question_id, option_label, option_text, is_correct) VALUES (?, ?, ?, ?)
 ```
-**Sửa:** cập nhật `questions`, rồi xóa và chèn lại 4 phương án (nếu câu đã có `submissions` thì **giữ nguyên `option_id`**: cập nhật trực tiếp từng `QuestionOption` theo `optionLabel` thay vì xóa/chèn).
+**Sửa:** chỉ người tạo hoặc Admin được mở form sửa và lưu (sai chủ → 403; form hiện đáp án đúng và lời giải nên cũng bị chặn). Cập nhật `questions`, rồi xóa và chèn lại 4 phương án (nếu câu đã có `submissions` thì **giữ nguyên `option_id`**: cập nhật trực tiếp từng `QuestionOption` theo `optionLabel` thay vì xóa/chèn).
 **Xóa:** nếu đã có bài nộp hoặc phiên gia sư mở từ câu này → `UPDATE questions SET is_active = 0` (BR-05, ẩn khỏi ngân hàng câu hỏi; học sinh vẫn ôn tập được); chưa có → `DELETE` (phương án xóa theo cascade).
 **Danh sách:**
 ```sql
@@ -648,11 +671,11 @@ SELECT option_id, option_label, is_correct FROM question_options WHERE question_
 3. Xác định đúng/sai; điểm = 10 nếu đúng, 0 nếu sai (BR-07).
 4. Lưu bài nộp:
 ```sql
-INSERT INTO submissions (student_id, question_id, submission_type, selected_option_id,
+INSERT INTO submissions (student_id, lesson_id, question_id, submission_type, student_answer,
                          is_correct, final_score, status)
-VALUES (?, ?, 'MULTIPLE_CHOICE', ?, ?, ?, 'GRADED')
+VALUES (?, ?, ?, 'MULTIPLE_CHOICE', ?, ?, ?, 'GRADED')   -- student_answer = chữ cái phương án đã chọn (A–D); không có cột selected_option_id
 ```
-5. Trả về (đã sanitize):
+5. Trả về (đã sanitize). Đáp án đúng và lời giải được trả **sau khi nộp, cả khi trả lời đúng lẫn sai** (BR-11 chỉ cấm gửi trước khi nộp):
 ```json
 {
   "isCorrect": false,
@@ -663,7 +686,7 @@ VALUES (?, ?, 'MULTIPLE_CHOICE', ?, ?, ?, 'GRADED')
   "canAskTutor": true
 }
 ```
-6. Client: đúng → tô xanh và hiện nút **Câu tiếp**; sai → tô đỏ phương án đã chọn, tô xanh đáp án đúng, hiện lời giải **và nút "Hỏi gia sư AI"**. Câu đã trả lời bị **khóa** (không gửi trùng); bảng câu hỏi tô xanh / đỏ theo kết quả; làm hết đề thì hiện **bảng tổng kết** (đúng x/y, Làm đề mới, Lịch sử bài này, Về bài học). Lời giải chèn bằng `textContent` rồi render KaTeX (không `innerHTML`).
+6. Client: đúng → tô xanh, hiện lời giải và nút **Câu tiếp**; sai → tô đỏ phương án đã chọn, tô xanh đáp án đúng, hiện lời giải **và nút "Hỏi gia sư AI"**. Câu đã trả lời bị **khóa** (không gửi trùng); bảng câu hỏi tô xanh / đỏ theo kết quả; làm hết đề thì hiện **bảng tổng kết** (đúng x/y, Làm đề mới, Lịch sử bài này, Về bài học). Lời giải chèn bằng `textContent` rồi render KaTeX (không `innerHTML`).
 7. **Không có bước "nộp cả bài":** mỗi câu được ghi ngay khi trả lời; câu không trả lời thì không ghi gì (không tạo bài nộp "bỏ trống" cho câu học sinh không được giao trong đề ngẫu nhiên).
 
 **Ngoại lệ:** nộp trùng cùng câu trong cùng phiên vẫn được ghi (BR-10) nhưng giao diện khóa câu đã trả lời; `selectedOptionId` không thuộc câu hỏi → 400.
@@ -725,7 +748,7 @@ GROUP BY l.lesson_id, l.lesson_name
 
 ### 3.5. MODULE 5 — GIA SƯ AI TỪNG BƯỚC (STUDENT)
 
-Controller: `TutorApiController` (`/api/tutor/**`) và `TutorPageController` (`/student/tutor/**`). Service: `AiTutorService`. **Server là nguồn sự thật về bước hiện tại** (`tutor_sessions.current_step`); mọi giá trị `currentStep` do client gửi đều bị bỏ qua.
+Controller: `TutorApiController` (`/api/tutor/**`) và `StudentTutorController` (trang gia sư). Service: `AiTutorService`. **Server là nguồn sự thật về bước hiện tại** (`tutor_sessions.current_step`); mọi giá trị `currentStep` do client gửi đều bị bỏ qua.
 
 #### UC-TUT-01 — Tạo phiên gia sư (FR-TUT-01)
 
@@ -845,19 +868,19 @@ OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
 |---|---|
 | URL | `POST /api/student/submit-essay-ocr` — `multipart/form-data`: `questionId`, `essayImage` (và/hoặc `studentAnswer`: lời giải gõ bằng văn bản, ≤ 20.000 ký tự — phải có ít nhất một trong hai) |
 
-**Luồng chính** (`EssayService`, bất đồng bộ — NFR-02)
+**Luồng chính** (`StudentApiController` → `EssayGradingService`, bất đồng bộ — NFR-02)
 1. Kiểm tra `questionId` tồn tại, `ESSAY` (không lọc `is_active`, BR-05).
-2. Kiểm tra file theo VAL-18: kích thước ≤ 5 MB, MIME, *magic bytes* (JPEG `FF D8 FF`; PNG `89 50 4E 47`; WebP `RIFF….WEBP`), đọc được bằng `ImageIO` và ≤ 4096×4096. Sai → 400 (TC-OCR-01, 02). *Triển khai* (`ImageValidator`): định dạng xác định bằng magic bytes, không tin đuôi tệp; JPEG / PNG đọc kích thước bằng `ImageIO` (chỉ đọc header); JDK không đọc được WebP nên kích thước WebP đọc trực tiếp từ header RIFF (`VP8` / `VP8L` / `VP8X`). Ảnh không hợp lệ bị từ chối **trước khi gọi AI**.
+2. Kiểm tra file theo VAL-18: kích thước ≤ 5 MB, *magic bytes* (JPEG `FF D8 FF`; PNG `89 50 4E 47`; WebP `RIFF….WEBP`), đọc được bằng `ImageIO` và ≤ 4096×4096. Sai → 400 (TC-OCR-01, 02). *Triển khai* (`ImageValidator`): định dạng xác định bằng magic bytes, không tin đuôi tệp hay MIME do client gửi; JPEG / PNG đọc kích thước bằng `ImageIO` (chỉ đọc header); JDK không đọc được WebP nên kích thước WebP đọc trực tiếp từ header RIFF (`VP8` / `VP8L` / `VP8X`). Ảnh không hợp lệ bị từ chối **trước khi gọi AI**.
 3. `RateLimiter.check(studentId, GRADING)` (hạn mức học sinh, 4.5).
 4. (Khuyến nghị — **chưa triển khai**) thu nhỏ ảnh có cạnh dài > 2000 px về 2000 px, xuất JPEG chất lượng 85 để giảm thời gian và token.
 5. Chuyển sang UC-OCR-02 (chấm). **Chưa lưu file** cho tới khi AI đọc được ảnh.
 
 #### UC-OCR-02 — AI đọc ảnh, chấm điểm, nhận xét (FR-OCR-02, FR-OCR-03)
 
-**Luồng chính** (`AiGradingService`)
+**Luồng chính** (`EssayGradingService`)
 1. Nạp `VISION_MODEL`, `GRADING_TEMPERATURE`, `MAX_OUTPUT_TOKENS`, `GRADING_PROMPT`; thay `{{QUESTION}}` bằng `question_text`, `{{REFERENCE}}` bằng `reference_solution` (rỗng → "Không có đáp án tham khảo, hãy tự giải để đối chiếu").
 2. Dựng payload đa phương thức: `parts = [ {text: prompt}, {inlineData: {mimeType, data: base64}} ]`, timeout = `2 × AI_TIMEOUT_SECONDS`, `responseMimeType = application/json`.
-3. Phản hồi JSON (`GradingAiResult`):
+3. Phản hồi JSON (`EssayGradingResult`):
 ```json
 {
   "legible": true,
@@ -905,7 +928,7 @@ Nút gọi `POST /api/tutor/start` với `{ "mode": "SUBMISSION", "submissionId"
 | `GeminiClient` | Gọi HTTP, timeout, retry, ánh xạ lỗi; không biết nghiệp vụ |
 | `AiJsonParser` | Bóc JSON (loại bỏ ```` ```json ````, khoảng trắng thừa), parse Jackson, kiểm tra trường bắt buộc |
 | `RateLimiter` | Giới hạn lượt gọi AI/giờ/người dùng |
-| `AiExamService`, `AiTutorService`, `AiGradingService` | Nghiệp vụ sinh đề / gia sư / chấm bài |
+| `AiExamService`, `AiTutorService`, `EssayGradingService` | Nghiệp vụ sinh đề / gia sư / chấm bài (gọi Gemini qua `GeminiService`) |
 
 ### 4.2. Định dạng gọi API
 
@@ -981,7 +1004,7 @@ QUY TẮC CỐ ĐỊNH (ưu tiên cao nhất):
 
 ### 4.6. Bất đồng bộ (NFR-02)
 
-- `AsyncConfig` khai báo `ThreadPoolTaskExecutor aiExecutor` (core/max/queue theo `application.properties`), `RejectedExecution` → 503 "Hệ thống AI đang bận".
+- `RootConfig` khai báo `ThreadPoolTaskExecutor aiExecutor` (core/max/queue theo `application.properties`), `RejectedExecution` → 503 "Hệ thống AI đang bận".
 - Endpoint AI trả `CompletableFuture<ResponseEntity<ApiResponse<…>>>` chạy trên `aiExecutor`; `DispatcherServlet` và filter phải bật `async-supported`.
 - Service chạy trên `aiExecutor` mở transaction riêng cho phần ghi DB; truyền **ID/DTO** giữa các luồng, không truyền Entity hoặc `EntityManager`.
 - Client dùng Fetch + spinner + khóa nút, đặt `AbortController` timeout 100 giây.
@@ -1023,7 +1046,7 @@ Cấu trúc đầu ra là **mảng JSON** các `QuestionGenerationDTO` (UC-TEA-0
 
 ### 5.3. Chấm tự luận
 
-Đầu vào: ảnh + đề + đáp án/barem tham khảo; đầu ra `GradingAiResult` (UC-OCR-02). Nhiệt độ thấp (0.1) để chấm ổn định; điểm làm tròn 0.25 phía server; kết quả là **đề xuất** cho giáo viên.
+Đầu vào: ảnh + đề + đáp án/barem tham khảo; đầu ra `EssayGradingResult` (UC-OCR-02). Nhiệt độ thấp (0.1) để chấm ổn định; điểm làm tròn 0.25 phía server; kết quả là **đề xuất** cho giáo viên.
 
 ### 5.4. Sơ đồ tuần tự
 
@@ -1082,16 +1105,16 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     actor HS as Học sinh
-    participant C as EssayApiController
-    participant S as EssayService / AiGradingService
+    participant C as StudentApiController
+    participant S as EssayGradingService
     participant F as FileStorageService
     participant AI as Gemini API
     participant R as Repository
     HS->>C: POST multipart (questionId, essayImage)
     C->>S: submit()
-    S->>S: Kiểm tra file (size, MIME, magic bytes), rate limit
+    S->>S: Kiểm tra file (size, magic bytes), rate limit
     S->>AI: prompt chấm + ảnh base64
-    AI-->>S: JSON GradingAiResult
+    AI-->>S: JSON EssayGradingResult
     alt legible = false
         S-->>HS: 422 chụp lại, không lưu
     else đọc được
@@ -1109,14 +1132,16 @@ sequenceDiagram
 
 | Ngoại lệ | HTTP | Trang / JSON |
 |---|---|---|
-| `ConfigValidationException`, `IllegalArgumentException`, `MethodArgumentNotValidException`, `BindException`, `ConstraintViolationException`, `MaxUploadSizeExceededException` | 400 | JSON có `errors[]`; trang form: trả lại form kèm lỗi theo trường |
+| `ConfigValidationException`, `IllegalArgumentException`, `MethodArgumentNotValidException`, `BindException`, `ConstraintViolationException`, `MaxUploadSizeExceededException` | 400 | JSON có `errors[]` (riêng `ConfigValidationException` ở `/api/**` hiện chưa kèm `errors[]`, mục 10); trang form: lỗi Bean Validation (`@Valid` + `BindingResult`) trả lại form kèm lỗi theo trường; các lỗi 400 khác (`IllegalArgumentException`, sai kiểu tham số, file quá lớn…) quay về trang trước (Referer, hoặc `/` nếu không có) kèm flash message |
 | `ForbiddenException`, CSRF sai | 403 | `error/403.jsp` / JSON |
 | `NotFoundException` | 404 | `error/404.jsp` / JSON |
 | `ConflictException` (trùng, ràng buộc nghiệp vụ) | 409 | Flash/JSON |
 | `AiRateLimitException` | 429 | JSON kèm số phút chờ |
 | `AiConfigException` | 503 | "Cấu hình AI chưa đúng, báo quản trị viên" |
 | `AiServiceException` (timeout) | 504 | "AI phản hồi quá chậm, vui lòng thử lại." |
-| `AiServiceException` (lỗi Gemini, hết lần thử) | 502 | "AI tạm thời không phản hồi, vui lòng thử lại sau." (nội dung lỗi thô của Gemini chỉ ghi log) |
+| `AiServiceException` (lỗi Gemini, hết lần thử; gồm cả khi Gemini trả HTTP 503 / 422) | 502 | "AI tạm thời không phản hồi, vui lòng thử lại sau." (nội dung lỗi thô của Gemini chỉ ghi log) |
+| `AiServiceException` (hàng đợi AI đầy — `RejectedExecutionHandler`) | 503 | "Hệ thống AI đang bận, vui lòng thử lại sau ít phút." |
+| `AiServiceException` (AI báo ảnh không đọc được, `legible = false`) | 422 | "Không đọc được bài làm, vui lòng chụp lại rõ nét hơn" |
 | `AiParseException` | 422 | "AI trả kết quả không dùng được, vui lòng thử lại" |
 | `DuplicateKeyException`, `DataIntegrityViolationException` | 409 | Thông báo thân thiện (không lộ SQL) |
 | `Exception` | 500 | Ghi log đầy đủ stack trace kèm mã tham chiếu `ERR-yyyyMMdd-xxxx`; người dùng chỉ thấy mã và lời nhắn thân thiện |
@@ -1153,22 +1178,23 @@ Quy tắc: trang HTML → view lỗi; request `/api/**` hoặc `Accept: applicat
 | `SessionUser` | `userId, username, fullName, role` |
 | `ApiResponse<T>` | `success, message, data, errors[{field,message}]` |
 | `PageResult<T>` | `items, page, size, totalItems, totalPages` |
-| `RegisterRequest` | `username, password, confirmPassword, fullName, email` |
-| `UserForm` | `username, password, fullName, email, role, status` |
+| `RegisterForm` | `username, password, confirmPassword, fullName, email` |
+| `UserCreateForm` / `UserEditForm` | `username, password, fullName, email, role` / `fullName, email, role, status` |
 | `AiConfigForm` | Map `config_key → giá trị` (có kiểm tra theo bảng UC-ADM-06) |
 | `MaterialForm` | `materialType, title, url, contentText, orderIndex` |
-| `QuestionForm` | `lessonId, questionType, difficultyLevel, questionText, explanationLatex, referenceSolution, options[4], correctLabel` |
+| `QuestionForm` | `action, id, lessonId, type, level, content, explanation, correctOption, optionTexts[]` |
 | `GenerateQuestionsRequest` | `lessonId, difficultyLevel, count` |
-| `QuestionGenerationDTO` | `questionText, options[{label,text,isCorrect}], explanationLatex` |
-| `QuizQuestionView` | `questionId, questionText, difficulty, options[{optionId,label,text}]` *(không có `isCorrect`)* |
-| `SubmitAnswerRequest` / `SubmitAnswerResponse` | `{questionId, selectedOptionId}` / `{isCorrect, correctOptionId, correctOptionLabel, explanationLatex, score, canAskTutor}` |
+| `BatchSaveRequest` | `lessonId, questions[QuestionGenerationDTO]` |
+| `QuestionGenerationDTO` | `content, level, options[{letter,content,isCorrect}], explanation` |
+| `QuizQuestionView` | `questionId, content, level, aiGenerated, options[{optionId,questionId,optionLetter,content}]` *(không có `isCorrect`)* |
+| `QuizAnswerRequest` / `QuizAnswerResponse` | `{questionId, selectedOptionId}` / `{isCorrect, correctOptionId, correctOptionLabel, explanationLatex, score, canAskTutor}` |
 | `TutorStartRequest` | `mode, problemText, lessonId, questionId, selectedOptionId, submissionId` |
-| `TutorInteractionRequest` | `sessionId, studentInput` |
+| `TutorInteractionRequest` | `sessionId, lessonId, studentInput, currentStep` *(`currentStep` bị server bỏ qua)* |
 | `TutorAiResult` *(nội bộ)* | `isStepCorrect, currentStep, totalSteps, feedbackToStudent, nextPromptOrQuestion, needsStudentInput, inputRequestHint, isSessionCompleted, finalSummary` |
 | `TutorStepResponse` | `sessionId, currentStep, totalSteps, isStepCorrect, feedbackToStudent, nextPromptOrQuestion, needsStudentInput, inputRequestHint, status, finalSummary` |
-| `GradingAiResult` *(nội bộ)* | `legible, extractedText, score, detailedFeedback, errors[{location,description}], suggestedCorrection` |
-| `EssayResultResponse` | `submissionId, extractedText, score, detailedFeedback, errors, suggestedCorrection, status, canAskTutor` |
-| `EssayReviewRequest` | `finalScore, teacherComment` |
+| `EssayGradingResult` *(nội bộ)* | `legible, extractedText, score, detailedFeedback, errors[{location,description}], suggestedCorrection` |
+| `EssayOcrResponse` | `submissionId, extractedText, score, detailedFeedback, errors, suggestedCorrection, imageUrl, status, canAskTutor` |
+| `ReviewForm` | `submissionId, score, isCorrect, teacherFeedback` (kèm tham số `keepAiScore`) |
 
 ---
 
@@ -1227,13 +1253,15 @@ Mục này ghi những chỗ mã nguồn **hiện tại** còn khác đặc tả
 
 | Đặc tả | Hiện tại |
 |---|---|
-| `GET /files/essays/{submissionId}` (ảnh bài tự luận; quy tắc 4 ở 2.1) | `GET /uploads/essays/{studentId}/{uuid}.{ext}` (ảnh cũ: `/uploads/{uuid}.{ext}`). Quyền kiểm tra trong `FileController` theo chủ bài: chủ bài, `TEACHER`, `ADMIN` xem được; học sinh khác 403; chưa đăng nhập → `/login` |
+| `GET /files/essays/{submissionId}` (ảnh bài tự luận; xem 2.1) | `GET /uploads/essays/{studentId}/{uuid}.{ext}` (ảnh cũ: `/uploads/{uuid}.{ext}`). Quyền kiểm tra trong `FileController` theo chủ bài: chủ bài, `TEACHER`, `ADMIN` xem được; học sinh khác 403; chưa đăng nhập → `/login` |
 | `GET /student/essay/result/{submissionId}` | Kết quả hiện ngay trên trang nộp bài; xem lại qua `/student/history?type=ESSAY` |
 | `/student/tutor`, `/student/tutor/{sessionId}`, `/student/tutor/new` | `/student/ai-tutor`, `/student/ai-tutor?sessionId=`; mở từ câu sai / bài tự luận: `/student/ai-tutor?mode=QUESTION&questionId=` hoặc `?mode=SUBMISSION&submissionId=` |
 | `/student/lessons/{id}` | `/student/lesson?id=` |
 | `/student/essay/{questionId}` | `/student/essay?lessonId=&questionId=` |
 | `/teacher/questions/new`, `/teacher/questions/generate`, `/teacher/submissions/essay/{id}` | `/teacher/questions?action=create`, `/teacher/ai/generate`, `/teacher/submissions?id=` |
 | `POST /teacher/topics/{id}/delete`, `/teacher/lessons/{id}/update`… | `POST /teacher/topics`, `POST /teacher/lessons` kèm `action=create|update|delete` |
+| `POST /admin/ai-config` | `POST /admin/ai-config/update` |
+| `POST /teacher/submissions/essay/{id}/review` (`finalScore`, `teacherComment`) | `POST /teacher/submissions` (`submissionId`, `score`, `teacherFeedback`, `keepAiScore`); danh sách `GET /teacher/submissions?status=pending|reviewed` |
 
 **Chức năng chưa làm / làm khác:**
 
@@ -1249,9 +1277,9 @@ Mục này ghi những chỗ mã nguồn **hiện tại** còn khác đặc tả
 | UC-OCR-01 bước 4 | Chưa thu nhỏ ảnh trước khi gửi AI |
 | UC-TUT-02 | `TutorPersistence.saveTurn` chưa kiểm tra lại phiên còn `ACTIVE` / còn ở đúng bước sau khi AI trả lời (hủy phiên giữa chừng hoặc gửi đúp từ hai tab vẫn có thể ghi tin nhắn); khi AI bỏ trống `isStepCorrect` ở lượt trả lời, server coi là sai; việc "không nêu đáp án cuối trước bước cuối" chỉ được ép bằng prompt |
 | UC-TUT-04 | Danh sách phiên gia sư: 15 phiên gần nhất, chưa phân trang / lọc trạng thái. Trang `ai-tutor.jsp` mở từ `mode=QUESTION|SUBMISSION` gọi `POST /start` mỗi lần tải trang (làm mới trang có thể tạo phiên trùng) |
-| UC-TEA-04 | Danh sách câu hỏi chưa có lọc `keyword` và tham số `size` (cố định 10 dòng), chưa chọn được cột sắp xếp; danh sách lịch sử học sinh cũng cố định 10 dòng. Giao diện hiện nút Sửa / Xóa cho mọi câu hỏi (server vẫn chặn 403 theo BR-03). Cho phép đổi loại câu hỏi MCQ ↔ ESSAY khi đã có bài nộp |
+| UC-TEA-04 | Danh sách câu hỏi chưa có lọc `keyword` và tham số `size` (cố định 10 dòng), chưa chọn được cột sắp xếp; danh sách lịch sử học sinh cũng cố định 10 dòng. Giao diện hiện nút Sửa / Xóa cho mọi câu hỏi (server vẫn chặn 403 theo BR-03, kể cả khi mở form sửa); bộ lọc chủ đề chỉ liệt kê chủ đề của chính giáo viên khi họ có ít nhất một chủ đề. Cho phép đổi loại câu hỏi MCQ ↔ ESSAY khi đã có bài nộp |
 | UC-TEA-01 / UC-TEA-02 | `TopicForm` chưa có `orderIndex` (danh sách sắp theo ngày tạo); danh sách chủ đề / bài học (giáo viên, Admin, học sinh) chưa phân trang; `/teacher/topics` chỉ liệt kê chủ đề của chính giáo viên; `MaterialService.create` chưa kiểm tra quyền sở hữu bài học |
-| UC-TEA-06 | Lưu hàng loạt trả về lỗi đầu tiên ("Câu n: …") chứ chưa phải danh sách lỗi theo chỉ số; chưa kiểm tra nhãn A–D là duy nhất và giới hạn số câu; `difficultyLevel` ở cấp request bị bỏ qua (dùng `level` từng câu, mặc định 1) |
+| UC-TEA-06 | Lưu hàng loạt trả về lỗi đầu tiên ("Câu n: …") chứ chưa phải danh sách lỗi theo chỉ số; chưa kiểm tra nhãn A–D là duy nhất và giới hạn số câu; `BatchSaveRequest` không có trường `difficultyLevel` (dùng `level` từng câu, mặc định 1); phần tử `null` trong `options` gây `NullPointerException` (500) thay vì lỗi 400 theo câu |
 | UC-TEA-07 / UC-TEA-09 | `/teacher/submissions` chưa có `size` / `lessonId`, mặc định lọc "chưa duyệt"; dashboard giáo viên hiện 5 bài tự luận mới nhất của mọi giáo viên và số liệu theo chủ đề do mình tạo, chưa có "5 câu hỏi mới nhất của giáo viên" |
 | UC-STU-01 / 02 / 07 | Trang chủ đề chưa hiện số câu hỏi, số bài giảng, tiến độ theo bài; chưa có nút "Hỏi gia sư AI về bài này"; bài học / quiz không tồn tại thì chuyển về `/student/topics` thay vì 404; chưa có trang chọn câu tự luận riêng (tự chọn câu đầu và hiện các nút "Câu 1…n") |
 | Sanitize (FRS 1.4) | `HtmlSanitizer` mới áp dụng cho bài giảng, câu hỏi AI lưu hàng loạt và đầu ra AI; nội dung câu hỏi / phương án / tóm tắt bài học nhập tay chưa sanitize (JSP vẫn escape bằng `<c:out>`). Khi sanitize phát hiện mẫu nguy hiểm, văn bản bị escape thực thể và hiện nguyên dạng `&lt;` trên giao diện |
@@ -1261,7 +1289,20 @@ Mục này ghi những chỗ mã nguồn **hiện tại** còn khác đặc tả
 | Cấu hình `application.properties` | `db.url` dùng CSDL `MathTutorDB` (không phải `EduTutorMath12` như 1.5); thiếu khóa `ai.config.cacheTtlSeconds` (mặc định trong code là 60); thêm các khóa `gemini.baseUrl`, `gemini.connectTimeoutSeconds`, `gemini.requestTimeoutSeconds`, `gemini.maxParseRetries`; `db.password` đặt mặc định cho môi trường dev (ghi đè bằng biến môi trường `DB_PASS`) |
 | Ánh xạ dữ liệu | Một số cột có DB default nhưng entity ánh xạ kiểu nguyên thủy (`boolean`, `int`) nên nếu chèn NULL bằng tay Hibernate sẽ lỗi khi nạp; vài truy vấn native thống kê (`countLastSevenDays`, `findQuestionResults`, `lessonResultSummary`) nằm ngoài danh mục "NEWID / CTE" của Claude.md 4.3 nhưng vẫn dùng tham số có tên; chưa có chỉ mục duy nhất theo điều kiện cho `topic_name` (tên chủ đề chỉ được kiểm tra duy nhất ở tầng ứng dụng) |
 | Kiểm thử | `QueryCountIT` chưa phủ `getTopicsByTeacher`, `findQuestionResults`, `topicProgress` / `lessonProgress` và dashboard học sinh |
+| Phiên và CSRF (1.4, UC-AUTH-01) | Cookie session chưa đặt cờ `Secure` (cần cấu hình khi chạy HTTPS); token CSRF được sinh lại sau mỗi lần đăng nhập nên form đăng nhập mở sẵn ở tab khác sẽ bị 403 khi gửi; `login.jsp` chưa hiện `errorFlash` (lỗi 400 quay về `/login` không có thông báo) |
+| Xử lý lỗi (1.2, 6.1) | Lỗi 400 không phải `@Valid` trên trang form quay về Referer kèm flash thay vì dựng lại form (GET sai tham số mà Referer chính là URL lỗi có thể chuyển hướng lặp); `ConfigValidationException` ở `/api/**` chưa kèm `errors[]` theo từng khóa (chỉ trang `/admin/ai-config` dùng được `getErrors()`) |
+| Phân trang (1.3) | `/teacher/questions`, `/admin/questions`, `/teacher/students`, `/student/history` cố định 10 dòng, chưa nhận tham số `size` |
+| UC-ADM-03 / UC-ADM-04 | Sửa / xóa người dùng chưa `flush` sớm nên vi phạm UNIQUE / FK do hai Admin thao tác đồng thời hiện thành lỗi 500 (khi tạo mới thì đã ánh xạ 409) |
+| UC-ADM-08 | Biểu đồ 7 ngày: nhãn ngày lấy theo giờ JVM (`LocalDate.now()`), còn truy vấn nhóm theo ngày của CSDL (`SYSDATETIME()`) nên nếu hai múi giờ khác nhau các cột có thể lệch ngày |
+| `/teacher/students` (theo dõi học sinh) | Danh sách và số học sinh gồm cả tài khoản `SUSPENDED` / `INACTIVE`; trang lịch sử một học sinh chưa kiểm tra `studentId` có tồn tại / là học sinh (id sai hiện trang rỗng thay vì 404) |
+| UC-ADM-06 (`MAX_OUTPUT_TOKENS`) | Giá trị Admin đặt thấp hơn mức tối thiểu cố định của từng chức năng (gia sư 2048, chấm tự luận 4096, sinh đề 700 × số câu + 512) bị nâng lên mức đó (`GeminiService`), nên chỉnh xuống dưới mức này không có tác dụng |
+| UC-OCR-02 | Nếu AI trả `legible = false` mà không có `score`, bộ phân tích coi là JSON thiếu trường: thử lại 3 lần rồi trả 422 "AI không trả về dữ liệu đúng định dạng…" thay vì 422 "Không đọc được bài làm…" ngay |
+| UC-TEA-05 | `difficultyLevel` sai bị kiểm tra trong tác vụ bất đồng bộ, sau `RateLimiter.check`, nên yêu cầu bị 400 vẫn tốn một lượt hạn mức |
+| FRS 4.3 (thử lại) | Timeout đọc (504) và lỗi I/O (502) cũng được thử lại trong ngân sách 90 s (bảng 4.3 chỉ liệt kê HTTP 429 / 500 / 502 / 503) |
+| UC-TUT-01 / UC-TUT-02 | `sessionId` của `next-step` không bắt buộc: gửi `null` sẽ tạo phiên `FREE` mới (và tốn một lượt hạn mức) thay vì báo lỗi VAL-19; ở `mode = QUESTION`, `selectedOptionId` chỉ cần thuộc câu hỏi, chưa đối chiếu với bài nộp sai thật của học sinh (chỉ ảnh hưởng nội dung prompt) |
 
 **Đã khắc phục trong lần rà soát 2.1.3:** XSS ở `<title>` (`head.jsp`); scriptlet `printStackTrace` trong `error.jsp`; ngân sách thời gian AI ≤ 90 s; xóa người dùng kiểm tra cả `reviewed_by` (BR-06); khóa API dạng chuỗi che không còn ghi đè khóa thật; sinh đề AI loại câu lỗi / trùng, giới hạn theo `count`, trả cảnh báo; hạn mức AI chỉ trừ sau khi dữ liệu và quyền hợp lệ; `AiConfigException` → 503 và thông báo thân thiện cho lỗi Gemini; thông báo còn nhắc script SQL cũ.
+
+**Đã khắc phục trong lần rà soát 2.1.4:** Admin sửa bài học của giáo viên khác không còn bị chuyển sang chủ đề khác (danh sách chủ đề của Admin gồm mọi chủ đề); giáo viên không còn mở được form sửa câu hỏi của người khác (403 theo BR-03, trước đây chỉ chặn lúc lưu); lỗi Gemini HTTP 503 / 422 sau khi hết lần thử trả 502 với thông báo cố định (không còn lộ nguyên văn lỗi của Google; 503 "hệ thống AI đang bận" và 422 do hệ thống tự tạo giữ nguyên); bỏ nhánh đăng nhập bằng SHA-256 không salt (chỉ chấp nhận BCrypt, đúng FRS 1.4).
 
 **Quyết định của nhóm (khác đặc tả gốc, đã cập nhật vào SRS / FRS):** BR-05 — nội dung xóa mềm chỉ ẩn ở phía quản lý, học sinh vẫn ôn tập được.

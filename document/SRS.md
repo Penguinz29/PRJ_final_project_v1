@@ -5,7 +5,7 @@
 | Thông tin | Nội dung |
 |---|---|
 | Đồ án | PRJ301 — Java Web Application |
-| Phiên bản tài liệu | 2.1.3 (rà soát tài liệu so với mã nguồn: sửa các lỗi XSS tiêu đề / lộ stack trace, ngân sách thời gian AI ≤ 90 s, `AiConfigException` → 503, sinh đề AI loại câu lỗi + cảnh báo, hạn mức AI chỉ trừ sau khi dữ liệu hợp lệ, xóa người dùng kiểm tra cả `reviewed_by`; các chỗ còn khác đặc tả liệt kê ở FRS mục 10). 2.1.2 (đồng bộ với mã nguồn: script SQL `01_schema.sql` + `02_data.sql`, BR-03 áp dụng khi tạo bài học, trắc nghiệm ngẫu nhiên + chấm từng câu, tiến độ theo lần làm gần nhất; hiện trạng triển khai ở FRS mục 10). 2.1.1: BR-05 xóa mềm chỉ ẩn khỏi trang quản lý, học sinh vẫn ôn tập được; nút Xóa báo trước kết quả. 2.1.0: chuyển tầng dữ liệu sang JPA; bổ sung validation nhiều lớp, đối chiếu rubric, phụ lục Q&A |
+| Phiên bản tài liệu | 2.1.4 (đồng bộ NFR-05 và TC-AI-07 với FRS 2.1.4). 2.1.3 (rà soát tài liệu so với mã nguồn: sửa các lỗi XSS tiêu đề / lộ stack trace, ngân sách thời gian AI ≤ 90 s, `AiConfigException` → 503, sinh đề AI loại câu lỗi + cảnh báo, hạn mức AI chỉ trừ sau khi dữ liệu hợp lệ, xóa người dùng kiểm tra cả `reviewed_by`; các chỗ còn khác đặc tả liệt kê ở FRS mục 10). 2.1.2 (đồng bộ với mã nguồn: script SQL `01_schema.sql` + `02_data.sql`, BR-03 áp dụng khi tạo bài học, trắc nghiệm ngẫu nhiên + chấm từng câu, tiến độ theo lần làm gần nhất; hiện trạng triển khai ở FRS mục 10). 2.1.1: BR-05 xóa mềm chỉ ẩn khỏi trang quản lý, học sinh vẫn ôn tập được; nút Xóa báo trước kết quả. 2.1.0: chuyển tầng dữ liệu sang JPA; bổ sung validation nhiều lớp, đối chiếu rubric, phụ lục Q&A |
 | Kiến trúc | Spring MVC 6 (framework chọn từ danh sách của rubric), Jakarta Servlet 6.0, **Spring Data JPA + Hibernate 6.6**, Jakarta Bean Validation, SQL Server |
 | Giao diện | JSP + JSTL + **Bootstrap 5.3** (framework UI duy nhất) + KaTeX |
 | AI | Google Gemini REST API (model cấu hình được trong CSDL) |
@@ -522,7 +522,7 @@ Ghi chú thiết kế:
 | NFR-02 | Hiệu năng AI | Gọi AI chạy bất đồng bộ phía client (Fetch + spinner); phía server dùng `CompletableFuture`/`DeferredResult` để không giữ luồng Tomcat; timeout 30 s (ảnh 60 s) | Demo với mạng chậm |
 | NFR-03 | Bảo mật | 100% truy vấn tham số hóa (JPA/Hibernate dùng `PreparedStatement`, cấm nối chuỗi JPQL/SQL); không bind request thẳng vào Entity; mật khẩu băm **BCrypt**; `<c:out>`/escape và JSoup sanitize nội dung hiển thị; CSRF token cho mọi form/POST; cookie session `HttpOnly`, `SameSite=Lax`; đổi session ID sau đăng nhập | Review code + thử tấn công cơ bản |
 | NFR-04 | Phân quyền | Mọi URL (kể cả `/api/**`) kiểm tra vai trò ở server; không tin dữ liệu ẩn từ client; học sinh chỉ truy cập dữ liệu của mình | Test case TC-SEC |
-| NFR-05 | Bảo mật dữ liệu AI | Khóa API chỉ hiển thị dạng che (`AIza****abcd`), không ghi vào log; file upload kiểm tra phần mở rộng, MIME và *magic bytes*, đổi tên ngẫu nhiên | Review |
+| NFR-05 | Bảo mật dữ liệu AI | Khóa API chỉ hiển thị dạng che (`AIza****abcd`), không ghi vào log; file upload chỉ chấp nhận định dạng xác định bằng *magic bytes* (không tin phần mở rộng hay MIME do client gửi), kiểm tra kích thước và kích thước ảnh, đổi tên ngẫu nhiên | Review |
 | NFR-06 | Kiểm soát chi phí | Giới hạn gọi AI theo `(userId, vai trò/hành động)`: học sinh `AI_RATE_LIMIT_PER_HOUR` (mặc định 60/giờ, gia sư + chấm ảnh); giáo viên `AI_RATE_LIMIT_TEACHER_PER_HOUR` (mặc định 300/giờ, sinh đề); Admin được miễn cho thao tác Test kết nối. Vượt hạn trả HTTP 429 | TC-AI-08 |
 | NFR-07 | Độ tin cậy | `@ControllerAdvice` xử lý lỗi tập trung; AI trả JSON sai cú pháp → thử lại tối đa 3 lần; lỗi HTTP 429/5xx → thử lại tối đa 2 lần với chờ lũy tiến; AI hỏng không làm sập chức năng khác | TC-AI-06, 07 |
 | NFR-08 | Toàn vẹn dữ liệu | Thao tác nhiều bước (tạo câu hỏi + 4 phương án, lưu hàng loạt) dùng `@Transactional` (`JpaTransactionManager`); không giữ transaction khi chờ AI | Test rollback |
@@ -620,7 +620,7 @@ Tài khoản demo (dữ liệu mẫu): `admin`, `teacher1`, `teacher2`, `student
 | TC-AI-04 | Tutor: trả lời sai bước | `isStepCorrect=false`, giữ nguyên bước, có gợi ý |
 | TC-AI-05 | Tutor: bài cần dữ liệu mới | `needsStudentInput=true`, `awaiting_input=1`; AI chờ, không tự bịa số liệu; lượt sau học sinh nhập số liệu thì `awaiting_input` về 0 và bước không bị chấm sai/đổi |
 | TC-AI-06 | AI trả JSON sai cú pháp | Tự thử lại ≤ 3 lần rồi báo lỗi thân thiện |
-| TC-AI-07 | Ngắt mạng / quá timeout | Báo "AI tạm thời không phản hồi", các chức năng khác vẫn dùng được |
+| TC-AI-07 | Ngắt mạng / quá timeout | Quá timeout: 504 "AI phản hồi quá chậm, vui lòng thử lại"; mất kết nối hoặc Gemini lỗi sau khi hết lần thử: 502 "AI tạm thời không phản hồi" (FRS 6.1); các chức năng khác vẫn dùng được |
 | TC-AI-08 | Vượt giới hạn gọi AI/giờ (học sinh vượt 60 lượt; giáo viên vượt 300 lượt sinh đề) | HTTP 429 + thông báo; Test kết nối của Admin không bị giới hạn |
 | TC-OCR-01 | Tải file `.exe` đổi tên thành `.jpg` | Từ chối (magic bytes) |
 | TC-OCR-02 | Tải ảnh 8 MB | Từ chối, báo dung lượng |
