@@ -5,9 +5,9 @@
 | Thông tin | Nội dung |
 |---|---|
 | Đồ án | PRJ301 — Spring MVC 6 + Spring Data JPA (Hibernate) + SQL Server + Gemini API |
-| Phiên bản | 2.1.1 (BR-05: xóa mềm chỉ ẩn ở phía quản lý, học sinh vẫn ôn tập được; nút Xóa báo trước kết quả). 2.1.0: chuyển tầng dữ liệu sang JPA; bổ sung Bean Validation, đối chiếu rubric |
+| Phiên bản | 2.1.2 (đồng bộ với mã nguồn: script SQL 07–10, BR-03 bài học, OCR `legible`/WebP, BR-09 tách điểm, hồ sơ cá nhân, kết quả theo câu, tiến độ BR-10, dashboard Admin, trắc nghiệm ngẫu nhiên + chấm từng câu; thêm mục 10 "Hiện trạng triển khai"). 2.1.1: BR-05 xóa mềm chỉ ẩn ở phía quản lý, học sinh vẫn ôn tập được; nút Xóa báo trước kết quả. 2.1.0: chuyển tầng dữ liệu sang JPA; bổ sung Bean Validation, đối chiếu rubric |
 | Liên quan | `EduTutor_SRS.md` (yêu cầu), `EduTutor_Database.sql` (CSDL) |
-| Quy ước tham chiếu | Bộ tài liệu gốc đặt trong `docs/`. Trong repo hiện tại: `document/SRS.md` ≙ `EduTutor_SRS.md`, `document/FRS.md` ≙ `EduTutor_FRS.md`, `document/sql/01…06_*.sql` ≙ `EduTutor_Database.sql`. Tài khoản mẫu `admin`, `teacher1`, `student1`…, mật khẩu **`EduTutor@123`** |
+| Quy ước tham chiếu | Bộ tài liệu gốc đặt trong `docs/`. Trong repo hiện tại: `document/SRS.md` ≙ `EduTutor_SRS.md`, `document/FRS.md` ≙ `EduTutor_FRS.md`, `document/sql/01…10_*.sql` ≙ `EduTutor_Database.sql` (chạy theo thứ tự số; chi tiết ở mục 1.7). Tài khoản mẫu `admin`, `teacher1`, `student1`…, mật khẩu **`EduTutor@123`** |
 
 Mã FR trong ngoặc ở mỗi use case (UC) trỏ về SRS.
 
@@ -110,6 +110,7 @@ app.upload.max-bytes=5242880
 app.ai.executor.core=4
 app.ai.executor.max=8
 app.ai.executor.queue=50
+ai.config.cacheTtlSeconds=60      # cache cấu hình AI (TTL, bị xóa ngay sau khi Admin lưu); test tích hợp đặt 0
 ```
 
 (Không dùng khóa `spring.datasource.*`: dự án không dùng Spring Boot; `RootConfig` đọc khóa `db.*` và `hibernate.*`. `hbm2ddl.auto` luôn là `none` — script SQL là nguồn sự thật về cấu trúc.)
@@ -160,7 +161,9 @@ Thông báo lỗi đặt trong `messages.properties` (tiếng Việt, UTF-8) và
 
 ### 1.7. Cấu trúc dữ liệu bổ sung và trạng thái (đồng bộ với SRS 6.1 / 6.2)
 
-Kiến trúc chuẩn gồm **10 bảng / 10 Entity**. Các thuộc tính sau là bắt buộc trong DDL và Entity (script `document/sql/06_target_schema_additions.sql` bổ sung vào CSDL hiện có; tên cột thực tế dùng PascalCase, vd. `questions.is_active` ≙ `Questions.IsActive`):
+Kiến trúc chuẩn gồm **10 bảng / 10 Entity**. Các thuộc tính sau là bắt buộc trong DDL và Entity (các script `document/sql/06`–`10` bổ sung vào CSDL hiện có; tên cột thực tế dùng PascalCase, vd. `questions.is_active` ≙ `Questions.IsActive`).
+
+**Thứ tự script:** `01_schema` (tạo CSDL — **xóa CSDL cũ**), `02_seed` (dữ liệu mẫu), `03_ai_configs`, `04_update_submissions`, `05_tutor_and_explanation`, `06_target_schema_additions`, `07_ai_configs_full` (đủ 15 khóa AI + 3 prompt, `IsSecret`), `08_tutor_session_state` (bước / đề bài của phiên gia sư), `09_submission_scores` (`Score` → `FinalScore`, thêm `AiScore`), `10_lesson_created_by` (`Lessons.CreatedBy`). Các script `03`–`10` chạy lại nhiều lần không lỗi, dùng để nâng cấp CSDL đang có dữ liệu. Mã nguồn hiện tại cần CSDL đã chạy đủ `01`→`10`; thiếu script nào thì trang dùng cột đó báo lỗi 500 (`Invalid column name …`).
 
 | Bảng | Cột bổ sung | Kiểu / mặc định | Dùng ở |
 |---|---|---|---|
@@ -169,8 +172,12 @@ Kiến trúc chuẩn gồm **10 bảng / 10 Entity**. Các thuộc tính sau là
 | `lessons`, `topics` | `is_active` | `BIT NOT NULL DEFAULT 1` | BR-05 (xóa mềm khi còn lịch sử; chỉ ẩn ở phía quản lý) |
 | `topics` | `order_index` | `INT NOT NULL DEFAULT 1` | UC-TEA-01 |
 | `lesson_materials` | `order_index`, `created_by` | `INT NOT NULL DEFAULT 1`, `INT NOT NULL` FK → `users` | UC-TEA-03, BR-03 |
-| `submissions` | `ai_feedback`, `suggested_correction`, `teacher_comment`, `reviewed_at`; `status` | `NVARCHAR(MAX) NULL` ×3, `DATETIME2 NULL`; `VARCHAR(20)` ∈ {`GRADED`,`AI_GRADED`,`REVIEWED`} | UC-STU-04, UC-OCR-02, UC-TEA-07 |
+| `lessons` | `created_by` (script 10) | `INT NOT NULL` FK → `users` (dữ liệu cũ: giáo viên sở hữu chủ đề) | UC-TEA-02, BR-03 |
+| `submissions` | `ai_feedback`, `suggested_correction`, `teacher_comment`, `reviewed_by`, `reviewed_at`; `status` | `NVARCHAR(MAX) NULL` ×3, `INT NULL` FK → `users`, `DATETIME2 NULL`; `VARCHAR(20)` ∈ {`GRADED`,`AI_GRADED`,`REVIEWED`} | UC-STU-04, UC-OCR-02, UC-TEA-07 |
+| `submissions` | `ai_score`, `final_score` (script 09: cột cũ `Score` đổi tên thành `FinalScore`) | `DECIMAL(4,2) NULL`, CHECK 0–10; Entity: `aiScore` khai báo `updatable = false` | BR-07, BR-09 |
 | `tutor_sessions` | `title`; `awaiting_input`; `input_hint` | `NVARCHAR(100) NOT NULL`; `BIT NOT NULL DEFAULT 0`; `NVARCHAR(255) NULL` | UC-TUT-01…03 |
+| `tutor_sessions` | `question_id`, `problem_text`, `current_step`, `total_steps` (script 08) | `INT NULL` FK; `NVARCHAR(MAX) NULL`; `INT NOT NULL DEFAULT 1`; `INT NOT NULL DEFAULT 0` (0 = chưa xác định) | UC-TUT-01…04 |
+| `ai_configs` | `is_secret`; `config_value` (script 07) | `BIT NOT NULL DEFAULT 0`; `NVARCHAR(MAX)` (prompt tới 8.000 ký tự) | UC-ADM-06 |
 | Mọi bảng | `created_at`, `updated_at` | `DATETIME2 NOT NULL DEFAULT SYSDATETIME()`, `DATETIME2 NULL` (`@CreationTimestamp` / `@UpdateTimestamp`); `submissions` dùng `submitted_at` làm thời điểm tạo | Kiểm toán, sắp xếp |
 
 **Trạng thái bài làm (`submissions.status`):** `GRADED` — trắc nghiệm, chấm tức thì (`final_score` = 10 hoặc 0), không cần duyệt • `AI_GRADED` — tự luận AI đã chấm, `ai_score` là đề xuất, chờ giáo viên • `REVIEWED` — giáo viên đã duyệt / chỉnh `final_score` (giữ nguyên `ai_score`).
@@ -388,6 +395,7 @@ WHERE config_key = ?
 
 #### UC-ADM-08 — Dashboard quản trị (FR-ADM-08)
 `GET /admin/dashboard` hiển thị các số liệu **lấy từ dữ liệu lưu bền vững trong CSDL** (không dùng bộ đếm trong RAM nên không mất khi khởi động lại): số người dùng theo vai trò/trạng thái, tổng số câu hỏi đang hoạt động (trong đó do AI sinh), tổng lượt làm bài 7 ngày gần nhất, **số phiên gia sư AI đã tạo**, **số câu hỏi do AI sinh**, **số bài tự luận đã chấm qua AI** và số bài tự luận chờ duyệt. Dashboard **không** thống kê "tổng số request AI thô"; bộ đếm của `RateLimiter` (4.5) chỉ phục vụ giới hạn tần suất.
+*Hiển thị:* 4 ô tổng hợp (người dùng; câu hỏi + số do AI sinh + số chủ đề; phiên gia sư AI; bài tự luận chấm qua AI + số chờ duyệt), bảng **vai trò × trạng thái** (đủ ô, kể cả 0) và biểu đồ cột một màu **lượt làm bài 7 ngày gần nhất** (đủ 7 ngày, ngày trống = 0, rê chuột xem số lượt, kèm bảng ẩn cho trình đọc màn hình). Tối đa 9 câu SQL, không phụ thuộc lượng dữ liệu.
 ```sql
 SELECT role, status, COUNT(*) AS n FROM users GROUP BY role, status;
 SELECT COUNT(*) AS total, SUM(CAST(is_ai_generated AS INT)) AS ai FROM questions WHERE is_active = 1;
@@ -434,6 +442,7 @@ Chủ đề (`topics`) cùng bài học (`lessons`) là hai cấp "chuyên đề
 | `POST /teacher/lessons/{id}/update`, `/{id}/delete` | Sửa, xóa |
 
 - `topicId` phải tồn tại; `contentSummary` cho phép LaTeX (làm sạch bằng `HtmlSanitizer`).
+- **BR-03:** khi tạo, ghi `created_by` = người đang đăng nhập. Chỉ người tạo hoặc Admin được mở form sửa / sửa / xóa (sai chủ → 403); Admin sửa không đổi `created_by`. Giáo viên chỉ được **thêm bài học vào chủ đề do mình tạo** (Admin: mọi chủ đề) — giao diện chỉ liệt kê chủ đề của mình, server vẫn kiểm tra lại. Danh sách chỉ hiện nút Sửa / Xóa cho người tạo hoặc Admin; giáo viên khác vẫn xem được bài học (nội dung dùng chung). Xóa tài khoản giáo viên đã tạo bài học → chỉ xóa mềm (BR-06).
 - Xóa (BR-05): chỉ chặn khi bài học còn câu hỏi **đang hoạt động** — `questionRepository.countByLessonIdAndIsActiveTrue(lessonId) == 0` (SQL tương đương: `SELECT COUNT(*) FROM questions WHERE lesson_id = ? AND is_active = 1`). Còn → 409 "Bài học còn câu hỏi đang hoạt động".
   - Nếu bài học **chỉ còn câu hỏi đã xóa mềm** (`is_active = 0`): cho phép xóa. Không còn bài nộp / phiên gia sư nào liên quan → xóa cứng bài học (câu hỏi và bài giảng xóa theo `ON DELETE CASCADE`). Còn (để bảo toàn lịch sử) → xóa mềm bài học (`lessons.is_active = 0`, ẩn khỏi trang quản lý; học sinh vẫn ôn tập được).
   - Bài giảng (`lesson_materials`) bị xóa theo (`ON DELETE CASCADE`) sau khi có xác nhận ở giao diện.
@@ -576,6 +585,8 @@ WHERE q.lesson_id = ? AND q.question_type = 'MULTIPLE_CHOICE' AND q.is_active = 
 GROUP BY q.question_id, q.question_text
 ORDER BY correct_pct ASC
 ```
+- **Triển khai:** SQL Server không `GROUP BY` được cột `NVARCHAR(MAX)` (`question_text`), nên số liệu bài nộp được gộp trong subquery theo `question_id` rồi mới `JOIN` câu hỏi (native query + interface projection, tham số có tên). Thêm cột **số học sinh** (`COUNT(DISTINCT student_id)`); câu tỉ lệ đúng thấp nhất lên đầu, **câu chưa ai làm xuống cuối**; chỉ câu đang hoạt động (trang quản lý, BR-05).
+- Phía trên bảng: tổng hợp cả bài học (số câu, lượt làm / số học sinh, tỉ lệ đúng chung, điểm TB). Phân trang ở CSDL, `size` ∈ {10, 20, 50}, giữ bài học đang chọn khi chuyển trang. Quyền: `TEACHER` / `ADMIN`.
 
 #### UC-TEA-09 — Dashboard giáo viên (FR-TEA-09)
 `GET /teacher/dashboard`: số bài tự luận chờ duyệt (`status = 'AI_GRADED'`), 5 câu hỏi mới nhất của giáo viên, lối tắt tới sinh đề AI.
@@ -600,7 +611,7 @@ Quyền: `STUDENT`. Mọi truy vấn dùng `student_id` lấy từ session.
 | `limit` | 5–30 (mặc định 10) |
 
 **Luồng chính**
-1. Chọn ngẫu nhiên `limit` câu `MULTIPLE_CHOICE` của bài (kể cả câu giáo viên đã xóa mềm, để ôn tập — BR-05), lọc độ khó nếu có:
+1. Chọn ngẫu nhiên `limit` câu `MULTIPLE_CHOICE` của bài (kể cả câu giáo viên đã xóa mềm, để ôn tập — BR-05), lọc độ khó nếu có. *Hiện trạng:* CSDL còn 3 mức `Level` 1–3, tham số `difficulty` nhận `1|2|3` hoặc `EASY|MEDIUM|HARD` (`ADVANCED` ≙ 3) cho tới khi chuyển sang 4 mức theo VAL-11; `limit` ngoài 5–30 được ép vào khoảng. Giao diện có ô chọn mức độ, số câu và nút **Đề mới** (mỗi lần chọn ngẫu nhiên lại):
 ```sql
 SELECT TOP (?) question_id, question_text, difficulty_level
 FROM questions
@@ -648,7 +659,8 @@ VALUES (?, ?, 'MULTIPLE_CHOICE', ?, ?, ?, 'GRADED')
   "canAskTutor": true
 }
 ```
-6. Client: đúng → tô xanh và hiện nút **Câu tiếp**; sai → tô đỏ phương án đã chọn, tô xanh đáp án đúng, hiện lời giải **và nút "Hỏi gia sư AI"**.
+6. Client: đúng → tô xanh và hiện nút **Câu tiếp**; sai → tô đỏ phương án đã chọn, tô xanh đáp án đúng, hiện lời giải **và nút "Hỏi gia sư AI"**. Câu đã trả lời bị **khóa** (không gửi trùng); bảng câu hỏi tô xanh / đỏ theo kết quả; làm hết đề thì hiện **bảng tổng kết** (đúng x/y, Làm đề mới, Lịch sử bài này, Về bài học). Lời giải chèn bằng `textContent` rồi render KaTeX (không `innerHTML`).
+7. **Không có bước "nộp cả bài":** mỗi câu được ghi ngay khi trả lời; câu không trả lời thì không ghi gì (không tạo bài nộp "bỏ trống" cho câu học sinh không được giao trong đề ngẫu nhiên).
 
 **Ngoại lệ:** nộp trùng cùng câu trong cùng phiên vẫn được ghi (BR-10) nhưng giao diện khóa câu đã trả lời; `selectedOptionId` không thuộc câu hỏi → 400.
 
@@ -691,7 +703,8 @@ WHERE lt.rn = 1
 GROUP BY t.topic_id, t.topic_name
 ```
 **Hai mức hiển thị tiến độ:**
-- `GET /student/dashboard`: tiến độ tổng hợp **theo Chủ đề** (câu SQL trên), thanh tiến độ `correct/answered` và điểm trung bình tự luận (`final_score` của bài ESSAY).
+- `GET /student/dashboard`: tiến độ tổng hợp **theo Chủ đề** (câu SQL trên, `LEFT JOIN` để chủ đề chưa làm vẫn hiện, kèm tổng số câu trắc nghiệm của chủ đề), thanh tiến độ (xanh = đúng, đỏ = sai, trên tổng số câu) và điểm trung bình tự luận (`final_score` của **lần nộp gần nhất mỗi câu** ESSAY, cũng theo BR-10). Các ô tổng hợp (đã làm / tổng, tỉ lệ đúng) cộng dồn từ tiến độ từng chủ đề, không chạy thêm truy vấn đếm.
+- Lịch sử lọc theo `lessonId` hiện khung "Bài học: …" kèm **Bỏ lọc**; tab loại bài và phân trang giữ bộ lọc. Trang tiến độ theo bài học có nút **Luyện** và **Lịch sử** cho từng bài; chủ đề không tồn tại → 404.
 - `GET /student/topics/{topicId}/progress`: bấm vào một chủ đề để xem tiến độ bóc tách **theo từng Bài học** (cùng CTE, nhóm theo `lesson_id`, lọc `t.topic_id = ?`):
 ```sql
 -- thay phần SELECT / GROUP BY của câu trên bằng:
@@ -826,13 +839,13 @@ OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
 
 | | |
 |---|---|
-| URL | `POST /api/student/submit-essay-ocr` — `multipart/form-data`: `questionId`, `essayImage` |
+| URL | `POST /api/student/submit-essay-ocr` — `multipart/form-data`: `questionId`, `essayImage` (và/hoặc `studentAnswer`: lời giải gõ bằng văn bản, ≤ 20.000 ký tự — phải có ít nhất một trong hai) |
 
 **Luồng chính** (`EssayService`, bất đồng bộ — NFR-02)
 1. Kiểm tra `questionId` tồn tại, `ESSAY` (không lọc `is_active`, BR-05).
-2. Kiểm tra file theo VAL-18: kích thước ≤ 5 MB, MIME, *magic bytes* (JPEG `FF D8 FF`; PNG `89 50 4E 47`; WebP `RIFF….WEBP`), đọc được bằng `ImageIO` và ≤ 4096×4096. Sai → 400 (TC-OCR-01, 02).
+2. Kiểm tra file theo VAL-18: kích thước ≤ 5 MB, MIME, *magic bytes* (JPEG `FF D8 FF`; PNG `89 50 4E 47`; WebP `RIFF….WEBP`), đọc được bằng `ImageIO` và ≤ 4096×4096. Sai → 400 (TC-OCR-01, 02). *Triển khai* (`ImageValidator`): định dạng xác định bằng magic bytes, không tin đuôi tệp; JPEG / PNG đọc kích thước bằng `ImageIO` (chỉ đọc header); JDK không đọc được WebP nên kích thước WebP đọc trực tiếp từ header RIFF (`VP8` / `VP8L` / `VP8X`). Ảnh không hợp lệ bị từ chối **trước khi gọi AI**.
 3. `RateLimiter.check(studentId, GRADING)` (hạn mức học sinh, 4.5).
-4. (Khuyến nghị) thu nhỏ ảnh có cạnh dài > 2000 px về 2000 px, xuất JPEG chất lượng 85 để giảm thời gian và token.
+4. (Khuyến nghị — **chưa triển khai**) thu nhỏ ảnh có cạnh dài > 2000 px về 2000 px, xuất JPEG chất lượng 85 để giảm thời gian và token.
 5. Chuyển sang UC-OCR-02 (chấm). **Chưa lưu file** cho tới khi AI đọc được ảnh.
 
 #### UC-OCR-02 — AI đọc ảnh, chấm điểm, nhận xét (FR-OCR-02, FR-OCR-03)
@@ -853,14 +866,15 @@ OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
 ```
 4. Hậu xử lý: `score` ép về `[0,10]` và **làm tròn tới 0.25** (`ScoreUtil.roundQuarter(8.8) = 8.75`); sanitize mọi chuỗi.
 5. `legible = false` → trả **422** "Không đọc được bài làm, vui lòng chụp lại rõ nét hơn"; **không lưu** gì (TC-OCR-03).
-6. `legible = true` → lưu ảnh: `FileStorageService.save()` → `essays/{studentId}/{uuid}.jpg`; rồi `INSERT`; nếu `INSERT` lỗi thì xóa file vừa lưu:
+6. `legible = true` (AI bỏ trống trường này cũng coi là `true`) → lưu ảnh: `FileStorageService.storeEssay()` → `${app.upload-dir}/essays/{studentId}/{uuid}.{jpg|png|webp}` (đuôi theo định dạng thật); rồi `INSERT`; nếu `INSERT` lỗi thì xóa file vừa lưu:
 ```sql
 INSERT INTO submissions (student_id, question_id, submission_type, essay_image_path, extracted_text,
                          ai_score, final_score, ai_feedback, suggested_correction, status)
 VALUES (?, ?, 'ESSAY', ?, ?, ?, ?, ?, ?, 'AI_GRADED')      -- final_score = ai_score ban đầu
 ```
    `ai_feedback` = `detailedFeedback` + danh sách `errors` ghép thành văn bản.
-7. Trả JSON cho học sinh: `submissionId`, `extractedText`, `score`, `detailedFeedback`, `errors`, `suggestedCorrection`, `status = "AI_GRADED"`, `canAskTutor = (errors không rỗng)`. Giao diện ghi rõ **"Điểm tạm thời — chờ giáo viên xác nhận"** (BR-09).
+7. Trả JSON cho học sinh: `submissionId`, `extractedText`, `score`, `detailedFeedback`, `errors`, `suggestedCorrection`, `imageUrl`, `status = "AI_GRADED"`, `canAskTutor = (errors không rỗng HOẶC score < 10)` (AI có thể không liệt kê lỗi nhưng vẫn trừ điểm). Giao diện ghi rõ **"Điểm tạm thời — chờ giáo viên xác nhận"** (BR-09), liệt kê lỗi sai (chèn bằng `textContent`); `suggested_correction` lưu ở cột riêng và hiện cho giáo viên khi duyệt.
+8. Quy tắc `legible = false` nằm trong phần cấu trúc JSON do ứng dụng tự nối vào prompt (4.4), nên có hiệu lực kể cả khi `GRADING_PROMPT` trong CSDL là bản cũ.
 
 #### UC-OCR-03 — Xem lại kết quả và ảnh (FR-OCR-03)
 
@@ -1200,3 +1214,33 @@ Quy tắc: trang HTML → view lỗi; request `/api/**` hoặc `Accept: applicat
 - [ ] Chuẩn bị 2 ảnh tự luận mẫu: một bài đúng, một bài sai cận tích phân; một ảnh không phải bài toán (kiểm tra `legible=false`).
 - [ ] Chạy hết bộ test ở SRS mục 9.2, đặc biệt TC-SEC-01, 08 và TC-AI-03, 05.
 - [ ] Chuẩn bị giải thích 3 sơ đồ tuần tự (5.4) và đoạn prompt gia sư (5.1) để trả lời câu hỏi về thuật toán AI.
+
+## 10. HIỆN TRẠNG TRIỂN KHAI (đồng bộ với mã nguồn nhánh `project-v2`)
+
+Mục này ghi những chỗ mã nguồn **hiện tại** còn khác đặc tả ở trên, để báo cáo và demo không mô tả sai. Khi sửa xong một dòng thì xóa dòng đó.
+
+**URL thực tế khác sitemap (SRS 5.2) — sẽ chuẩn hóa sau:**
+
+| Đặc tả | Hiện tại |
+|---|---|
+| `GET /files/essays/{submissionId}` (ảnh bài tự luận; quy tắc 4 ở 2.1) | `GET /uploads/essays/{studentId}/{uuid}.{ext}` (ảnh cũ: `/uploads/{uuid}.{ext}`). Quyền kiểm tra trong `FileController` theo chủ bài: chủ bài, `TEACHER`, `ADMIN` xem được; học sinh khác 403; chưa đăng nhập → `/login` |
+| `GET /student/essay/result/{submissionId}` | Kết quả hiện ngay trên trang nộp bài; xem lại qua `/student/history?type=ESSAY` |
+| `/student/tutor`, `/student/tutor/{sessionId}`, `/student/tutor/new` | `/student/ai-tutor`, `/student/ai-tutor?sessionId=`; mở từ câu sai / bài tự luận: `/student/ai-tutor?mode=QUESTION&questionId=` hoặc `?mode=SUBMISSION&submissionId=` |
+| `/student/lessons/{id}` | `/student/lesson?id=` |
+| `/student/essay/{questionId}` | `/student/essay?lessonId=&questionId=` |
+| `/teacher/questions/new`, `/teacher/questions/generate`, `/teacher/submissions/essay/{id}` | `/teacher/questions?action=create`, `/teacher/ai/generate`, `/teacher/submissions?id=` |
+| `POST /teacher/topics/{id}/delete`, `/teacher/lessons/{id}/update`… | `POST /teacher/topics`, `POST /teacher/lessons` kèm `action=create|update|delete` |
+
+**Chức năng chưa làm / làm khác:**
+
+| Mục | Hiện tại |
+|---|---|
+| VAL-11 (4 mức độ khó, `reference_solution`) | CSDL còn `Level` 1–3; chưa có cột `reference_solution` — chấm tự luận dùng `explanation_latex` làm `{{REFERENCE}}` |
+| FRS 4.3 (thử lại 1 + 3 lần, chờ 1 s / 3 s, `MAX_TOKENS`, ping "OK" 15 s) | Thử lại tối đa 3 lần gọi chung cho JSON hỏng và 429/5xx, chờ 0,7 s / 1,4 s; chưa xử lý `MAX_TOKENS` |
+| UC-AUTH-01 | Chưa tách thông báo tài khoản bị khóa, chưa chặn sau 5 lần sai, chưa quay lại trang định vào sau đăng nhập |
+| UC-OCR-01 bước 4 | Chưa thu nhỏ ảnh trước khi gửi AI |
+| UC-TUT-04 | Danh sách phiên gia sư: 15 phiên gần nhất, chưa phân trang / lọc trạng thái |
+| Giao diện (Claude.md 4.5) | Chưa có `layout.jsp` chung, `field-error.tag`, `math.tag`; Bootstrap / KaTeX tải từ CDN (demo cần mạng) |
+| Cấu hình `application.properties` | `db.url` dùng CSDL `MathTutorDB` (không phải `EduTutorMath12` như 1.5) |
+
+**Quyết định của nhóm (khác đặc tả gốc, đã cập nhật vào SRS / FRS):** BR-05 — nội dung xóa mềm chỉ ẩn ở phía quản lý, học sinh vẫn ôn tập được.

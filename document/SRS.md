@@ -5,7 +5,7 @@
 | Thông tin | Nội dung |
 |---|---|
 | Đồ án | PRJ301 — Java Web Application |
-| Phiên bản tài liệu | 2.1.1 (BR-05: xóa mềm chỉ ẩn khỏi trang quản lý, học sinh vẫn ôn tập được; nút Xóa báo trước kết quả). 2.1.0: chuyển tầng dữ liệu sang JPA; bổ sung validation nhiều lớp, đối chiếu rubric, phụ lục Q&A |
+| Phiên bản tài liệu | 2.1.2 (đồng bộ với mã nguồn: script SQL 01–10, BR-03 áp dụng khi tạo bài học, trắc nghiệm ngẫu nhiên + chấm từng câu, tiến độ theo lần làm gần nhất; hiện trạng triển khai ở FRS mục 10). 2.1.1: BR-05 xóa mềm chỉ ẩn khỏi trang quản lý, học sinh vẫn ôn tập được; nút Xóa báo trước kết quả. 2.1.0: chuyển tầng dữ liệu sang JPA; bổ sung validation nhiều lớp, đối chiếu rubric, phụ lục Q&A |
 | Kiến trúc | Spring MVC 6 (framework chọn từ danh sách của rubric), Jakarta Servlet 6.0, **Spring Data JPA + Hibernate 6.6**, Jakarta Bean Validation, SQL Server |
 | Giao diện | JSP + JSTL + **Bootstrap 5.3** (framework UI duy nhất) + KaTeX |
 | AI | Google Gemini REST API (model cấu hình được trong CSDL) |
@@ -309,11 +309,11 @@ flowchart TD
 | Teacher | `/teacher/results` | Kết quả học sinh |
 | Student | `/student/dashboard` | Tổng quan, tiến độ |
 | Student | `/student/topics`, `/student/lessons/{id}` | Chọn chủ đề/bài, xem bài giảng |
-| Student | `/student/quiz?lessonId=` | Luyện trắc nghiệm |
+| Student | `/student/quiz?lessonId=&difficulty=&limit=` | Luyện trắc nghiệm: đề ngẫu nhiên, lọc mức độ, 5–30 câu, chấm từng câu |
 | Student | `/student/essay?lessonId=`, `/student/essay/{questionId}` | Chọn câu tự luận, nộp ảnh |
 | Student | `/student/tutor`, `/student/tutor/{sessionId}` | Danh sách phiên, khung chat gia sư |
 | Student | `/student/topics/{topicId}/progress` | Tiến độ chi tiết theo từng bài học của một chủ đề |
-| Student | `/student/history` | Lịch sử làm bài |
+| Student | `/student/history?type=&lessonId=` | Lịch sử làm bài (lọc loại bài, bài học) |
 
 ### 5.3. Giao diện với hệ thống ngoài (Gemini)
 - Giao thức: HTTPS REST, `POST https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent`.
@@ -507,7 +507,7 @@ Ghi chú thiết kế:
 - Rubric nêu "5–6 bảng"; đồ án có **6 bảng lõi** (`users`, `topics`, `lessons`, `questions`, `submissions`, `tutor_sessions`) cộng **4 bảng phụ** xuất hiện *do chuẩn hóa*: `lesson_materials`, `question_options`, `tutor_messages` là thuộc tính đa trị (quan hệ 1–N) buộc phải tách để đạt 1NF/3NF; `ai_configs` lưu cấu hình AI để Admin đổi không cần sửa code. Có thể nhóm thành 4 cụm: *người dùng* (users) • *nội dung* (topics, lessons, lesson_materials, questions, question_options) • *kết quả* (submissions) • *AI* (ai_configs, tutor_sessions, tutor_messages).
 - Mỗi bảng ánh xạ **một Entity JPA** (10 Entity); `hbm2ddl.auto=none` — script SQL là nguồn sự thật, Hibernate không tự sửa cấu trúc.
 - Điểm trắc nghiệm quy ra thang 10 (đúng = 10, sai = 0) để thống nhất với tự luận; `is_correct` giữ kết quả đúng/sai.
-- Script đầy đủ (DDL, chỉ mục, dữ liệu mẫu) trong `EduTutor_Database.sql` (trong repo: `document/sql/01…06`). Mật khẩu mẫu của mọi tài khoản seed là **`EduTutor@123`** (đạt VAL-02), được lưu dạng BCrypt.
+- Script đầy đủ (DDL, chỉ mục, dữ liệu mẫu) trong `EduTutor_Database.sql` (trong repo: `document/sql/01…10`, chạy theo thứ tự số). `01` tạo lại CSDL (**xóa CSDL cũ**), `02` dữ liệu mẫu; `03`–`10` nâng cấp cấu trúc, chạy lại nhiều lần không lỗi — dùng để cập nhật CSDL đang có dữ liệu (chi tiết FRS 1.7). Mật khẩu mẫu của mọi tài khoản seed là **`EduTutor@123`** (đạt VAL-02), được lưu dạng BCrypt.
 
 ### 6.3. Lưu trữ file
 Ảnh bài tự luận lưu ngoài thư mục web, tại `${app.upload-dir}/essays/{studentId}/{uuid}.{ext}`; CSDL chỉ lưu đường dẫn tương đối. Ảnh chỉ được phục vụ qua controller có kiểm tra quyền (chủ bài, giáo viên, admin).
@@ -540,7 +540,7 @@ Ghi chú thiết kế:
 |---|---|
 | BR-01 | Chỉ tài khoản `ACTIVE` mới đăng nhập được (`SUSPENDED`, `INACTIVE` bị từ chối); tài khoản bị khóa đang đăng nhập sẽ bị chặn ở request kế tiếp. `SUSPENDED` được mở khóa; `INACTIVE` (xóa mềm) được Admin khôi phục về `ACTIVE` |
 | BR-02 | Hệ thống phải luôn còn ít nhất 1 Admin `ACTIVE`; không cho khóa/xóa/hạ quyền Admin cuối cùng; Admin không tự khóa chính mình |
-| BR-03 | Áp dụng cho **toàn bộ tài nguyên giáo viên**: chủ đề (`topics`), bài học (`lessons`), bài giảng (`lesson_materials`) và câu hỏi (`questions`). Giáo viên chỉ sửa/xóa mục có `created_by` là mình; Admin có toàn quyền trên toàn hệ thống. Mọi giáo viên vẫn được *xem* nội dung dùng chung |
+| BR-03 | Áp dụng cho **toàn bộ tài nguyên giáo viên**: chủ đề (`topics`), bài học (`lessons`), bài giảng (`lesson_materials`) và câu hỏi (`questions`). Giáo viên chỉ sửa/xóa mục có `created_by` là mình; Admin có toàn quyền trên toàn hệ thống. Mọi giáo viên vẫn được *xem* nội dung dùng chung. Giáo viên chỉ được **thêm bài học vào chủ đề do mình tạo** (để chủ đề của người khác không bị chặn xóa bởi bài học lạ) |
 | BR-04 | Câu trắc nghiệm có đúng 4 phương án A–D và đúng 1 phương án đúng; câu tự luận không có phương án |
 | BR-05 | Việc xóa luôn do **giáo viên / Admin chủ động** bấm Xóa và xác nhận; hệ thống chỉ quyết định *cách* xóa. **Câu hỏi:** đã có bài nộp (hoặc phiên gia sư mở từ câu đó) thì chuyển `is_active = 0` (xóa mềm), chưa có thì xóa hẳn. **Bài học:** không xóa nếu còn câu hỏi *đang hoạt động*; kiểm tra bằng `countByLessonIdAndIsActiveTrue(lessonId) == 0`. Nếu chỉ còn câu hỏi đã xóa mềm (`is_active = 0`) thì cho phép xóa: xóa cứng khi không còn bài nộp / phiên gia sư liên quan, ngược lại xóa mềm bài học (`lessons.is_active = 0`). **Chủ đề:** không xóa nếu còn bài học *đang hoạt động*; xóa cứng khi không còn bài học nào, ngược lại xóa mềm (`topics.is_active = 0`). **Phạm vi ẩn:** bản ghi xóa mềm chỉ bị ẩn ở **phía quản lý** (danh sách, sửa/xóa, chọn bài học khi soạn câu hỏi / sinh đề / thêm bài giảng, số liệu dashboard giáo viên và Admin chỉ lấy `is_active = 1`). **Phía học sinh** vẫn thấy và dùng bình thường (danh sách chủ đề / bài học, bài giảng, luyện trắc nghiệm, tự luận, gia sư AI) để **ôn tập**; lịch sử làm bài giữ nguyên. Tên chủ đề chỉ cần duy nhất trong các chủ đề đang hoạt động |
 | BR-06 | Người dùng đã có dữ liệu liên quan chỉ được xóa mềm (`INACTIVE`) |
