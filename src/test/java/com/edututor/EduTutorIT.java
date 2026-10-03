@@ -44,8 +44,8 @@ import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 /**
  * Kiểm thử tích hợp end-to-end (tên *IT: không chạy trong {@code mvn package}): Tomcat nhúng + toàn bộ Spring MVC +
  * Spring Data JPA/Hibernate + SQL Server thật + Gemini giả (mock HTTP).
- * Cần CSDL đã nạp document/sql/01..09 (06 bảng LessonMaterials, 07 khóa ai_configs, 08 trạng thái phiên gia sư,
- * 09 tách AiScore / FinalScore);
+ * Cần CSDL đã nạp document/sql/01..10 (06 bảng LessonMaterials, 07 khóa ai_configs, 08 trạng thái phiên gia sư,
+ * 09 tách AiScore / FinalScore, 10 Lessons.CreatedBy);
  * chạy riêng:
  * <pre>
  * mvn verify -Pintegration -Dit.db.url="jdbc:sqlserver://localhost:1433;databaseName=MathTutorDB_verify;encrypt=true;trustServerCertificate=true"
@@ -246,6 +246,48 @@ class EduTutorIT {
                 + ",\"feedbackToStudent\":\"Nhận xét bước\",\"nextPromptOrQuestion\":\"Câu hỏi bước " + step + "\""
                 + ",\"needsStudentInput\":" + needsInput + ",\"inputRequestHint\":" + (hint == null ? "null" : "\"" + hint + "\"")
                 + ",\"isSessionCompleted\":" + done + ",\"finalSummary\":" + (done ? "\"Kết luận $x=2$\"" : "null") + "}";
+    }
+
+    /** Ảnh PNG / JPEG thật kích thước w×h (tạo trong bộ nhớ). */
+    static byte[] image(String format, int w, int h) throws Exception {
+        java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_RGB);
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(img, format, out);
+        return out.toByteArray();
+    }
+
+    /** Header WebP lossless (VP8L) w×h: đủ để kiểm tra magic bytes và kích thước. */
+    static byte[] webpLossless(int w, int h) {
+        byte[] b = new byte[40];
+        System.arraycopy("RIFF".getBytes(), 0, b, 0, 4);
+        b[4] = 32;
+        System.arraycopy("WEBPVP8L".getBytes(), 0, b, 8, 8);
+        b[16] = 20;
+        b[20] = 0x2F;
+        int bits = (w - 1) | (h - 1) << 14;
+        b[21] = (byte) bits;
+        b[22] = (byte) (bits >> 8);
+        b[23] = (byte) (bits >> 16);
+        b[24] = (byte) (bits >> 24);
+        return b;
+    }
+
+    /** Header WebP mở rộng (VP8X) với kích thước canvas w×h. */
+    static byte[] webpExtended(int w, int h) {
+        byte[] b = new byte[40];
+        System.arraycopy("RIFF".getBytes(), 0, b, 0, 4);
+        b[4] = 32;
+        System.arraycopy("WEBPVP8X".getBytes(), 0, b, 8, 8);
+        b[16] = 10;
+        int cw = w - 1;
+        int ch = h - 1;
+        b[24] = (byte) cw;
+        b[25] = (byte) (cw >> 8);
+        b[26] = (byte) (cw >> 16);
+        b[27] = (byte) ch;
+        b[28] = (byte) (ch >> 8);
+        b[29] = (byte) (ch >> 16);
+        return b;
     }
 
     static final byte[] PNG = java.util.Base64.getDecoder().decode(
@@ -776,6 +818,14 @@ class EduTutorIT {
         String url = j.get("imageUrl").asText();
         assertTrue(url.startsWith("/uploads/") && url.endsWith(".png"), url);
         assertTrue(Files.exists(uploadDir.resolve(url.substring("/uploads/".length()))));
+        // SRS 6.3: ảnh lưu theo thư mục học sinh essays/{studentId}/{uuid}.{ext}
+        int studentId = count("SELECT UserId FROM Users WHERE Username = 'student1'");
+        assertTrue(url.startsWith("/uploads/essays/" + studentId + "/"), url);
+        // UC-OCR-02: trả trạng thái chờ duyệt và cờ gia sư; lời giải gợi ý lưu ở cột riêng
+        assertEquals("AI_GRADED", j.get("status").asText());
+        assertTrue(j.has("errors") && j.has("canAskTutor"));
+        assertEquals("$x=1$", scalar("SELECT SuggestedCorrection FROM Submissions WHERE SubmissionId = ?",
+                j.get("submissionId").asInt()));
 
         // Payload gửi Gemini: ảnh Base64 + đề bài, dùng VISION_MODEL, key ở header
         JsonNode sent = JSON.readTree(lastRequestBody);
@@ -800,6 +850,42 @@ class EduTutorIT {
         // Ảnh chỉ phục vụ cho chủ bài / giáo viên / admin (TC-SEC-07); người ẩn danh bị chuyển về /login
         Resp img = c.get(url);
         assertEquals(200, img.status());
+        assertEquals(404, c.get("/uploads/essays/" + studentId + "/khong-co.png").status());
+
+        // TC-OCR-03: AI báo không đọc được → 422, KHÔNG lưu bài làm, KHÔNG lưu ảnh
+        int subsBefore = count("SELECT COUNT(*) FROM Submissions WHERE StudentId = ?", studentId);
+        long filesBefore;
+        try (java.util.stream.Stream<java.nio.file.Path> f = Files.walk(uploadDir)) {
+            filesBefore = f.filter(Files::isRegularFile).count();
+        }
+        script.add(new String[]{"200", "{\"legible\":false,\"extractedText\":\"\",\"score\":0,"
+                + "\"detailedFeedback\":\"Ảnh mờ\",\"errors\":[],\"suggestedCorrection\":\"\"}"});
+        Resp blurry = c.multipart("/api/student/submit-essay-ocr", Map.of("questionId", "3"), "essayImage", "mo.png",
+                "image/png", PNG);
+        assertEquals(422, blurry.status(), blurry.body());
+        assertTrue(blurry.has("Không đọc được bài làm"), blurry.body());
+        assertEquals(subsBefore, count("SELECT COUNT(*) FROM Submissions WHERE StudentId = ?", studentId));
+        try (java.util.stream.Stream<java.nio.file.Path> f = Files.walk(uploadDir)) {
+            assertEquals(filesBefore, f.filter(Files::isRegularFile).count(), "không lưu ảnh khi không đọc được");
+        }
+
+        // VAL-18: WebP được chấp nhận, lưu đuôi .webp, phục vụ đúng Content-Type
+        Resp webp = c.multipart("/api/student/submit-essay-ocr", Map.of("questionId", "3"), "essayImage", "bai.webp",
+                "image/webp", webpLossless(800, 600));
+        assertEquals(200, webp.status(), webp.body());
+        String webpUrl = JSON.readTree(webp.body()).get("data").get("imageUrl").asText();
+        assertTrue(webpUrl.startsWith("/uploads/essays/" + studentId + "/") && webpUrl.endsWith(".webp"), webpUrl);
+        assertTrue(lastRequestBody.contains("image/webp"), "gửi Gemini đúng MIME");
+        Resp webpImg = c.get(webpUrl);
+        assertEquals(200, webpImg.status());
+        assertTrue(webpImg.contentType().startsWith("image/webp"), webpImg.contentType());
+        // VAL-18: ảnh vượt 4096×4096 bị từ chối trước khi gọi AI
+        int callsBefore = geminiCalls;
+        Resp huge = c.multipart("/api/student/submit-essay-ocr", Map.of("questionId", "3"), "essayImage", "to.png",
+                "image/png", image("png", 4097, 10));
+        assertEquals(400, huge.status(), huge.body());
+        assertTrue(huge.has("4096"), huge.body());
+        assertEquals(callsBefore, geminiCalls, "không gọi AI với ảnh không hợp lệ");
         assertEquals(302, new Client().get(url).status());
         Client otherStudent = new Client();
         otherStudent.login("student2", "123456");
@@ -1226,6 +1312,39 @@ class EduTutorIT {
         t2.login("teacher2", "123456");
         assertEquals(403, t2.form("/teacher/topics", Map.of("action", "delete", "id", "" + topicId)).status());
         assertEquals(1, count("SELECT COUNT(*) FROM Topics WHERE TopicId = ?", topicId));
+
+        // BR-03 / TC-TEA-04 cho bài học: chỉ người tạo hoặc Admin được sửa / xóa
+        c.form("/teacher/lessons", Map.of("action", "create", "topicId", "" + topicId, "title", "it_Bài của GV1",
+                "summary", "s", "content", "c", "youtubeUrl", ""));
+        int ownLesson = count("SELECT LessonId FROM Lessons WHERE Title = N'it_Bài của GV1'");
+        int teacher1Id = count("SELECT UserId FROM Users WHERE Username = 'teacher1'");
+        assertEquals(teacher1Id, count("SELECT CreatedBy FROM Lessons WHERE LessonId = ?", ownLesson), "ghi người tạo");
+        assertEquals(403, t2.get("/teacher/lessons?action=edit&id=" + ownLesson).status(), "GV2 không mở form sửa");
+        assertEquals(403, t2.form("/teacher/lessons", Map.of("action", "update", "id", "" + ownLesson,
+                "topicId", "" + topicId, "title", "it_GV2 sửa trộm", "summary", "s", "content", "c")).status());
+        assertEquals("it_Bài của GV1", scalar("SELECT Title FROM Lessons WHERE LessonId = ?", ownLesson));
+        assertEquals(403, t2.form("/teacher/lessons", Map.of("action", "delete", "id", "" + ownLesson)).status());
+        assertEquals(1, count("SELECT COUNT(*) FROM Lessons WHERE LessonId = ?", ownLesson));
+        // GV2 không được thêm bài học vào chủ đề của GV1
+        assertEquals(403, t2.form("/teacher/lessons", Map.of("action", "create", "topicId", "" + topicId,
+                "title", "it_GV2 chen bai", "summary", "s", "content", "c")).status());
+        assertEquals(0, count("SELECT COUNT(*) FROM Lessons WHERE Title = N'it_GV2 chen bai'"));
+        // GV2 không thấy nút Sửa / Xóa bài học của GV1 trong danh sách
+        assertFalse(t2.get("/teacher/lessons?topicId=" + topicId).has("action=edit&id=" + ownLesson));
+        assertTrue(c.get("/teacher/lessons?topicId=" + topicId).has("action=edit&id=" + ownLesson));
+        // Admin có toàn quyền
+        Client adm = new Client();
+        adm.login("admin", "123456");
+        assertEquals(302, adm.form("/teacher/lessons", Map.of("action", "update", "id", "" + ownLesson,
+                "topicId", "" + topicId, "title", "it_Admin sửa", "summary", "s", "content", "c")).status());
+        assertEquals("it_Admin sửa", scalar("SELECT Title FROM Lessons WHERE LessonId = ?", ownLesson));
+        assertEquals(teacher1Id, count("SELECT CreatedBy FROM Lessons WHERE LessonId = ?", ownLesson),
+                "Admin sửa không đổi người tạo");
+        assertEquals(302, adm.form("/teacher/lessons", Map.of("action", "delete", "id", "" + ownLesson)).status());
+        assertEquals(0, count("SELECT COUNT(*) FROM Lessons WHERE LessonId = ?", ownLesson));
+        for (int i = 0; i < 3; i++) {
+            c.get("/teacher/lessons?topicId=" + topicId); // đọc flash còn tồn đọng
+        }
 
         // BR-05: không xóa chủ đề còn bài học (TC-TEA-01)
         c.form("/teacher/lessons", Map.of("action", "create", "topicId", "" + topicId, "title", "it_Bài học giữ lại",

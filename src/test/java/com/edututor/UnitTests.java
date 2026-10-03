@@ -23,6 +23,7 @@ import com.edututor.interceptor.AuthInterceptor;
 import com.edututor.interceptor.CsrfInterceptor;
 import com.edututor.repository.UserRepository;
 import com.edututor.util.HtmlSanitizer;
+import com.edututor.util.ImageValidator;
 import com.edututor.util.Pager;
 import com.edututor.util.ScoreUtil;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -450,5 +451,78 @@ class UnitTests {
         assertTrue(PromptBuilder.missingPlaceholders("QUIZ_GEN_PROMPT",
                 "{{COUNT}} {{TOPIC}} {{LESSON}} {{DIFFICULTY}}").isEmpty());
         assertEquals(List.of("{{REFERENCE}}"), PromptBuilder.missingPlaceholders("GRADING_PROMPT", "Đề: {{QUESTION}}"));
+    }
+
+    /** Ảnh PNG / JPEG thật kích thước w×h (tạo trong bộ nhớ). */
+    static byte[] image(String format, int w, int h) throws Exception {
+        java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_RGB);
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(img, format, out);
+        return out.toByteArray();
+    }
+
+    /** Header WebP lossless (VP8L) w×h: đủ để kiểm tra magic bytes và kích thước. */
+    static byte[] webpLossless(int w, int h) {
+        byte[] b = new byte[40];
+        System.arraycopy("RIFF".getBytes(), 0, b, 0, 4);
+        b[4] = 32;
+        System.arraycopy("WEBPVP8L".getBytes(), 0, b, 8, 8);
+        b[16] = 20;
+        b[20] = 0x2F;
+        int bits = (w - 1) | (h - 1) << 14;
+        b[21] = (byte) bits;
+        b[22] = (byte) (bits >> 8);
+        b[23] = (byte) (bits >> 16);
+        b[24] = (byte) (bits >> 24);
+        return b;
+    }
+
+    /** Header WebP mở rộng (VP8X) với kích thước canvas w×h. */
+    static byte[] webpExtended(int w, int h) {
+        byte[] b = new byte[40];
+        System.arraycopy("RIFF".getBytes(), 0, b, 0, 4);
+        b[4] = 32;
+        System.arraycopy("WEBPVP8X".getBytes(), 0, b, 8, 8);
+        b[16] = 10;
+        int cw = w - 1;
+        int ch = h - 1;
+        b[24] = (byte) cw;
+        b[25] = (byte) (cw >> 8);
+        b[26] = (byte) (cw >> 16);
+        b[27] = (byte) ch;
+        b[28] = (byte) (ch >> 8);
+        b[29] = (byte) (ch >> 16);
+        return b;
+    }
+
+    /** VAL-18 / TC-OCR-01: magic bytes, đọc được, tối đa 4096×4096; WebP đọc kích thước từ header. */
+    @Test
+    void imageValidatorChecksFormatAndDimensions() throws Exception {
+        ImageValidator.ImageInfo png = ImageValidator.validate(image("png", 640, 480));
+        assertEquals("image/png", png.mimeType());
+        assertEquals("png", png.extension());
+        assertEquals(640, png.width());
+        assertEquals(480, png.height());
+        assertEquals("jpg", ImageValidator.validate(image("jpg", 100, 50)).extension());
+        assertEquals(4096, ImageValidator.validate(image("png", 4096, 1)).width(), "đúng giới hạn vẫn hợp lệ");
+
+        ImageValidator.ImageInfo webp = ImageValidator.validate(webpLossless(1200, 900));
+        assertEquals("image/webp", webp.mimeType());
+        assertEquals("webp", webp.extension());
+        assertEquals(1200, webp.width());
+        assertEquals(900, webp.height());
+        assertEquals(3000, ImageValidator.validate(webpExtended(3000, 2000)).width());
+
+        // Quá 4096 px (PNG thật và WebP), tệp .exe đổi đuôi, tệp hỏng → từ chối với thông báo tiếng Việt
+        IllegalArgumentException big = org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> ImageValidator.validate(image("png", 4097, 1)));
+        assertTrue(big.getMessage().contains("4096"), big.getMessage());
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> ImageValidator.validate(webpExtended(5000, 10)));
+        IllegalArgumentException exe = org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> ImageValidator.validate("MZ\u0090\u0000 day la tep exe".getBytes()));
+        assertTrue(exe.getMessage().contains("JPG, PNG hoặc WebP"));
+        byte[] broken = java.util.Arrays.copyOf(image("png", 10, 10), 12); // chỉ còn chữ ký PNG
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () -> ImageValidator.validate(broken));
     }
 }

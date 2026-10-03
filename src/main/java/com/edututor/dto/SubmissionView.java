@@ -204,4 +204,10 @@ public class SubmissionView implements Serializable {
     public void setReviewedByName(String reviewedByName) { this.reviewedByName = reviewedByName; }
     public Date getReviewedAt() { return reviewedAt; }
     public void setReviewedAt(Date reviewedAt) { this.reviewedAt = reviewedAt; }
+
+    /** Lời giải đúng AI đề xuất (cột SuggestedCorrection). */
+    private String suggestedCorrection;
+
+    public String getSuggestedCorrection() { return suggestedCorrection; }
+    public void setSuggestedCorrection(String suggestedCorrection) { this.suggestedCorrection = suggestedCorrection; }
 }

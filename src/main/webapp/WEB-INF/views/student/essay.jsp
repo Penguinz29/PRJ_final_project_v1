@@ -99,8 +99,9 @@
                                                                 <p class="mb-1 fw-bold fs-5 text-muted">Kéo thả ảnh vào
                                                                     đây</p>
                                                                 <p class="text-muted small">hoặc click để chọn file</p>
+                                                                <%-- VAL-18: JPG / PNG / WebP ≤ 5MB, ≤ 4096×4096; capture mở camera sau trên điện thoại --%>
                                                                 <input type="file" name="essayImage" id="essayImageFile"
-                                                                    accept="image/jpeg, image/png"
+                                                                    accept="image/jpeg,image/png,image/webp" capture="environment"
                                                                     style="display:none;" />
                                                                 <div id="imagePreview" style="display:none;"
                                                                     class="mt-3">
@@ -145,10 +146,18 @@
                                                     <span class="badge bg-primary fs-6" id="essayScore"></span>
                                                 </div>
                                                 <div class="card-body p-4">
+                                                    <%-- BR-09: điểm AI chỉ là điểm tạm thời --%>
+                                                    <div class="alert alert-warning py-2 small">
+                                                        <i class="bi bi-hourglass-split me-1"></i><strong>Điểm tạm thời</strong> — chờ giáo viên xác nhận.
+                                                    </div>
                                                     <h6 class="fw-bold">Nội dung nhận diện</h6>
                                                     <div class="p-3 bg-light rounded latex-content mb-4" id="essayExtracted" style="white-space:pre-wrap;"></div>
                                                     <h6 class="fw-bold">Nhận xét chi tiết</h6>
-                                                    <div class="p-3 bg-light rounded latex-content mb-4" id="essayFeedback" style="white-space:pre-wrap;"></div>
+                                                    <div class="p-3 bg-light rounded latex-content mb-3" id="essayFeedback" style="white-space:pre-wrap;"></div>
+                                                    <div id="essayErrorsWrap" class="mb-4 d-none">
+                                                        <h6 class="fw-bold text-danger">Các lỗi sai</h6>
+                                                        <ul class="list-group latex-content" id="essayErrors"></ul>
+                                                    </div>
                                                     <h6 class="fw-bold">Lời giải đúng gợi ý</h6>
                                                     <div class="p-3 bg-light rounded latex-content mb-3" id="essayCorrection" style="white-space:pre-wrap;"></div>
                                                     <%-- FR-OCR-04: mở gia sư AI từ bài tự luận vừa chấm (href gán sau khi chấm xong) --%>
@@ -262,6 +271,22 @@
                                         document.getElementById('essayExtracted').textContent = data.data.extractedText || '(không có)';
                                         document.getElementById('essayFeedback').textContent = data.data.detailedFeedback || '';
                                         document.getElementById('essayCorrection').textContent = data.data.suggestedCorrection || '';
+                                        // Danh sách lỗi sai (chèn bằng textContent, không dùng innerHTML)
+                                        const errList = document.getElementById('essayErrors');
+                                        errList.textContent = '';
+                                        (data.data.errors || []).forEach(e => {
+                                            const li = document.createElement('li');
+                                            li.className = 'list-group-item';
+                                            if (e.location) {
+                                                const loc = document.createElement('strong');
+                                                loc.textContent = e.location + ': ';
+                                                li.appendChild(loc);
+                                            }
+                                            li.appendChild(document.createTextNode(e.description || ''));
+                                            errList.appendChild(li);
+                                        });
+                                        document.getElementById('essayErrorsWrap').classList.toggle('d-none', !(data.data.errors || []).length);
+                                        document.getElementById('btnAskTutor').classList.toggle('d-none', !data.data.canAskTutor);
                                         document.getElementById('btnAskTutor').href = document.body.dataset.ctx
                                             + '/student/ai-tutor?mode=SUBMISSION&submissionId=' + encodeURIComponent(data.data.submissionId);
                                         resultBox.classList.remove('d-none');

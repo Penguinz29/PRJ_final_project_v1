@@ -127,6 +127,7 @@ final class ViewMapper {
         v.setReviewedByName(s.getReviewedBy() == null ? null : s.getReviewedBy().getFullName());
         v.setReviewedAt(toDate(s.getReviewedAt()));
         v.setAiFeedback(s.getAiFeedback());
+        v.setSuggestedCorrection(s.getSuggestedCorrection());
         v.setTeacherFeedback(s.getTeacherFeedback());
         v.setReviewed(s.isReviewed());
         v.setSubmittedAt(toDate(s.getSubmittedAt()));

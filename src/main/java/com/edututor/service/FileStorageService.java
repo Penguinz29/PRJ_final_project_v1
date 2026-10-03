@@ -25,13 +25,18 @@ public class FileStorageService {
         this.root = Paths.get(uploadDir).toAbsolutePath().normalize();
     }
 
-    /** @return đường dẫn tương đối để lưu CSDL, ví dụ /uploads/3f2a....png */
-    public String store(byte[] data, String extension) {
+    /**
+     * Lưu ảnh bài tự luận vào {@code essays/{studentId}/{uuid}.{ext}} (SRS 6.3).
+     *
+     * @return đường dẫn tương đối để lưu CSDL, ví dụ /uploads/essays/4/3f2a....png
+     */
+    public String storeEssay(int studentId, byte[] data, String extension) {
         try {
-            Files.createDirectories(root);
-            String name = UUID.randomUUID() + "." + extension;
-            Files.write(root.resolve(name), data);
-            return URL_PREFIX + name;
+            String relative = "essays/" + studentId + "/" + UUID.randomUUID() + "." + extension;
+            Path file = root.resolve(relative).normalize();
+            Files.createDirectories(file.getParent());
+            Files.write(file, data);
+            return URL_PREFIX + relative;
         } catch (IOException e) {
             throw new UncheckedIOException("Không thể lưu ảnh bài làm: " + e.getMessage(), e);
         }

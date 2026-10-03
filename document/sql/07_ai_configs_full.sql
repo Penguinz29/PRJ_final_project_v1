@@ -60,7 +60,7 @@ NHIỆM VỤ:
 3. Chấm điểm theo thang 10, làm tròn đến 0.25.
 4. Nêu rõ VỊ TRÍ sai sót (bước/dòng nào, sai gì) và những điểm học sinh đã làm tốt.
 5. Đưa ra lời giải đúng, đầy đủ.
-6. Nếu ảnh không đọc được hoặc không phải bài giải toán: cho 0 điểm và giải thích lý do.',
+6. Nếu ảnh không đọc được hoặc không phải bài giải toán: đặt legible = false, không chấm điểm và nêu lý do.',
  N'Prompt chấm bài tự luận. Bắt buộc giữ {{QUESTION}}, {{REFERENCE}}');
 
 INSERT INTO AiConfigs (ConfigKey, ConfigValue, [Description])

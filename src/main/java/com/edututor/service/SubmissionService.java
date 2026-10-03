@@ -198,7 +198,7 @@ public class SubmissionService {
     /** Lưu bài tự luận đã được AI chấm (chờ giáo viên duyệt). Gọi SAU khi AI trả lời, ngoài transaction chờ AI. */
     @Transactional
     public int saveEssaySubmission(int studentId, int questionId, String studentAnswer, String imagePath,
-                                   double score, String aiFeedback) {
+                                   double score, String aiFeedback, String suggestedCorrection) {
         Question q = questionRepository.findWithLessonByQuestionId(questionId)
                 .orElseThrow(() -> new NotFoundException("Câu hỏi tự luận không tồn tại."));
         Submission sub = new Submission();
@@ -212,6 +212,7 @@ public class SubmissionService {
         sub.setAiScore(ScoreUtil.toDecimal(score));
         sub.setFinalScore(ScoreUtil.toDecimal(score));
         sub.setAiFeedback(aiFeedback);
+        sub.setSuggestedCorrection(suggestedCorrection == null || suggestedCorrection.isBlank() ? null : suggestedCorrection);
         sub.setStatus(SubmissionStatus.AI_GRADED);
         return submissionRepository.saveAndFlush(sub).getSubmissionId();
     }

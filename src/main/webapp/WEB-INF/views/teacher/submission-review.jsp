@@ -115,6 +115,16 @@
                                 </div>
                             </div>
                         </c:if>
+                        <c:if test="${not empty sub.suggestedCorrection}">
+                            <div class="mt-3 p-3 border border-success-subtle bg-success-subtle rounded">
+                                <h6 class="text-success fw-bold mb-1">
+                                    <i class="bi bi-lightbulb me-1"></i>Lời giải gợi ý của AI:
+                                </h6>
+                                <div class="latex-content small" style="white-space: pre-wrap;">
+                                    <c:out value="${sub.suggestedCorrection}" />
+                                </div>
+                            </div>
+                        </c:if>
                     </div>
                 </div>
             </div>

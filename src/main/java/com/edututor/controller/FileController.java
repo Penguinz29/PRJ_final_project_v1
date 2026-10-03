@@ -34,10 +34,23 @@ public class FileController {
         this.storage = storage;
     }
 
+    /** Ảnh lưu theo thư mục học sinh: /uploads/essays/{studentId}/{uuid}.{ext} (SRS 6.3). */
+    @GetMapping("/uploads/essays/{studentId:\\d+}/{filename:[A-Za-z0-9._-]+}")
+    public ResponseEntity<Resource> essayImageByStudent(@PathVariable String studentId, @PathVariable String filename,
+                                                        @SessionAttribute(AuthInterceptor.SESSION_USER) SessionUser user) {
+        return serve("essays/" + studentId + "/" + filename, user);
+    }
+
+    /** Ảnh cũ lưu phẳng trong thư mục upload (trước khi tách theo học sinh). */
     @GetMapping("/uploads/{filename:[A-Za-z0-9._-]+}")
     public ResponseEntity<Resource> essayImage(@PathVariable String filename,
                                                @SessionAttribute(AuthInterceptor.SESSION_USER) SessionUser user) {
-        String urlPath = FileStorageService.URL_PREFIX + filename;
+        return serve(filename, user);
+    }
+
+    private ResponseEntity<Resource> serve(String relative, SessionUser user) {
+        String filename = relative.substring(relative.lastIndexOf('/') + 1);
+        String urlPath = FileStorageService.URL_PREFIX + relative;
         Integer ownerId = submissionService.findEssayImageOwner(urlPath)
                 .orElseThrow(() -> new NotFoundException("Không tìm thấy ảnh bài làm."));
         if (user.isStudent() && ownerId != user.getUserId()) {
@@ -50,6 +63,7 @@ public class FileController {
         String lower = filename.toLowerCase(Locale.ROOT);
         MediaType type = lower.endsWith(".png") ? MediaType.IMAGE_PNG
                 : (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) ? MediaType.IMAGE_JPEG
+                : lower.endsWith(".webp") ? MediaType.parseMediaType("image/webp")
                 : MediaType.APPLICATION_OCTET_STREAM;
         return ResponseEntity.ok()
                 .contentType(type)
