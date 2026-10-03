@@ -10,7 +10,7 @@
 | Giao diện | JSP + JSTL + **Bootstrap 5.3** (framework UI duy nhất) + KaTeX |
 | AI | Google Gemini REST API (model cấu hình được trong CSDL) |
 | Tài liệu đi kèm | `EduTutor_FRS.md` (đặc tả chức năng chi tiết), `EduTutor_Database.sql` (DDL + dữ liệu mẫu) |
-| Quy ước tham chiếu | Bộ tài liệu gốc đặt trong `docs/` (`EduTutor_SRS.md`, `EduTutor_FRS.md`, `EduTutor_Database.sql`). Trong repo hiện tại các tệp này nằm ở `document/SRS.md`, `document/FRS.md` và `document/sql/*.sql`; mọi dẫn chiếu `EduTutor_*` trong tài liệu được hiểu là các tệp tương ứng này. Tài khoản mẫu: `admin`, `teacher1`, `student1`…, mật khẩu **`EduTutor@123`** |
+| Quy ước tham chiếu | Bộ tài liệu gốc đặt trong `docs/` (`EduTutor_SRS.md`, `EduTutor_FRS.md`, `EduTutor_Database.sql`). Trong repo hiện tại các tệp này nằm ở `document/SRS.md`, `document/FRS.md` và `document/sql/01_schema.sql` + `02_data.sql`; mọi dẫn chiếu `EduTutor_*` trong tài liệu được hiểu là các tệp tương ứng này. Tài khoản mẫu: `admin`, `teacher1`, `student1`…, mật khẩu **`EduTutor@123`** |
 
 ---
 
@@ -507,7 +507,7 @@ Ghi chú thiết kế:
 - Rubric nêu "5–6 bảng"; đồ án có **6 bảng lõi** (`users`, `topics`, `lessons`, `questions`, `submissions`, `tutor_sessions`) cộng **4 bảng phụ** xuất hiện *do chuẩn hóa*: `lesson_materials`, `question_options`, `tutor_messages` là thuộc tính đa trị (quan hệ 1–N) buộc phải tách để đạt 1NF/3NF; `ai_configs` lưu cấu hình AI để Admin đổi không cần sửa code. Có thể nhóm thành 4 cụm: *người dùng* (users) • *nội dung* (topics, lessons, lesson_materials, questions, question_options) • *kết quả* (submissions) • *AI* (ai_configs, tutor_sessions, tutor_messages).
 - Mỗi bảng ánh xạ **một Entity JPA** (10 Entity); `hbm2ddl.auto=none` — script SQL là nguồn sự thật, Hibernate không tự sửa cấu trúc.
 - Điểm trắc nghiệm quy ra thang 10 (đúng = 10, sai = 0) để thống nhất với tự luận; `is_correct` giữ kết quả đúng/sai.
-- Script đầy đủ (DDL, chỉ mục, dữ liệu mẫu) trong `EduTutor_Database.sql` (trong repo: `document/sql/01…10`, chạy theo thứ tự số). `01` tạo lại CSDL (**xóa CSDL cũ**), `02` dữ liệu mẫu; `03`–`10` nâng cấp cấu trúc, chạy lại nhiều lần không lỗi — dùng để cập nhật CSDL đang có dữ liệu (chi tiết FRS 1.7). Mật khẩu mẫu của mọi tài khoản seed là **`EduTutor@123`** (đạt VAL-02), được lưu dạng BCrypt.
+- Script đầy đủ (DDL, chỉ mục, dữ liệu mẫu) trong `EduTutor_Database.sql` — trong repo là **2 file**: `document/sql/01_schema.sql` (tạo CSDL, 10 bảng, mọi ràng buộc PK/FK/UNIQUE/CHECK/DEFAULT và chỉ mục; **xóa CSDL cũ cùng tên**) và `document/sql/02_data.sql` (dữ liệu mẫu). Thư mục `document/sql/upgrade/` (`03`–`10`) chỉ để nâng cấp CSDL cũ đang có dữ liệu, chạy lại nhiều lần không lỗi (chi tiết FRS 1.7). Mật khẩu mẫu của mọi tài khoản seed là **`EduTutor@123`** (đạt VAL-02), được lưu dạng BCrypt.
 
 ### 6.3. Lưu trữ file
 Ảnh bài tự luận lưu ngoài thư mục web, tại `${app.upload-dir}/essays/{studentId}/{uuid}.{ext}`; CSDL chỉ lưu đường dẫn tương đối. Ảnh chỉ được phục vụ qua controller có kiểm tra quyền (chủ bài, giáo viên, admin).

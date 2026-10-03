@@ -44,8 +44,8 @@ import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 /**
  * Kiểm thử tích hợp end-to-end (tên *IT: không chạy trong {@code mvn package}): Tomcat nhúng + toàn bộ Spring MVC +
  * Spring Data JPA/Hibernate + SQL Server thật + Gemini giả (mock HTTP).
- * Cần CSDL đã nạp document/sql/01..10 (06 bảng LessonMaterials, 07 khóa ai_configs, 08 trạng thái phiên gia sư,
- * 09 tách AiScore / FinalScore, 10 Lessons.CreatedBy);
+ * Cần một CSDL RIÊNG đã nạp document/sql/01_schema.sql + 02_data.sql (đổi tên MathTutorDB trong 2 file, vd.
+ * thành MathTutorDB_verify); CSDL cũ thì nâng cấp bằng document/sql/upgrade/03..10;
  * chạy riêng:
  * <pre>
  * mvn verify -Pintegration -Dit.db.url="jdbc:sqlserver://localhost:1433;databaseName=MathTutorDB_verify;encrypt=true;trustServerCertificate=true"

@@ -64,13 +64,10 @@ PRJ_final_project_v1/
 ├── pom.xml                                # Maven (WAR, Spring 6.2, Spring Data JPA, Hibernate 6.6, Hikari, Jackson, Jsoup...)
 ├── nb-configuration.xml                   # Gợi ý server Tomcat cho NetBeans
 ├── document/                              # SRS, FRS, Claude.md (quy tắc kỹ thuật)
-│   └── sql/                               # Kịch bản SQL Server (chạy theo thứ tự)
-│       ├── 01_schema.sql                  # Tạo CSDL MathTutorDB và các bảng gốc
-│       ├── 02_seed.sql                    # Dữ liệu mẫu (mật khẩu BCrypt của EduTutor@123)
-│       ├── 03_ai_configs.sql              # Bảng cấu hình AI
-│       ├── 04_update_submissions.sql      # Cột Score & AiFeedback
-│       └── 05_tutor_and_explanation.sql   # TutorSessions, TutorMessages, Questions.ExplanationLatex
-│       └── 06_target_schema_additions.sql # Cột/bảng bổ sung theo SRS/FRS (IsActive, trạng thái bài làm, AwaitingInput, LessonMaterials...) - idempotent
+│   └── sql/                               # Kịch bản SQL Server
+│       ├── 01_schema.sql                  # Tạo CSDL MathTutorDB, 10 bảng + toàn bộ ràng buộc (XÓA CSDL cũ cùng tên)
+│       ├── 02_data.sql                    # Dữ liệu mẫu (mật khẩu BCrypt của EduTutor@123, 15 khóa cấu hình AI)
+│       └── upgrade/                       # 03..10: chỉ để nâng cấp CSDL cũ đang có dữ liệu (xem upgrade/README.md)
 └── src/
     ├── main/
     │   ├── java/com/edututor/
@@ -104,9 +101,11 @@ PRJ_final_project_v1/
 - Maven đi kèm NetBeans (hoặc Maven 3.9+ độc lập).
 
 ### Bước 2: Thiết lập Cơ sở Dữ liệu
-Chạy lần lượt trong SSMS các file trong `document/sql/`: `01_schema.sql` -> `02_seed.sql` -> `03_ai_configs.sql` -> `04_update_submissions.sql` -> `05_tutor_and_explanation.sql` -> `06_target_schema_additions.sql` (tạo bảng `LessonMaterials`, chuyển "video hướng dẫn" cũ `Lessons.YoutubeUrl` thành bài giảng, và các cột bổ sung theo thiết kế chuẩn 10 bảng; **bắt buộc chạy**: thêm cột `Users.Status` (trạng thái tài khoản ACTIVE/SUSPENDED/INACTIVE) mà ứng dụng dùng khi đăng nhập; thiếu script này ứng dụng sẽ lỗi). (`01_schema.sql` **xóa và tạo lại** CSDL `MathTutorDB`.)
+**Cài mới:** chạy trong SSMS 2 file trong `document/sql/`: `01_schema.sql` (tạo CSDL `MathTutorDB`, 10 bảng và ràng buộc — **xóa và tạo lại** nếu CSDL đã tồn tại) rồi `02_data.sql` (dữ liệu mẫu, mật khẩu mọi tài khoản `EduTutor@123`).
 
-> Nếu chạy bằng `sqlcmd`, thêm cờ `-x` (tắt thay thế biến) vì dữ liệu mẫu chứa ký tự `$(`: `sqlcmd -S localhost -U sa -P 123 -C -x -f 65001 -i 02_seed.sql`.
+**Đã có CSDL cũ đang chứa dữ liệu** (ví dụ từ bản Ant): đừng chạy `01_schema.sql`; chạy các script nâng cấp `document/sql/upgrade/03` → `10` (chạy lại nhiều lần không lỗi, không mất dữ liệu) — xem `document/sql/upgrade/README.md`.
+
+> Nếu chạy bằng `sqlcmd`, thêm cờ `-x` (tắt thay thế biến) vì dữ liệu mẫu chứa ký tự `$(`: `sqlcmd -S localhost -U sa -P 123 -C -x -f 65001 -i 02_data.sql`.
 
 ### Bước 3: Cấu hình kết nối
 Sửa `src/main/resources/application.properties` (`db.url`, `db.username`, `db.password`) **hoặc** đặt biến môi trường / `-D` `DB_URL`, `DB_USER`, `DB_PASS` (ưu tiên cao hơn). Ảnh bài làm tự luận lưu ở `app.upload-dir` (mặc định `C:/edututor/uploads`, đổi bằng `UPLOAD_DIR`).
@@ -126,7 +125,8 @@ Hoặc dòng lệnh: `mvn clean package` rồi chép `target/edututor.war` vào 
 ### Bước 5 (tùy chọn): Chạy kiểm thử
 ```bash
 mvn clean package            # build WAR + 17 unit test, không cần CSDL
-# Kiểm thử tích hợp (Tomcat nhúng + SQL Server thật + Gemini giả + đếm số câu SQL chống N+1). Dùng CSDL riêng đã nạp 01..05:
+# Kiểm thử tích hợp (Tomcat nhúng + SQL Server thật + Gemini giả + đếm số câu SQL chống N+1).
+# Dùng CSDL riêng: chạy 01_schema.sql + 02_data.sql sau khi đổi tên MathTutorDB thành MathTutorDB_test:
 mvn clean verify -Pintegration -Dit.db.url="jdbc:sqlserver://localhost:1433;databaseName=MathTutorDB_test;encrypt=true;trustServerCertificate=true" -Dit.db.user=sa -Dit.db.pass=123
 ```
 Bộ kiểm thử tích hợp **xóa bài làm, phiên gia sư và đặt lại mật khẩu seed** của CSDL được trỏ tới, vì vậy đừng chạy trên dữ liệu thật.
