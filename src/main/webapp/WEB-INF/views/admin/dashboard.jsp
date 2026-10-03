@@ -1,5 +1,7 @@
-<%-- File: WEB-INF/views/admin/dashboard.jsp Servlet: AdminDashboardServlet Attributes: totalTeachers(int),
-    totalStudents(int), totalTopics(int), totalQuestions(int), recentUsers(List<User>)
+<%-- File: WEB-INF/views/admin/dashboard.jsp Controller: AdminDashboardController (GET /admin/dashboard)
+    Attributes (StatsService.adminStats, FR-ADM-08): totalUsers, totalTeachers, totalStudents, userRows (vai trò × trạng thái),
+    totalTopics, totalQuestions, aiQuestions, tutorSessions, aiGradedEssays, pendingEssays, weekDays, weekTotal,
+    recentUsers(List<UserView>)
     --%>
     <%@ page contentType="text/html;charset=UTF-8" pageEncoding="UTF-8" %>
         <%@ taglib prefix="ui" tagdir="/WEB-INF/tags" %>
@@ -31,45 +33,120 @@
                                 </span>
                             </div>
 
-                            <%-- Stat cards --%>
+                            <%-- FR-ADM-08: mọi số liệu lấy từ dữ liệu lưu trong CSDL (không dùng bộ đếm trong RAM) --%>
                                 <div class="row g-3 mb-4">
                                     <div class="col-sm-6 col-xl-3">
                                         <div class="stat-card">
-                                            <div class="stat-icon blue"><i class="bi bi-person-workspace"></i></div>
+                                            <div class="stat-icon blue"><i class="bi bi-people"></i></div>
                                             <div>
-                                                <div class="stat-number">${totalTeachers}</div>
-                                                <div class="stat-label">Giáo viên</div>
+                                                <div class="stat-number">${totalUsers}</div>
+                                                <div class="stat-label">Người dùng · ${totalTeachers} GV, ${totalStudents} HS</div>
                                             </div>
                                         </div>
                                     </div>
                                     <div class="col-sm-6 col-xl-3">
                                         <div class="stat-card">
-                                            <div class="stat-icon green"><i class="bi bi-mortarboard"></i></div>
-                                            <div>
-                                                <div class="stat-number">${totalStudents}</div>
-                                                <div class="stat-label">Học sinh</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="col-sm-6 col-xl-3">
-                                        <div class="stat-card">
-                                            <div class="stat-icon orange"><i class="bi bi-folder2"></i></div>
-                                            <div>
-                                                <div class="stat-number">${totalTopics}</div>
-                                                <div class="stat-label">Chủ đề</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="col-sm-6 col-xl-3">
-                                        <div class="stat-card">
-                                            <div class="stat-icon purple"><i class="bi bi-patch-question"></i></div>
+                                            <div class="stat-icon orange"><i class="bi bi-patch-question"></i></div>
                                             <div>
                                                 <div class="stat-number">${totalQuestions}</div>
-                                                <div class="stat-label">Câu hỏi</div>
+                                                <div class="stat-label">Câu hỏi · ${aiQuestions} do AI sinh · ${totalTopics} chủ đề</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-sm-6 col-xl-3">
+                                        <div class="stat-card">
+                                            <div class="stat-icon purple"><i class="bi bi-robot"></i></div>
+                                            <div>
+                                                <div class="stat-number">${tutorSessions}</div>
+                                                <div class="stat-label">Phiên gia sư AI đã tạo</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-sm-6 col-xl-3">
+                                        <div class="stat-card">
+                                            <div class="stat-icon green"><i class="bi bi-image"></i></div>
+                                            <div>
+                                                <div class="stat-number">${aiGradedEssays}</div>
+                                                <div class="stat-label">Bài tự luận chấm qua AI · ${pendingEssays} chờ duyệt</div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
+
+                                <div class="row g-3 mb-4">
+                                    <%-- Người dùng theo vai trò × trạng thái --%>
+                                    <div class="col-lg-6">
+                                        <div class="card h-100">
+                                            <div class="card-header"><i class="bi bi-person-lines-fill me-2 text-primary"></i>Người dùng theo vai trò và trạng thái</div>
+                                            <div class="table-responsive">
+                                                <table class="table table-sm mb-0 align-middle" id="userStatusTable">
+                                                    <thead class="table-light">
+                                                    <tr>
+                                                        <th>Vai trò</th>
+                                                        <th class="text-end">Hoạt động</th>
+                                                        <th class="text-end">Bị khóa</th>
+                                                        <th class="text-end">Đã xóa</th>
+                                                        <th class="text-end">Tổng</th>
+                                                    </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                    <c:forEach var="r" items="${userRows}">
+                                                        <tr>
+                                                            <td>
+                                                                <c:choose>
+                                                                    <c:when test="${r.role == 'ADMIN'}">Quản trị viên</c:when>
+                                                                    <c:when test="${r.role == 'TEACHER'}">Giáo viên</c:when>
+                                                                    <c:otherwise>Học sinh</c:otherwise>
+                                                                </c:choose>
+                                                            </td>
+                                                            <td class="text-end">${r.ACTIVE}</td>
+                                                            <td class="text-end">${r.SUSPENDED}</td>
+                                                            <td class="text-end">${r.INACTIVE}</td>
+                                                            <td class="text-end fw-semibold">${r.total}</td>
+                                                        </tr>
+                                                    </c:forEach>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <%-- Lượt làm bài 7 ngày gần nhất: một chuỗi số liệu → biểu đồ cột một màu, không cần chú thích --%>
+                                    <div class="col-lg-6">
+                                        <div class="card h-100">
+                                            <div class="card-header d-flex justify-content-between">
+                                                <span><i class="bi bi-bar-chart me-2 text-primary"></i>Lượt làm bài 7 ngày gần nhất</span>
+                                                <span class="small text-muted">Tổng: <strong class="text-body">${weekTotal}</strong></span>
+                                            </div>
+                                            <div class="card-body">
+                                                <div class="week-chart" role="img" aria-label="Lượt làm bài 7 ngày gần nhất, tổng ${weekTotal}">
+                                                    <c:forEach var="d" items="${weekDays}">
+                                                        <div class="week-col" title="${d.label}: ${d.total} lượt">
+                                                            <div class="week-bar-wrap">
+                                                                <div class="week-bar" style="height:${d.total == 0 ? 0 : (d.pct < 3 ? 3 : d.pct)}%"></div>
+                                                            </div>
+                                                            <div class="week-label">${d.label}</div>
+                                                        </div>
+                                                    </c:forEach>
+                                                </div>
+                                                <%-- Bảng dữ liệu cho trình đọc màn hình --%>
+                                                <table class="visually-hidden">
+                                                    <caption>Lượt làm bài theo ngày</caption>
+                                                    <c:forEach var="d" items="${weekDays}"><tr><th>${d.label}</th><td>${d.total}</td></tr></c:forEach>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <style>
+                                    .week-chart { display: flex; align-items: flex-end; gap: 8px; height: 160px; }
+                                    .week-col { flex: 1; display: flex; flex-direction: column; height: 100%; cursor: default; }
+                                    .week-bar-wrap { flex: 1; display: flex; align-items: flex-end; border-bottom: 1px solid var(--border, #e5e7eb); }
+                                    .week-bar { width: 100%; max-width: 36px; margin: 0 auto; background: var(--primary); border-radius: 4px 4px 0 0; }
+                                    .week-col:hover .week-bar { opacity: .8; }
+                                    .week-label { text-align: center; font-size: .75rem; color: var(--bs-secondary-color, #6b7280); margin-top: 4px; }
+                                </style>
 
                                 <%-- Bảng người dùng mới --%>
                                     <div class="card">

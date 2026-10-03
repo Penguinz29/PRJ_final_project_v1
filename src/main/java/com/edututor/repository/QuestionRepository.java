@@ -46,6 +46,9 @@ public interface QuestionRepository extends JpaRepository<Question, Integer>, Jp
 
     long countByActiveTrue();
 
+    /** UC-ADM-08: câu hỏi đang hoạt động do AI sinh. */
+    long countByActiveTrueAndAiGeneratedTrue();
+
     /** Câu trắc nghiệm hiển thị khi làm bài: chỉ chọn cột được phép (không lời giải), tránh nạp Entity đầy đủ. */
     @Query("select new com.edututor.dto.QuizQuestionView(q.questionId, q.content, q.level, q.aiGenerated) "
             + "from Question q where q.lesson.lessonId = :lessonId "

@@ -2,6 +2,7 @@ package com.edututor.repository;
 
 import com.edututor.model.QuestionType;
 import com.edututor.model.Submission;
+import com.edututor.model.SubmissionStatus;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -37,6 +38,18 @@ public interface SubmissionRepository extends JpaRepository<Submission, Integer>
     long countByQuestionTypeAndReviewed(QuestionType type, boolean reviewed);
 
     long countByQuestion_QuestionId(Integer questionId);
+
+    /** UC-ADM-08: số bài theo loại (ESSAY = đã chấm qua AI) và theo loại + trạng thái (AI_GRADED = chờ duyệt). */
+    long countByQuestionType(QuestionType type);
+
+    long countByQuestionTypeAndStatus(QuestionType type, SubmissionStatus status);
+
+    /** UC-ADM-08: lượt làm bài theo ngày trong 7 ngày gần nhất (kể cả hôm nay); ngày không có lượt nào bị thiếu. */
+    @Query(value = "SELECT CONVERT(VARCHAR(10), CAST(s.SubmittedAt AS DATE), 23) AS day, COUNT(*) AS total "
+            + "FROM Submissions s WHERE s.SubmittedAt >= DATEADD(DAY, -6, CAST(SYSDATETIME() AS DATE)) "
+            + "GROUP BY CAST(s.SubmittedAt AS DATE) ORDER BY CAST(s.SubmittedAt AS DATE)",
+            nativeQuery = true)
+    List<DailyCount> countLastSevenDays();
 
     /** Câu hỏi nào trong danh sách đã có bài nộp (dự báo xóa mềm ở trang quản lý, một truy vấn IN). */
     @Query("select distinct s.question.questionId from Submission s where s.question.questionId in :ids")

@@ -8,6 +8,7 @@ import com.edututor.config.RootConfig;
 import com.edututor.dto.QuizQuestionView;
 import com.edututor.service.LessonService;
 import com.edututor.service.QuestionService;
+import com.edututor.service.StatsService;
 import com.edututor.service.SubmissionService;
 import com.edututor.service.TopicService;
 import com.edututor.service.UserService;
@@ -121,5 +122,55 @@ class QueryCountIT {
                 "học sinh: trang + COUNT + tên giáo viên bằng IN");
         assertAtMost(2, statements(() -> ctx.getBean(SubmissionService.class).getEssaySubmissions(false, 1, 10)),
                 "bài tự luận chờ duyệt: trang + COUNT");
+    }
+
+    private static long sql(String query) throws Exception {
+        try (Connection c = db(); Statement st = c.createStatement(); java.sql.ResultSet rs = st.executeQuery(query)) {
+            rs.next();
+            return rs.getLong(1);
+        }
+    }
+
+    /** FR-ADM-08: mọi số liệu dashboard Admin khớp với dữ liệu đếm trực tiếp trong CSDL; số câu SQL cố định. */
+    @Test
+    @SuppressWarnings("unchecked")
+    void adminDashboardStatsMatchDatabase() throws Exception {
+        StatsService service = ctx.getBean(StatsService.class);
+        AtomicReference<java.util.Map<String, Object>> ref = new AtomicReference<>();
+        long queries = statements(() -> ref.set(service.adminStats()));
+        java.util.Map<String, Object> m = ref.get();
+
+        assertEquals(sql("SELECT COUNT(*) FROM Users"), m.get("totalUsers"));
+        assertEquals(sql("SELECT COUNT(*) FROM Users WHERE [Role] = 'TEACHER'"), m.get("totalTeachers"));
+        assertEquals(sql("SELECT COUNT(*) FROM Users WHERE [Role] = 'STUDENT'"), m.get("totalStudents"));
+        assertEquals(sql("SELECT COUNT(*) FROM Questions WHERE IsActive = 1"), m.get("totalQuestions"));
+        assertEquals(sql("SELECT COUNT(*) FROM Questions WHERE IsActive = 1 AND IsAiGenerated = 1"), m.get("aiQuestions"));
+        assertEquals(sql("SELECT COUNT(*) FROM TutorSessions"), m.get("tutorSessions"));
+        assertEquals(sql("SELECT COUNT(*) FROM Submissions WHERE QuestionType = 'ESSAY'"), m.get("aiGradedEssays"));
+        assertEquals(sql("SELECT COUNT(*) FROM Submissions WHERE QuestionType = 'ESSAY' AND [Status] = 'AI_GRADED'"),
+                m.get("pendingEssays"));
+
+        // Vai trò × trạng thái: đủ 3 vai trò, từng ô khớp SQL
+        List<java.util.Map<String, Object>> rows = (List<java.util.Map<String, Object>>) m.get("userRows");
+        assertEquals(3, rows.size());
+        for (java.util.Map<String, Object> r : rows) {
+            for (String status : new String[]{"ACTIVE", "SUSPENDED", "INACTIVE"}) {
+                assertEquals(sql("SELECT COUNT(*) FROM Users WHERE [Role] = '" + r.get("role") + "' AND [Status] = '"
+                        + status + "'"), r.get(status), r.get("role") + "/" + status);
+            }
+        }
+
+        // 7 ngày gần nhất: đủ 7 cột (ngày trống = 0), hôm nay ở cuối, tổng khớp SQL
+        List<java.util.Map<String, Object>> days = (List<java.util.Map<String, Object>>) m.get("weekDays");
+        assertEquals(7, days.size());
+        assertEquals(java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM")),
+                days.get(6).get("label"));
+        long weekSql = sql("SELECT COUNT(*) FROM Submissions "
+                + "WHERE SubmittedAt >= DATEADD(DAY, -6, CAST(SYSDATETIME() AS DATE))");
+        assertEquals(weekSql, ((Number) m.get("weekTotal")).longValue());
+        assertTrue(((Number) m.get("weekTotal")).longValue() >= 5, "có 5 bài 'qc' vừa chèn hôm nay");
+
+        // Mỗi nhóm số liệu là một truy vấn gộp: số câu SQL cố định, không phụ thuộc lượng dữ liệu
+        assertTrue(queries <= 9, "dashboard Admin: " + queries + " câu SQL");
     }
 }

@@ -3,6 +3,7 @@ package com.edututor.repository;
 import com.edututor.model.Role;
 import com.edututor.model.User;
 import com.edututor.model.UserStatus;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -27,6 +28,10 @@ public interface UserRepository extends JpaRepository<User, Integer>, JpaSpecifi
     long countByRole(Role role);
 
     long countByRoleAndStatus(Role role, UserStatus status);
+
+    /** UC-ADM-08: người dùng theo vai trò × trạng thái trong MỘT truy vấn GROUP BY. */
+    @Query("select u.role as role, u.status as status, count(u) as total from User u group by u.role, u.status")
+    List<RoleStatusCount> countByRoleAndStatusGrouped();
 
     /** Có học sinh nào đang được gán cho giáo viên này không (dữ liệu liên quan khi xóa tài khoản). */
     boolean existsByTeacherId(Integer teacherId);

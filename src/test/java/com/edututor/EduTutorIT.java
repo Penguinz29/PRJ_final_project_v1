@@ -984,6 +984,14 @@ class EduTutorIT {
             Resp r = c.get(p);
             assertEquals(200, r.status(), p + " -> " + r.body());
         }
+        // FR-ADM-08: dashboard có đủ các nhóm số liệu
+        Resp dash = c.get("/admin/dashboard");
+        for (String label : new String[]{"Người dùng theo vai trò và trạng thái", "do AI sinh", "Phiên gia sư AI đã tạo",
+                "Bài tự luận chấm qua AI", "chờ duyệt", "Lượt làm bài 7 ngày gần nhất"}) {
+            assertTrue(dash.has(label), "dashboard thiếu: " + label);
+        }
+        assertEquals(7, dash.body().split("class=\"week-col\"", -1).length - 1, "đủ 7 cột ngày");
+
         Resp cfg = c.get("/admin/ai-config");
         assertFalse(cfg.has("test-key-123"), "không in API key ra HTML");
         assertTrue(cfg.has("test****-123"), "NFR-05: khóa hiển thị dạng che");

@@ -5,14 +5,24 @@ import com.edututor.dto.ProgressView;
 import com.edututor.dto.QuestionResultView;
 import com.edututor.model.QuestionType;
 import com.edututor.model.Role;
+import com.edututor.model.SubmissionStatus;
+import com.edututor.model.UserStatus;
+import com.edututor.repository.DailyCount;
 import com.edututor.repository.LessonRepository;
 import com.edututor.repository.ProgressRow;
 import com.edututor.repository.QuestionRepository;
 import com.edututor.repository.QuestionResultRow;
+import com.edututor.repository.RoleStatusCount;
 import com.edututor.repository.SubmissionRepository;
 import com.edututor.repository.TopicRepository;
+import com.edututor.repository.TutorSessionRepository;
 import com.edututor.repository.UserRepository;
 import com.edututor.util.Pager;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,22 +40,93 @@ public class StatsService {
     private final LessonRepository lessons;
     private final QuestionRepository questions;
     private final SubmissionRepository submissions;
+    private final TutorSessionRepository tutorSessions;
 
     public StatsService(UserRepository users, TopicRepository topics, LessonRepository lessons,
-                        QuestionRepository questions, SubmissionRepository submissions) {
+                        QuestionRepository questions, SubmissionRepository submissions,
+                        TutorSessionRepository tutorSessions) {
         this.users = users;
         this.topics = topics;
         this.lessons = lessons;
         this.questions = questions;
         this.submissions = submissions;
+        this.tutorSessions = tutorSessions;
     }
 
+    /**
+     * UC-ADM-08 (FR-ADM-08): số liệu lấy từ dữ liệu lưu bền vững trong CSDL (không dùng bộ đếm trong RAM như
+     * RateLimiter nên không mất khi khởi động lại). Mỗi nhóm số liệu là một truy vấn gộp.
+     */
     public Map<String, Object> adminStats() {
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("totalTeachers", (int) users.countByRole(Role.TEACHER));
-        m.put("totalStudents", (int) users.countByRole(Role.STUDENT));
-        m.put("totalTopics", (int) topics.countByActiveTrue());
-        m.put("totalQuestions", (int) questions.countByActiveTrue());
+
+        // Người dùng theo vai trò × trạng thái (một GROUP BY), đủ ô kể cả ô bằng 0
+        Map<Role, Map<UserStatus, Long>> byRole = new EnumMap<>(Role.class);
+        for (Role r : Role.values()) {
+            Map<UserStatus, Long> row = new EnumMap<>(UserStatus.class);
+            for (UserStatus s : UserStatus.values()) {
+                row.put(s, 0L);
+            }
+            byRole.put(r, row);
+        }
+        for (RoleStatusCount c : users.countByRoleAndStatusGrouped()) {
+            byRole.get(c.getRole()).put(c.getStatus(), c.getTotal());
+        }
+        List<Map<String, Object>> userRows = new ArrayList<>();
+        long allUsers = 0;
+        for (Role r : Role.values()) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            long sum = 0;
+            row.put("role", r.name());
+            for (UserStatus s : UserStatus.values()) {
+                long n = byRole.get(r).get(s);
+                row.put(s.name(), n);
+                sum += n;
+            }
+            row.put("total", sum);
+            allUsers += sum;
+            userRows.add(row);
+        }
+        m.put("userRows", userRows);
+        m.put("totalUsers", allUsers);
+        m.put("totalTeachers", byRole.get(Role.TEACHER).values().stream().mapToLong(Long::longValue).sum());
+        m.put("totalStudents", byRole.get(Role.STUDENT).values().stream().mapToLong(Long::longValue).sum());
+
+        // Nội dung
+        m.put("totalTopics", topics.countByActiveTrue());
+        m.put("totalQuestions", questions.countByActiveTrue());
+        m.put("aiQuestions", questions.countByActiveTrueAndAiGeneratedTrue());
+
+        // AI và bài làm
+        m.put("tutorSessions", tutorSessions.count());
+        m.put("aiGradedEssays", submissions.countByQuestionType(QuestionType.ESSAY));
+        m.put("pendingEssays", submissions.countByQuestionTypeAndStatus(QuestionType.ESSAY, SubmissionStatus.AI_GRADED));
+
+        // Lượt làm bài 7 ngày gần nhất: điền đủ 7 ngày (ngày không có lượt nào = 0)
+        Map<String, Integer> perDay = new HashMap<>();
+        for (DailyCount d : submissions.countLastSevenDays()) {
+            perDay.put(d.getDay(), d.getTotal() == null ? 0 : d.getTotal());
+        }
+        LocalDate today = LocalDate.now();
+        List<Map<String, Object>> days = new ArrayList<>();
+        int weekTotal = 0;
+        int max = 0;
+        for (int i = 6; i >= 0; i--) {
+            LocalDate day = today.minusDays(i);
+            int n = perDay.getOrDefault(day.toString(), 0);
+            Map<String, Object> d = new LinkedHashMap<>();
+            d.put("label", day.format(DateTimeFormatter.ofPattern("dd/MM")));
+            d.put("total", n);
+            days.add(d);
+            weekTotal += n;
+            max = Math.max(max, n);
+        }
+        for (Map<String, Object> d : days) {
+            int n = (Integer) d.get("total");
+            d.put("pct", max == 0 ? 0 : Math.round(n * 100f / max));
+        }
+        m.put("weekDays", days);
+        m.put("weekTotal", weekTotal);
         return m;
     }
 
