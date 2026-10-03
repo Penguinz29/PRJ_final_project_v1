@@ -1,5 +1,6 @@
 package com.edututor.controller.api;
 
+import com.edututor.ai.RateLimiter;
 import com.edututor.dto.ApiResponse;
 import com.edututor.dto.SessionUser;
 import com.edututor.dto.TutorInteractionRequest;
@@ -26,10 +27,13 @@ import org.springframework.web.bind.annotation.SessionAttribute;
 public class TutorApiController {
 
     private final AiTutorService tutorService;
+    private final RateLimiter rateLimiter;
     private final Executor aiExecutor;
 
-    public TutorApiController(AiTutorService tutorService, @Qualifier("aiExecutor") Executor aiExecutor) {
+    public TutorApiController(AiTutorService tutorService, RateLimiter rateLimiter,
+                              @Qualifier("aiExecutor") Executor aiExecutor) {
         this.tutorService = tutorService;
+        this.rateLimiter = rateLimiter;
         this.aiExecutor = aiExecutor;
     }
 
@@ -38,6 +42,7 @@ public class TutorApiController {
             @Valid @RequestBody TutorInteractionRequest req,
             @SessionAttribute(AuthInterceptor.SESSION_USER) SessionUser user) {
         final int studentId = user.getUserId();
+        rateLimiter.check(studentId, RateLimiter.Action.STUDENT_AI); // BR-13: vượt hạn mức → 429
         return CompletableFuture.supplyAsync(
                 () -> ResponseEntity.ok(ApiResponse.ok(tutorService.nextStep(studentId, req))), aiExecutor);
     }

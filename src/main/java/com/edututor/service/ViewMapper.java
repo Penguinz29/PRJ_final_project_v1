@@ -133,7 +133,7 @@ final class ViewMapper {
         v.setConfigId(c.getConfigId());
         v.setConfigKey(c.getConfigKey());
         // Khóa API chỉ hiển thị dạng che, không bao giờ lộ nguyên văn ra giao diện (NFR-05)
-        v.setConfigValue(API_KEY_CONFIG.equals(c.getConfigKey()) ? maskKey(c.getConfigValue()) : c.getConfigValue());
+        v.setConfigValue(c.isSecret() || API_KEY_CONFIG.equals(c.getConfigKey()) ? maskKey(c.getConfigValue()) : c.getConfigValue());
         v.setDescription(c.getDescription());
         v.setUpdatedBy(c.getUpdatedBy() == null ? null : c.getUpdatedBy().getUserId());
         v.setUpdatedByName(c.getUpdatedBy() == null ? null : c.getUpdatedBy().getFullName());

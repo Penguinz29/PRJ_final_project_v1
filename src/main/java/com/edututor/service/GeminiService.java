@@ -41,17 +41,20 @@ public class GeminiService {
     /**
      * Gọi Gemini ở chế độ JSON và chuyển kết quả bằng {@code parser}.
      *
-     * @param vision    true: dùng VISION_MODEL (đa phương thức), false: DEFAULT_MODEL
+     * @param vision      true: dùng VISION_MODEL (đa phương thức) và thời gian chờ gấp đôi, false: DEFAULT_MODEL
+     * @param temperature nhiệt độ của chức năng gọi (TUTOR_/QUIZ_/GRADING_TEMPERATURE)
      * @param minTokens số token đầu ra tối thiểu (lấy max với MAX_OUTPUT_TOKENS trong CSDL)
      * @param parser    chuyển JsonNode sang kết quả; ném exception nếu sai schema để kích hoạt thử lại
      */
-    public <T> T generateJson(String systemInstruction, List<Turn> turns, boolean vision, int minTokens,
-                              Function<JsonNode, T> parser) {
+    public <T> T generateJson(String systemInstruction, List<Turn> turns, boolean vision, double temperature,
+                              int minTokens, Function<JsonNode, T> parser) {
+        int timeout = config.getTimeoutSeconds();
         Settings settings = new Settings(
                 config.getApiKey(),
                 vision ? config.getVisionModel() : config.getDefaultModel(),
-                config.getTemperature(),
-                Math.max(config.getMaxOutputTokens(), minTokens));
+                temperature,
+                Math.max(config.getMaxOutputTokens(), minTokens),
+                vision ? timeout * 2 : timeout);
 
         Exception last = null;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {

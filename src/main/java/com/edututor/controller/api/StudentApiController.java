@@ -1,5 +1,6 @@
 package com.edututor.controller.api;
 
+import com.edututor.ai.RateLimiter;
 import com.edututor.dto.ApiResponse;
 import com.edututor.dto.EssayOcrResponse;
 import com.edututor.dto.QuizAnswerRequest;
@@ -35,12 +36,14 @@ public class StudentApiController {
 
     private final SubmissionService submissionService;
     private final EssayGradingService essayGradingService;
+    private final RateLimiter rateLimiter;
     private final Executor aiExecutor;
 
     public StudentApiController(SubmissionService submissionService, EssayGradingService essayGradingService,
-                                @Qualifier("aiExecutor") Executor aiExecutor) {
+                                RateLimiter rateLimiter, @Qualifier("aiExecutor") Executor aiExecutor) {
         this.submissionService = submissionService;
         this.essayGradingService = essayGradingService;
+        this.rateLimiter = rateLimiter;
         this.aiExecutor = aiExecutor;
     }
 
@@ -66,6 +69,7 @@ public class StudentApiController {
             throw new IllegalArgumentException("Không đọc được ảnh tải lên.");
         }
         final int studentId = user.getUserId();
+        rateLimiter.check(studentId, RateLimiter.Action.STUDENT_AI); // BR-13: dùng chung hạn mức với gia sư
         return CompletableFuture.supplyAsync(() -> ResponseEntity.ok(ApiResponse.ok(
                 essayGradingService.gradeAndSave(studentId, questionId, bytes, studentAnswer))), aiExecutor);
     }

@@ -29,8 +29,12 @@ public class AiConfig {
     private String configKey;
 
     @Nationalized
-    @Column(name = "ConfigValue", nullable = false, length = 500)
+    @Column(name = "ConfigValue", nullable = false, columnDefinition = "NVARCHAR(MAX)")
     private String configValue;
+
+    /** Khóa bí mật (GEMINI_API_KEY): chỉ hiển thị dạng che, không bao giờ ghi log. */
+    @Column(name = "IsSecret", nullable = false)
+    private boolean secret;
 
     @Nationalized
     @Column(name = "`Description`", length = 255)
@@ -54,6 +58,8 @@ public class AiConfig {
     public void setConfigKey(String configKey) { this.configKey = configKey; }
     public String getConfigValue() { return configValue; }
     public void setConfigValue(String configValue) { this.configValue = configValue; }
+    public boolean isSecret() { return secret; }
+    public void setSecret(boolean secret) { this.secret = secret; }
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
     public User getUpdatedBy() { return updatedBy; }

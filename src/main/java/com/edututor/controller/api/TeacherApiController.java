@@ -1,5 +1,6 @@
 package com.edututor.controller.api;
 
+import com.edututor.ai.RateLimiter;
 import com.edututor.dto.ApiResponse;
 import com.edututor.dto.BatchSaveRequest;
 import com.edututor.dto.GenerateQuestionsRequest;
@@ -40,19 +41,24 @@ public class TeacherApiController {
     private final AiExamService aiExamService;
     private final QuestionService questionService;
     private final LessonService lessonService;
+    private final RateLimiter rateLimiter;
     private final Executor aiExecutor;
 
     public TeacherApiController(AiExamService aiExamService, QuestionService questionService,
-                                LessonService lessonService, @Qualifier("aiExecutor") Executor aiExecutor) {
+                                LessonService lessonService, RateLimiter rateLimiter,
+                                @Qualifier("aiExecutor") Executor aiExecutor) {
         this.aiExamService = aiExamService;
         this.questionService = questionService;
         this.lessonService = lessonService;
+        this.rateLimiter = rateLimiter;
         this.aiExecutor = aiExecutor;
     }
 
     @PostMapping(value = "/api/teacher/generate-questions", consumes = MediaType.APPLICATION_JSON_VALUE)
     public CompletableFuture<ResponseEntity<ApiResponse<List<QuestionGenerationDTO>>>> generateQuestions(
-            @Valid @RequestBody GenerateQuestionsRequest req) {
+            @Valid @RequestBody GenerateQuestionsRequest req,
+            @SessionAttribute(AuthInterceptor.SESSION_USER) SessionUser user) {
+        rateLimiter.check(user.getUserId(), RateLimiter.Action.QUIZ_GEN); // BR-13: hạn mức giáo viên → 429
         return CompletableFuture.supplyAsync(
                 () -> ResponseEntity.ok(ApiResponse.ok(aiExamService.generateQuestions(req))), aiExecutor);
     }

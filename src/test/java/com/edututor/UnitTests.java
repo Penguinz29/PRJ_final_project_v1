@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.edututor.ai.AiJsonParser;
+import com.edututor.ai.PromptBuilder;
+import com.edututor.ai.RateLimiter;
 import com.edututor.config.MessageSourceMessageInterpolator;
 import com.edututor.dto.ApiResponse;
 import com.edututor.dto.QuestionGenerationDTO;
@@ -14,6 +16,7 @@ import com.edututor.dto.QuizAnswerResponse;
 import com.edututor.dto.RegisterForm;
 import com.edututor.dto.SessionUser;
 import com.edututor.dto.TutorStepResponse;
+import com.edututor.exception.AiRateLimitException;
 import com.edututor.interceptor.AuthInterceptor;
 import com.edututor.interceptor.CsrfInterceptor;
 import com.edututor.repository.UserRepository;
@@ -342,5 +345,48 @@ class UnitTests {
         assertNull(com.edututor.util.YoutubeUtil.extractId(null));
         assertEquals("https://www.youtube.com/embed/zSnMIO2D4oE",
                 com.edututor.util.YoutubeUtil.getEmbedUrl("https://youtu.be/zSnMIO2D4oE"));
+    }
+
+    /** BR-13 / NFR-06: cửa sổ trượt 60 phút theo (userId, nhóm hành động); hạn mức học sinh và giáo viên độc lập. */
+    @Test
+    void rateLimiterUsesSlidingWindowPerUserAndAction() {
+        java.util.concurrent.atomic.AtomicReference<java.time.Instant> now =
+                new java.util.concurrent.atomic.AtomicReference<>(java.time.Instant.parse("2026-10-03T08:00:00Z"));
+        java.time.Clock clock = new java.time.Clock() {
+            @Override public java.time.ZoneId getZone() { return java.time.ZoneOffset.UTC; }
+            @Override public java.time.Clock withZone(java.time.ZoneId zone) { return this; }
+            @Override public java.time.Instant instant() { return now.get(); }
+        };
+        RateLimiter limiter = new RateLimiter(a -> a == RateLimiter.Action.QUIZ_GEN ? 3 : 2, clock);
+
+        limiter.check(1, RateLimiter.Action.STUDENT_AI);
+        now.set(now.get().plusSeconds(600));
+        limiter.check(1, RateLimiter.Action.STUDENT_AI);
+        AiRateLimitException ex = org.junit.jupiter.api.Assertions.assertThrows(AiRateLimitException.class,
+                () -> limiter.check(1, RateLimiter.Action.STUDENT_AI));
+        assertEquals(50, ex.getRetryAfterMinutes(), "lượt đầu hết hạn sau 50 phút nữa");
+        assertTrue(ex.getMessage().contains("50 phút"));
+
+        // Người khác và nhóm hành động khác không bị ảnh hưởng
+        limiter.check(2, RateLimiter.Action.STUDENT_AI);
+        limiter.check(1, RateLimiter.Action.QUIZ_GEN);
+
+        // Sau 60 phút kể từ lượt đầu, lượt đó rời cửa sổ
+        now.set(java.time.Instant.parse("2026-10-03T09:00:01Z"));
+        limiter.check(1, RateLimiter.Action.STUDENT_AI);
+    }
+
+    /** FRS 4.4 / VAL-17: thay placeholder, nối cấu trúc JSON + phần chốt cố định, phát hiện placeholder bị xóa. */
+    @Test
+    void promptBuilderFillsPlaceholdersAndAppendsFixedRules() {
+        String sys = PromptBuilder.system("Chia {{MIN_STEPS}} đến {{MAX_STEPS}} bước.",
+                java.util.Map.of("MIN_STEPS", "3", "MAX_STEPS", "6"), "JSON: {...}");
+        assertTrue(sys.startsWith("Chia 3 đến 6 bước."), sys);
+        assertTrue(sys.indexOf("JSON: {...}") < sys.indexOf("QUY TẮC CỐ ĐỊNH"), "phần chốt luôn nằm cuối");
+        assertTrue(sys.endsWith(PromptBuilder.FIXED_RULES));
+
+        assertTrue(PromptBuilder.missingPlaceholders("QUIZ_GEN_PROMPT",
+                "{{COUNT}} {{TOPIC}} {{LESSON}} {{DIFFICULTY}}").isEmpty());
+        assertEquals(List.of("{{REFERENCE}}"), PromptBuilder.missingPlaceholders("GRADING_PROMPT", "Đề: {{QUESTION}}"));
     }
 }

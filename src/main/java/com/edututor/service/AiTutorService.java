@@ -1,6 +1,7 @@
 package com.edututor.service;
 
 import com.edututor.ai.GeminiClient.Turn;
+import com.edututor.ai.PromptBuilder;
 import com.edututor.dto.TutorInteractionRequest;
 import com.edututor.dto.TutorMessageView;
 import com.edututor.dto.TutorSessionView;
@@ -15,6 +16,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 
 /**
@@ -26,35 +28,33 @@ import org.springframework.stereotype.Service;
 @Service
 public class AiTutorService {
 
-    private static final int MIN_STEPS = 3;
-    private static final int MAX_STEPS = 6;
-
-    private static final String SYSTEM_INSTRUCTION = String.join("\n",
-            "Bạn là gia sư Toán lớp 12 (chương trình GDPT 2018), dạy theo phương pháp sư phạm từng bước (gợi mở).",
-            "QUY TẮC BẮT BUỘC:",
-            "- TUYỆT ĐỐI KHÔNG giải tắt hoặc đưa lời giải trọn vẹn / đáp số cuối cùng ngay từ bước đầu tiên.",
-            "- Phân tích bài toán thành chuỗi từ 3 đến 6 bước logic sư phạm; totalSteps giữ nguyên trong cả phiên.",
-            "- Mỗi bước gồm: tóm tắt ngắn lý thuyết cần dùng và MỘT câu hỏi gợi mở yêu cầu học sinh tự biến đổi/tính toán.",
-            "- Khi học sinh trả lời bước hiện tại:",
-            "  + ĐÚNG: khen ngắn gọn rồi đưa câu hỏi cho bước kế tiếp (currentStep tăng thêm 1). "
-                    + "Nếu đó là bước cuối đã đúng thì tổng kết và đặt isSessionCompleted = true.",
-            "  + SAI: chỉ ra điểm nhầm lẫn một cách xây dựng, đưa gợi ý (hint) và yêu cầu làm lại ĐÚNG bước hiện tại "
-                    + "(currentStep giữ nguyên, isStepCorrect = false). Không tiết lộ đáp án của bước đó.",
+    /**
+     * Cấu trúc phản hồi do ứng dụng quy định (không nằm trong prompt Admin sửa được), vì server dựa vào các trường
+     * này để chuẩn hóa bước. Phần sư phạm đọc từ TUTOR_SYSTEM_PROMPT.
+     */
+    private static final String JSON_FORMAT = String.join("\n",
+            "CẤU TRÚC PHẢN HỒI BẮT BUỘC:",
             "- Lượt đầu tiên (học sinh vừa nêu bài toán): isStepCorrect = true, currentStep = 1, "
                     + "feedbackToStudent = lời chào và nhận định ngắn về hướng giải (KHÔNG giải), "
                     + "nextPromptOrQuestion = câu hỏi của bước 1, isSessionCompleted = false.",
-            "- Mọi công thức toán đặt trong $...$ (inline) hoặc $$...$$ (khối), cú pháp KaTeX. Trả lời bằng tiếng Việt.",
-            "- Chỉ trả về MỘT JSON object, không markdown, đúng schema:",
+            "- Học sinh trả lời đúng: isStepCorrect = true, currentStep tăng thêm 1; "
+                    + "nếu bước cuối đã đúng thì isSessionCompleted = true.",
+            "- Học sinh trả lời sai: isStepCorrect = false, currentStep giữ nguyên.",
+            "- totalSteps giữ nguyên trong cả phiên.",
+            "Trả về MỘT JSON object đúng schema:",
             "{\"isStepCorrect\": boolean, \"currentStep\": number, \"totalSteps\": number, "
                     + "\"feedbackToStudent\": string, \"nextPromptOrQuestion\": string, \"isSessionCompleted\": boolean}");
 
     private final TutorPersistence persistence;
     private final GeminiService gemini;
+    private final AiConfigService config;
     private final ObjectMapper mapper;
 
-    public AiTutorService(TutorPersistence persistence, GeminiService gemini, ObjectMapper mapper) {
+    public AiTutorService(TutorPersistence persistence, GeminiService gemini, AiConfigService config,
+                          ObjectMapper mapper) {
         this.persistence = persistence;
         this.gemini = gemini;
+        this.config = config;
         this.mapper = mapper;
     }
 
@@ -97,11 +97,15 @@ public class AiTutorService {
                 : "Câu trả lời của học sinh cho bước " + prevStep + ": " + input));
 
         // 3. Gọi AI — nằm NGOÀI mọi transaction để không giữ kết nối DB trong lúc chờ mạng
-        String system = SYSTEM_INSTRUCTION;
+        final int minSteps = config.getTutorMinSteps();
+        final int maxSteps = config.getTutorMaxSteps();
+        String prompt = config.getPrompt(AiConfigService.KEY_TUTOR_PROMPT);
         if (lessonTitle != null) {
-            system += "\nBài học liên quan: " + lessonTitle + ".";
+            prompt += "\nBài học liên quan: " + lessonTitle + ".";
         }
-        TutorStepResponse raw = gemini.generateJson(system, turns, false, 2048, node -> {
+        String system = PromptBuilder.system(prompt,
+                Map.of("MIN_STEPS", String.valueOf(minSteps), "MAX_STEPS", String.valueOf(maxSteps)), JSON_FORMAT);
+        TutorStepResponse raw = gemini.generateJson(system, turns, false, config.getTemperature(), 2048, node -> {
             try {
                 TutorStepResponse r = mapper.treeToValue(node, TutorStepResponse.class);
                 if (r.feedbackToStudent() == null && r.nextPromptOrQuestion() == null) {
@@ -117,7 +121,7 @@ public class AiTutorService {
         });
 
         // 4. Chuẩn hóa theo quy tắc phía server
-        TutorStepResponse step = normalize(raw, first, prevStep);
+        TutorStepResponse step = normalize(raw, first, prevStep, minSteps, maxSteps);
         String aiText = joinText(step.feedbackToStudent(), step.nextPromptOrQuestion());
 
         // 5. Lưu kết quả (transaction ngắn ở bean riêng)
@@ -142,8 +146,9 @@ public class AiTutorService {
         return 1;
     }
 
-    private TutorStepResponse normalize(TutorStepResponse r, boolean firstTurn, int prevStep) {
-        int total = Math.min(MAX_STEPS, Math.max(MIN_STEPS, r.totalSteps()));
+    private TutorStepResponse normalize(TutorStepResponse r, boolean firstTurn, int prevStep,
+                                        int minSteps, int maxSteps) {
+        int total = Math.min(maxSteps, Math.max(minSteps, r.totalSteps()));
         boolean correct = firstTurn || r.isStepCorrect();
         boolean completed;
         int current;

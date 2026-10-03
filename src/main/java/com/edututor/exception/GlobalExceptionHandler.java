@@ -41,7 +41,7 @@ public class GlobalExceptionHandler {
     private static final SecureRandom RANDOM = new SecureRandom();
 
     /** Các mã lỗi mà người dùng có thể tự khắc phục: hiển thị thông báo ngay trên trang trước. */
-    private static final Set<Integer> RECOVERABLE = Set.of(400, 409, 422, 502, 503, 504);
+    private static final Set<Integer> RECOVERABLE = Set.of(400, 409, 422, 429, 502, 503, 504);
 
     private final ObjectMapper mapper;
 
@@ -112,6 +112,14 @@ public class GlobalExceptionHandler {
         log.warn("Vi phạm ràng buộc CSDL tại {} {}", req.getMethod(), req.getRequestURI());
         respond(HttpStatus.CONFLICT, "Dữ liệu bị trùng hoặc đang được sử dụng ở nơi khác nên không thể thực hiện.",
                 null, req, res);
+    }
+
+    /** Vượt hạn mức gọi AI trong giờ (BR-13) → 429 kèm số phút cần chờ. */
+    @ExceptionHandler(AiRateLimitException.class)
+    public void handleRateLimit(AiRateLimitException ex, HttpServletRequest req, HttpServletResponse res)
+            throws IOException {
+        res.setHeader("Retry-After", String.valueOf(ex.getRetryAfterMinutes() * 60));
+        respond(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage(), null, req, res);
     }
 
     /** Lỗi gọi Gemini: 504 hết thời gian, 503 hệ thống bận, 422 dữ liệu không dùng được, còn lại 502. */

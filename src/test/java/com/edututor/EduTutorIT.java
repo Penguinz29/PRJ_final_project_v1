@@ -43,7 +43,7 @@ import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 /**
  * Kiểm thử tích hợp end-to-end (tên *IT: không chạy trong {@code mvn package}): Tomcat nhúng + toàn bộ Spring MVC +
  * Spring Data JPA/Hibernate + SQL Server thật + Gemini giả (mock HTTP).
- * Cần CSDL đã nạp document/sql/01..06 (06 tạo bảng LessonMaterials); chạy riêng:
+ * Cần CSDL đã nạp document/sql/01..07 (06 tạo bảng LessonMaterials, 07 bổ sung khóa ai_configs); chạy riêng:
  * <pre>
  * mvn verify -Pintegration -Dit.db.url="jdbc:sqlserver://localhost:1433;databaseName=MathTutorDB_verify;encrypt=true;trustServerCertificate=true"
  *            -Dit.db.user=sa -Dit.db.pass=123
@@ -300,6 +300,8 @@ class EduTutorIT {
         System.setProperty("DB_PASS", System.getProperty("it.db.pass", "123"));
         System.setProperty("UPLOAD_DIR", uploadDir.toString());
         System.setProperty("gemini.baseUrl", "http://127.0.0.1:" + gemini.getAddress().getPort() + "/v1beta");
+        // Test sửa AiConfigs trực tiếp bằng SQL nên tắt cache cấu hình (mặc định 60 giây)
+        System.setProperty("ai.config.cacheTtlSeconds", "0");
 
         tomcat = new Tomcat();
         tomcat.setBaseDir(Files.createTempDirectory("tomcat").toString());
@@ -335,6 +337,10 @@ class EduTutorIT {
         exec("UPDATE AiConfigs SET ConfigValue = 'gemini-1.5-pro' WHERE ConfigKey = 'VISION_MODEL'");
         exec("UPDATE AiConfigs SET ConfigValue = '0.2' WHERE ConfigKey = 'TUTOR_TEMPERATURE'");
         exec("UPDATE AiConfigs SET ConfigValue = '2048' WHERE ConfigKey = 'MAX_OUTPUT_TOKENS'");
+        exec("UPDATE AiConfigs SET ConfigValue = '3' WHERE ConfigKey = 'TUTOR_MIN_STEPS'");
+        exec("UPDATE AiConfigs SET ConfigValue = '6' WHERE ConfigKey = 'TUTOR_MAX_STEPS'");
+        exec("UPDATE AiConfigs SET ConfigValue = '60' WHERE ConfigKey = 'AI_RATE_LIMIT_PER_HOUR'");
+        exec("UPDATE AiConfigs SET ConfigValue = '300' WHERE ConfigKey = 'AI_RATE_LIMIT_TEACHER_PER_HOUR'");
     }
 
     @AfterAll
@@ -759,7 +765,12 @@ class EduTutorIT {
         }
         Resp cfg = c.get("/admin/ai-config");
         assertFalse(cfg.has("test-key-123"), "không in API key ra HTML");
-        assertTrue(cfg.has("Đã cấu hình"));
+        assertTrue(cfg.has("test****-123"), "NFR-05: khóa hiển thị dạng che");
+        for (String key : new String[]{"QUIZ_TEMPERATURE", "GRADING_TEMPERATURE", "TUTOR_MIN_STEPS", "TUTOR_MAX_STEPS",
+                "AI_TIMEOUT_SECONDS", "AI_RATE_LIMIT_PER_HOUR", "AI_RATE_LIMIT_TEACHER_PER_HOUR",
+                "TUTOR_SYSTEM_PROMPT", "QUIZ_GEN_PROMPT", "GRADING_PROMPT"}) {
+            assertTrue(cfg.has("name=\"" + key + "\""), "FR-ADM-06: form có ô " + key);
+        }
 
         // Cập nhật: để trống API key => giữ nguyên; temperature hợp lệ => lưu
         Resp up = c.form("/admin/ai-config/update", Map.of("GEMINI_API_KEY", "", "DEFAULT_MODEL", "gemini-2.0-flash",
@@ -787,6 +798,33 @@ class EduTutorIT {
         assertTrue(c.get("/admin/ai-config").has("0.0 đến 1.0"));
         // khóa lạ bị bỏ qua
         c.form("/admin/ai-config/update", Map.of("EVIL_KEY", "x"));
+        c.get("/admin/ai-config"); // đọc flash của lần lưu trên để không lẫn với lần sau
+
+        // VAL-15: số bước tối thiểu > tối đa bị từ chối; VAL-17: prompt thiếu placeholder bị từ chối
+        c.form("/admin/ai-config/update", Map.of("TUTOR_MIN_STEPS", "8", "TUTOR_MAX_STEPS", "4"));
+        assertEquals("3", scalar("SELECT ConfigValue FROM AiConfigs WHERE ConfigKey = 'TUTOR_MIN_STEPS'"));
+        assertTrue(c.get("/admin/ai-config").has("không được lớn hơn"));
+        String oldPrompt = (String) scalar("SELECT ConfigValue FROM AiConfigs WHERE ConfigKey = 'TUTOR_SYSTEM_PROMPT'");
+        c.form("/admin/ai-config/update", Map.of("TUTOR_SYSTEM_PROMPT", "Gia sư từng bước, không có placeholder"));
+        assertEquals(oldPrompt, scalar("SELECT ConfigValue FROM AiConfigs WHERE ConfigKey = 'TUTOR_SYSTEM_PROMPT'"));
+        Resp afterBad = c.get("/admin/ai-config");
+        assertTrue(afterBad.has("thiếu placeholder"), "lỗi hiện tại trường prompt");
+        assertTrue(afterBad.has("không có placeholder"), "giữ lại nội dung vừa nhập để sửa");
+
+        // Prompt + số bước + nhiệt độ cấu hình được và đi vào request Gemini; phần chốt cố định luôn được nối
+        String custom = "PROMPT_IT gia sư từng bước, chia {{MIN_STEPS}}-{{MAX_STEPS}} bước";
+        Resp savedPrompt = c.form("/admin/ai-config/update",
+                Map.of("TUTOR_SYSTEM_PROMPT", custom, "TUTOR_MIN_STEPS", "2", "TUTOR_MAX_STEPS", "4"));
+        assertEquals(302, savedPrompt.status());
+        script.clear();
+        st.json("/api/tutor/next-step", "{\"studentInput\":\"kiểm tra prompt\"}");
+        String sys = JSON.readTree(lastRequestBody).path("system_instruction").path("parts").path(0).path("text").asText();
+        assertTrue(sys.contains("PROMPT_IT gia sư từng bước, chia 2-4 bước"), sys);
+        assertTrue(sys.contains("QUY TẮC CỐ ĐỊNH"), "FRS 4.4: phần chốt cố định");
+        assertTrue(sys.contains("isStepCorrect"), "cấu trúc JSON do ứng dụng nối vào");
+        exec("UPDATE AiConfigs SET ConfigValue = ? WHERE ConfigKey = 'TUTOR_SYSTEM_PROMPT'", oldPrompt);
+        exec("UPDATE AiConfigs SET ConfigValue = '3' WHERE ConfigKey = 'TUTOR_MIN_STEPS'");
+        exec("UPDATE AiConfigs SET ConfigValue = '6' WHERE ConfigKey = 'TUTOR_MAX_STEPS'");
 
         // Test connection (UC-ADM-07)
         Resp ping2 = c.form("/api/admin/ai-config/test-connection", Map.of("DEFAULT_MODEL", "gemini-1.5-flash"));
@@ -1367,6 +1405,43 @@ class EduTutorIT {
         assertEquals(404, t1.form("/teacher/materials/" + mid + "/delete", Map.of()).status());
 
         exec("DELETE FROM LessonMaterials WHERE Title LIKE N'it[_]%'");
+    }
+
+    /** BR-13 / NFR-06 / TC-AI-08: vượt hạn mức gọi AI → 429; hạn mức học sinh và giáo viên độc lập; ping không bị giới hạn. */
+    @Test
+    @Order(55)
+    void aiRateLimitReturns429() throws Exception {
+        Client tch = new Client();
+        tch.login("teacher1", "123456");
+        Client st = new Client();
+        st.login("student1", "123456");
+        script.clear();
+        try {
+            // Giáo viên đã sinh đề ở các bài trước => hạn mức 1 lượt/giờ đã hết
+            exec("UPDATE AiConfigs SET ConfigValue = '1' WHERE ConfigKey = 'AI_RATE_LIMIT_TEACHER_PER_HOUR'");
+            int before = geminiCalls;
+            Resp limited = tch.json("/api/teacher/generate-questions", "{\"lessonId\":1,\"difficultyLevel\":1,\"count\":2}");
+            assertEquals(429, limited.status(), limited.body());
+            assertTrue(limited.has("hết lượt AI"), limited.body());
+            assertEquals(before, geminiCalls, "không gọi Gemini khi đã vượt hạn mức");
+            // Hạn mức học sinh độc lập: học sinh vẫn dùng gia sư được
+            Resp tutor = st.json("/api/tutor/next-step", "{\"studentInput\":\"bài toán hạn mức\"}");
+            assertEquals(200, tutor.status(), tutor.body());
+
+            // Học sinh: gia sư + chấm ảnh dùng chung một hạn mức
+            exec("UPDATE AiConfigs SET ConfigValue = '1' WHERE ConfigKey = 'AI_RATE_LIMIT_PER_HOUR'");
+            assertEquals(429, st.json("/api/tutor/next-step", "{\"studentInput\":\"thêm một bài\"}").status());
+
+            // Admin test kết nối không bị giới hạn
+            Client admin = new Client();
+            admin.login("admin", "123456");
+            Resp ping = admin.form("/api/admin/ai-config/test-connection", Map.of());
+            assertEquals(200, ping.status(), ping.body());
+            assertTrue(JSON.readTree(ping.body()).get("success").asBoolean(), ping.body());
+        } finally {
+            exec("UPDATE AiConfigs SET ConfigValue = '60' WHERE ConfigKey = 'AI_RATE_LIMIT_PER_HOUR'");
+            exec("UPDATE AiConfigs SET ConfigValue = '300' WHERE ConfigKey = 'AI_RATE_LIMIT_TEACHER_PER_HOUR'");
+        }
     }
 
     @Test

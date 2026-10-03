@@ -1,6 +1,7 @@
 package com.edututor.service;
 
 import com.edututor.ai.GeminiClient.Turn;
+import com.edututor.ai.PromptBuilder;
 import com.edututor.dto.GenerateQuestionsRequest;
 import com.edututor.dto.QuestionGenerationDTO;
 import com.edututor.dto.LessonView;
@@ -10,6 +11,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 
 /**
@@ -21,25 +23,22 @@ public class AiExamService {
 
     public static final int MAX_QUESTIONS = 10;
 
-    private static final String SYSTEM_INSTRUCTION = String.join("\n",
-            "Bạn là chuyên gia sư phạm Toán lớp 12, soạn đề theo Chương trình Giáo dục Phổ thông 2018 (GDPT 2018).",
-            "QUY ĐỊNH BẮT BUỘC:",
-            "1. Nội dung bám sát chương trình Toán 12 GDPT 2018 và định dạng đề thi THPT Quốc gia.",
-            "2. 100% công thức, ký hiệu toán học phải nằm trong cặp dấu LaTeX $...$ (inline) hoặc $$...$$ (khối), "
-                    + "viết theo cú pháp KaTeX.",
-            "3. Mỗi câu có đúng 4 phương án A, B, C, D và chỉ DUY NHẤT 1 phương án đúng.",
-            "4. Có lời giải chi tiết, từng bước, tường minh.",
-            "5. Chỉ trả về MỘT JSON Array hợp lệ, không thêm lời dẫn, không dùng markdown. Mỗi phần tử có schema:",
+    /** Cấu trúc phản hồi do ứng dụng quy định; phần nội dung sư phạm đọc từ QUIZ_GEN_PROMPT. */
+    private static final String JSON_FORMAT = String.join("\n",
+            "CẤU TRÚC PHẢN HỒI BẮT BUỘC: trả về MỘT JSON Array, mỗi phần tử có schema:",
             "{\"content\": string, \"level\": 1|2|3, \"explanation\": string, \"options\": "
                     + "[{\"letter\": \"A\", \"content\": string, \"isCorrect\": boolean}, ... đủ 4 phần tử A-D]}");
 
     private final GeminiService gemini;
     private final LessonService lessonService;
+    private final AiConfigService config;
     private final ObjectMapper mapper;
 
-    public AiExamService(GeminiService gemini, LessonService lessonService, ObjectMapper mapper) {
+    public AiExamService(GeminiService gemini, LessonService lessonService, AiConfigService config,
+                         ObjectMapper mapper) {
         this.gemini = gemini;
         this.lessonService = lessonService;
+        this.config = config;
         this.mapper = mapper;
     }
 
@@ -60,15 +59,17 @@ public class AiExamService {
         int level = parseLevel(req.difficultyLevel());
         int count = (req.count() == null) ? 3 : Math.min(MAX_QUESTIONS, Math.max(1, req.count()));
 
-        String prompt = "Hãy tạo đúng " + count + " câu hỏi trắc nghiệm.\n"
-                + "- Chuyên đề: " + (isBlank(topicName) ? "Toán 12" : topicName.trim()) + "\n"
-                + "- Bài học: " + (isBlank(lessonName) ? "Kiến thức trọng tâm" : lessonName.trim()) + "\n"
-                + "- Mức độ: " + describeLevel(level) + " (trường \"level\" = " + level + ")";
+        String system = PromptBuilder.system(config.getPrompt(AiConfigService.KEY_QUIZ_PROMPT), Map.of(
+                "COUNT", String.valueOf(count),
+                "TOPIC", isBlank(topicName) ? "Toán 12" : topicName.trim(),
+                "LESSON", isBlank(lessonName) ? "Kiến thức trọng tâm" : lessonName.trim(),
+                "DIFFICULTY", describeLevel(level) + " (trường \"level\" = " + level + ")"), JSON_FORMAT);
+        String request = "Hãy soạn đúng " + count + " câu hỏi trắc nghiệm theo yêu cầu.";
 
         // 700 token cho mỗi câu (kèm lời giải) để không bị cắt cụt JSON
         int minTokens = Math.min(8192, 700 * count + 512);
-        return gemini.generateJson(SYSTEM_INSTRUCTION, List.of(Turn.user(prompt)), false, minTokens,
-                node -> parse(node, level));
+        return gemini.generateJson(system, List.of(Turn.user(request)), false, config.getQuizTemperature(),
+                minTokens, node -> parse(node, level));
     }
 
     private List<QuestionGenerationDTO> parse(JsonNode root, int defaultLevel) {

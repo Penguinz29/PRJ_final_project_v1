@@ -25,8 +25,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class GeminiClient {
 
-    /** Tham số một lần gọi. */
-    public record Settings(String apiKey, String model, double temperature, int maxOutputTokens) {
+    /** Tham số một lần gọi. timeoutSeconds: thời gian chờ đọc phản hồi (AI_TIMEOUT_SECONDS, ảnh gấp đôi). */
+    public record Settings(String apiKey, String model, double temperature, int maxOutputTokens, int timeoutSeconds) {
     }
 
     /** Một phần nội dung: văn bản hoặc ảnh inline (Base64). */
@@ -79,7 +79,7 @@ public class GeminiClient {
             throw new AiServiceException("Chưa cấu hình GEMINI_API_KEY. Vui lòng vào Quản trị > Cấu hình AI để cập nhật.");
         }
         String body = buildBody(s, systemInstruction, turns, json);
-        JsonNode root = post(s.apiKey(), s.model(), body);
+        JsonNode root = post(s.apiKey(), s.model(), body, Duration.ofSeconds(s.timeoutSeconds()));
 
         JsonNode candidate = root.path("candidates").path(0);
         StringBuilder sb = new StringBuilder();
@@ -102,7 +102,7 @@ public class GeminiClient {
         contents.addObject().putArray("parts").addObject().put("text", "Ping. Reply with: Pong");
         body.putObject("generationConfig").put("maxOutputTokens", 50);
         try {
-            post(apiKey, model, mapper.writeValueAsString(body));
+            post(apiKey, model, mapper.writeValueAsString(body), requestTimeout);
         } catch (IOException e) {
             throw new AiServiceException("Không tạo được yêu cầu ping: " + e.getMessage(), e);
         }
@@ -142,14 +142,14 @@ public class GeminiClient {
         }
     }
 
-    private JsonNode post(String apiKey, String model, String body) {
+    private JsonNode post(String apiKey, String model, String body, Duration timeout) {
         if (model == null || model.isBlank()) {
             throw new AiServiceException("Chưa cấu hình model Gemini. Vui lòng vào Quản trị > Cấu hình AI để cập nhật.");
         }
         String m = model.trim();
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/models/" + m + ":generateContent"))
-                .timeout(requestTimeout)
+                .timeout(timeout)
                 .header("Content-Type", "application/json; charset=UTF-8")
                 .header("x-goog-api-key", apiKey)
                 .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))

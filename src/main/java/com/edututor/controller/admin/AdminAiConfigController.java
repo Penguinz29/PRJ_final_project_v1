@@ -1,9 +1,12 @@
 package com.edututor.controller.admin;
 
+import com.edututor.dto.AiConfigView;
 import com.edututor.dto.SessionUser;
+import com.edututor.exception.ConfigValidationException;
 import com.edututor.interceptor.AuthInterceptor;
 import com.edututor.service.AiConfigService;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -25,11 +28,20 @@ public class AdminAiConfigController {
 
     @GetMapping("/admin/ai-config")
     public String list(Model model) {
-        model.addAttribute("configs", aiConfigService.getAllConfigs());
+        List<AiConfigView> configs = aiConfigService.getAllConfigs();
+        Map<String, AiConfigView> byKey = new LinkedHashMap<>();
+        for (AiConfigView c : configs) {
+            byKey.put(c.getConfigKey(), c);
+        }
+        model.addAttribute("configs", configs);
+        model.addAttribute("cfg", byKey);
         return "admin/ai-config";
     }
 
-    /** Cập nhật các tham số cấu hình AI trong một transaction. Chỉ khóa có gửi lên mới được cập nhật. */
+    /**
+     * Cập nhật các tham số cấu hình AI trong một transaction. Chỉ khóa có gửi lên mới được cập nhật.
+     * Có lỗi thì không khóa nào được ghi; form hiển thị lại giá trị vừa nhập kèm lỗi tại từng trường.
+     */
     @PostMapping("/admin/ai-config/update")
     public String update(@RequestParam Map<String, String> params,
                          @SessionAttribute(AuthInterceptor.SESSION_USER) SessionUser admin,
@@ -48,8 +60,11 @@ public class AdminAiConfigController {
         try {
             aiConfigService.updateConfigs(values, admin.getUserId());
             redirect.addFlashAttribute("flash", "Cập nhật cấu hình AI thành công!");
-        } catch (IllegalArgumentException e) {
-            redirect.addFlashAttribute("errorFlash", e.getMessage());
+        } catch (ConfigValidationException e) {
+            values.remove(AiConfigService.KEY_API_KEY); // không đưa khóa bí mật trở lại trang
+            redirect.addFlashAttribute("errorFlash", "Cấu hình chưa hợp lệ, vui lòng kiểm tra các trường được đánh dấu.");
+            redirect.addFlashAttribute("fieldErrors", e.getErrors());
+            redirect.addFlashAttribute("formValues", values);
         }
         return "redirect:/admin/ai-config";
     }

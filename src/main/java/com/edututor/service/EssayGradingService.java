@@ -2,6 +2,7 @@ package com.edututor.service;
 
 import com.edututor.ai.GeminiClient.Part;
 import com.edututor.ai.GeminiClient.Turn;
+import com.edututor.ai.PromptBuilder;
 import com.edututor.dto.EssayGradingResult;
 import com.edututor.dto.EssayOcrResponse;
 import com.edututor.model.Question;
@@ -14,6 +15,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -25,32 +27,28 @@ import org.springframework.stereotype.Service;
 @Service
 public class EssayGradingService {
 
-    private static final String SYSTEM_INSTRUCTION = String.join("\n",
-            "Bạn là giám khảo chấm thi THPT Quốc gia môn Toán (chương trình GDPT 2018).",
-            "Nhiệm vụ:",
-            "1. Nếu có ảnh: đọc chính xác nội dung toán học viết tay (OCR) và chuyển sang LaTeX trong $...$ "
-                    + "-> trường extractedText. Nếu học sinh nhập văn bản: chép lại nguyên văn.",
-            "2. Kiểm tra logic từng bước biến đổi, cận tích phân, dấu và các phép toán so với đề bài.",
-            "3. Chấm điểm theo thang 10.0, làm tròn đến 0.25.",
-            "4. detailedFeedback: nêu rõ VỊ TRÍ sai sót (bước/dòng nào, sai gì) và điểm đã làm tốt.",
-            "5. suggestedCorrection: lời giải đúng, đầy đủ, trình bày bằng LaTeX.",
-            "6. Nếu ảnh không đọc được hoặc không phải bài giải toán: score = 0 và giải thích trong detailedFeedback.",
-            "Mọi công thức đặt trong $...$ hoặc $$...$$ (KaTeX). Trả lời bằng tiếng Việt.",
-            "Chỉ trả về MỘT JSON object, không markdown: "
-                    + "{\"extractedText\": string, \"score\": number, \"detailedFeedback\": string, "
-                    + "\"suggestedCorrection\": string}");
+    /** Cấu trúc phản hồi do ứng dụng quy định; phần nhiệm vụ chấm đọc từ GRADING_PROMPT. */
+    private static final String JSON_FORMAT = String.join("\n",
+            "CẤU TRÚC PHẢN HỒI BẮT BUỘC: trả về MỘT JSON object:",
+            "{\"extractedText\": string (nội dung bài làm đã chép lại), \"score\": number (thang 10), "
+                    + "\"detailedFeedback\": string (nhận xét, vị trí sai), "
+                    + "\"suggestedCorrection\": string (lời giải đúng)}");
+
+    private static final String NO_REFERENCE = "(Không có đáp án tham khảo, hãy tự giải để đối chiếu.)";
 
     private final GeminiService gemini;
+    private final AiConfigService config;
     private final QuestionRepository questionRepository;
     private final SubmissionService submissionService;
     private final FileStorageService storage;
     private final ObjectMapper mapper;
     private final long maxFileSize;
 
-    public EssayGradingService(GeminiService gemini, QuestionRepository questionRepository,
+    public EssayGradingService(GeminiService gemini, AiConfigService config, QuestionRepository questionRepository,
                                SubmissionService submissionService, FileStorageService storage,
                                ObjectMapper mapper, @Value("${app.upload.max-bytes:5242880}") long maxFileSize) {
         this.gemini = gemini;
+        this.config = config;
         this.questionRepository = questionRepository;
         this.submissionService = submissionService;
         this.storage = storage;
@@ -96,8 +94,14 @@ public class EssayGradingService {
             }
         }
 
-        // Payload đa phương thức: [Ảnh Base64] + [System prompt chấm thi + đề bài gốc]
-        StringBuilder prompt = new StringBuilder("ĐỀ BÀI GỐC:\n").append(question.getContent());
+        // System instruction = GRADING_PROMPT (đề + đáp án tham khảo) + cấu trúc JSON + phần chốt cố định
+        String reference = question.getExplanationLatex();
+        String system = PromptBuilder.system(config.getPrompt(AiConfigService.KEY_GRADING_PROMPT), Map.of(
+                "QUESTION", question.getContent(),
+                "REFERENCE", (reference == null || reference.isBlank()) ? NO_REFERENCE : reference), JSON_FORMAT);
+
+        // Payload đa phương thức: [Ảnh Base64] + [bài làm học sinh]
+        StringBuilder prompt = new StringBuilder("Hãy chấm bài làm của học sinh.");
         if (hasText) {
             prompt.append("\n\nLỜI GIẢI HỌC SINH NHẬP BẰNG VĂN BẢN:\n").append(textAnswer.trim());
         }
@@ -108,8 +112,8 @@ public class EssayGradingService {
         }
         parts.add(Part.text(prompt.toString()));
 
-        EssayGradingResult result = gemini.generateJson(SYSTEM_INSTRUCTION, List.of(new Turn("user", parts)),
-                hasImage, 4096, node -> {
+        EssayGradingResult result = gemini.generateJson(system, List.of(new Turn("user", parts)),
+                hasImage, config.getGradingTemperature(), 4096, node -> {
                     try {
                         EssayGradingResult r = mapper.treeToValue(node, EssayGradingResult.class);
                         if (r.score() == null || r.score().isNaN()) {
