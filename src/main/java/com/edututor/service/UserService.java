@@ -13,9 +13,6 @@ import com.edututor.model.User;
 import com.edututor.model.UserStatus;
 import com.edututor.repository.UserRepository;
 import com.edututor.util.Pager;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -42,12 +39,12 @@ public class UserService {
     }
 
     /**
-     * UC-AUTH-01: xác thực đăng nhập. Mật khẩu lưu bằng BCrypt. Tài khoản cũ còn băm SHA-256 vẫn đăng nhập được
-     * và được nâng cấp sang BCrypt ngay lần đăng nhập thành công đầu tiên.
+     * UC-AUTH-01: xác thực đăng nhập. Mật khẩu chỉ lưu bằng BCrypt (FRS 1.4); mã băm không phải BCrypt
+     * (ví dụ SHA-256 không salt của bản cũ) bị từ chối.
      *
      * @return người dùng để lưu vào session (không chứa mã băm), hoặc null nếu sai thông tin / tài khoản bị khóa
      */
-    @Transactional
+    @Transactional(readOnly = true)
     public SessionUser authenticate(String username, String plainPassword) {
         if (username == null || username.isBlank() || plainPassword == null || plainPassword.isEmpty()) {
             return null;
@@ -56,17 +53,8 @@ public class UserService {
         if (user == null || !user.isActive() || user.getPasswordHash() == null) {
             return null;
         }
-        String stored = user.getPasswordHash();
-        boolean ok;
-        if (isBcrypt(stored)) {
-            ok = passwordEncoder.matches(plainPassword, stored);
-        } else if (stored.equalsIgnoreCase(sha256Hex(plainPassword))) {
-            user.setPasswordHash(passwordEncoder.encode(plainPassword)); // dirty checking → UPDATE
-            ok = true;
-        } else {
-            ok = false;
-        }
-        return ok ? new SessionUser(user.getUserId(), user.getUsername(), user.getFullName(), user.getRole().name())
+        return passwordMatches(user, plainPassword)
+                ? new SessionUser(user.getUserId(), user.getUsername(), user.getFullName(), user.getRole().name())
                 : null;
     }
 
@@ -120,26 +108,17 @@ public class UserService {
                 .orElseThrow(() -> new NotFoundException("Tài khoản không tồn tại."));
     }
 
-    /** So khớp mật khẩu với mã băm đã lưu (BCrypt; tài khoản cũ còn SHA-256). */
+    /** So khớp mật khẩu với mã băm BCrypt đã lưu; mã băm định dạng khác luôn bị từ chối. */
     private boolean passwordMatches(User user, String plain) {
         String stored = user.getPasswordHash();
-        if (stored == null || plain == null) {
+        if (stored == null || plain == null || !isBcrypt(stored)) {
             return false;
         }
-        return isBcrypt(stored) ? passwordEncoder.matches(plain, stored) : stored.equalsIgnoreCase(sha256Hex(plain));
+        return passwordEncoder.matches(plain, stored);
     }
 
     private static boolean isBcrypt(String hash) {
         return hash.startsWith("$2a$") || hash.startsWith("$2b$") || hash.startsWith("$2y$");
-    }
-
-    private static String sha256Hex(String s) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8));
-            return java.util.HexFormat.of().formatHex(digest);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 không khả dụng", e);
-        }
     }
 
     /**

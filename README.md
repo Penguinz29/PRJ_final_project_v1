@@ -24,7 +24,7 @@
 | **Truy cập dữ liệu** | **Spring Data JPA 3.5 + Hibernate ORM 6.6** (Jakarta Persistence 3.1) + **HikariCP** | Repository là `interface extends JpaRepository`; `Specification` cho lọc động; `@EntityGraph` + truy vấn `IN` chống N+1; `@Transactional` ở tầng Service; `hbm2ddl.auto=none` (script SQL là nguồn sự thật) |
 | **Cơ sở dữ liệu** | Microsoft SQL Server 2016+ | Driver `mssql-jdbc` |
 | **Validation** | **Jakarta Bean Validation** (Hibernate Validator 8) | Thông báo tiếng Việt trong `messages.properties` (UTF-8), hiển thị tại từng trường bằng `<form:errors>`; ràng buộc nghiệp vụ ở Service; ràng buộc `UNIQUE/CHECK/FK` ở CSDL |
-| **Bảo mật** | `AuthInterceptor` phân quyền ADMIN/TEACHER/STUDENT theo URL (cả `/api/**`), `CsrfInterceptor` (token CSRF cho mọi POST), mật khẩu **BCrypt** (tự nâng cấp từ SHA-256 cũ), đổi session ID sau đăng nhập, Jsoup làm sạch nội dung AI, ảnh upload kiểm tra magic-bytes và chỉ phục vụ cho đúng người | Chống SQL Injection / XSS / CSRF / session fixation |
+| **Bảo mật** | `AuthInterceptor` phân quyền ADMIN/TEACHER/STUDENT theo URL (cả `/api/**`), `CsrfInterceptor` (token CSRF cho mọi POST), mật khẩu **BCrypt**, đổi session ID sau đăng nhập, Jsoup làm sạch nội dung AI, ảnh upload kiểm tra magic-bytes và chỉ phục vụ cho đúng người | Chống SQL Injection / XSS / CSRF / session fixation |
 | **Trí tuệ nhân tạo** | Google Gemini API qua `java.net.http.HttpClient` (model, khóa API, nhiệt độ... cấu hình trong bảng `AiConfigs`) | Sinh đề, Gia sư AI step-by-step, chấm tự luận OCR; chạy bất đồng bộ (`CompletableFuture` + thread pool riêng), tự thử lại tối đa 3 lần |
 | **Giao diện (Frontend)** | HTML5, CSS3, Bootstrap 5, Bootstrap Icons, AJAX/Fetch | Responsive |
 | **Hiển thị Toán học** | KaTeX (Auto-render) | Công thức LaTeX |
@@ -148,7 +148,7 @@ Tất cả các tài khoản mặc định có mật khẩu là: **`EduTutor@123
 ---
 
 ## ⚙️ 7. Lưu ý Kỹ thuật quan trọng
-- **Mật khẩu:** tài khoản seed dùng BCrypt (`EduTutor@123`). Tài khoản cũ còn băm SHA-256 vẫn đăng nhập được và tự được băm lại bằng BCrypt ở lần đăng nhập thành công đầu tiên.
+- **Mật khẩu:** tài khoản seed dùng BCrypt (`EduTutor@123`). Chỉ chấp nhận mã băm BCrypt; mã băm SHA-256 của bản cũ bị từ chối (chạy lại `01_schema.sql` + `02_data.sql` để có dữ liệu BCrypt).
 - **Tầng dữ liệu:** Entity JPA ánh xạ **1-1 với 10 bảng** (tất cả do `01_schema.sql` tạo). Mọi quan hệ `LAZY`; Service map Entity sang DTO bên trong `@Transactional`; không bật Open-Session-In-View; câu hỏi làm bài chỉ chọn cột được phép (không lộ đáp án/lời giải trước khi nộp).
 - **Giao dịch & AI:** các lời gọi Gemini nằm **ngoài** transaction; phần ghi DB của gia sư AI nằm ở bean riêng `TutorPersistence`. Các endpoint `/api/tutor/next-step`, `/api/teacher/generate-questions`, `/api/student/submit-essay-ocr`, `/api/admin/ai-config/test-connection` trả `CompletableFuture`, chạy trên thread pool `aiExecutor` nên không chặn luồng Tomcat.
 - **Phản hồi API thống nhất:** mọi `/api/**` trả `{"success", "message", "data", "errors"}`; `GlobalExceptionHandler` ánh xạ lỗi sang mã HTTP (400 dữ liệu sai, 401, 403, 404, 409 xung đột, 422 AI trả dữ liệu không dùng được, 502/503/504 lỗi AI, 500 kèm mã tham chiếu `ERR-yyyyMMdd-xxxx`) và chuyển về trang trước kèm thông báo cho trang thường.

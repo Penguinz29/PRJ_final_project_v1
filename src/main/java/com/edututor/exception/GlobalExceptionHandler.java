@@ -131,18 +131,20 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Lỗi gọi Gemini: 504 hết thời gian, 503 hệ thống bận, 422 dữ liệu không dùng được, còn lại 502.
-     * Nội dung lỗi thô của Gemini (429/5xx hết lần thử, nội dung bị chặn...) chỉ ghi log, không hiện cho người dùng.
+     * Lỗi gọi Gemini: 504 hết thời gian, còn lại 502 (FRS 6.1). Nội dung lỗi thô của Gemini
+     * (429/5xx hết lần thử, 422, nội dung bị chặn...) chỉ ghi log, không hiện cho người dùng.
+     * Ngoại lệ do hệ thống tự tạo ({@code userFacing}: hàng đợi AI đầy 503, AI trả dữ liệu hỏng 422,
+     * ảnh không đọc được 422) giữ mã và thông báo riêng.
      */
     @ExceptionHandler(AiServiceException.class)
     public void handleAi(AiServiceException ex, HttpServletRequest req, HttpServletResponse res) throws IOException {
         log.warn("Lỗi dịch vụ AI: {}", ex.getMessage());
-        switch (ex.getHttpStatus()) {
-            case 504 -> respond(HttpStatus.GATEWAY_TIMEOUT, "AI phản hồi quá chậm, vui lòng thử lại.", null, req, res);
-            case 503 -> respond(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), null, req, res);
-            case 422 -> respond(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), null, req, res);
-            default -> respond(HttpStatus.BAD_GATEWAY, "AI tạm thời không phản hồi, vui lòng thử lại sau.", null,
-                    req, res);
+        if (ex.isUserFacing()) {
+            respond(HttpStatus.valueOf(ex.getHttpStatus()), ex.getMessage(), null, req, res);
+        } else if (ex.getHttpStatus() == 504) {
+            respond(HttpStatus.GATEWAY_TIMEOUT, "AI phản hồi quá chậm, vui lòng thử lại.", null, req, res);
+        } else {
+            respond(HttpStatus.BAD_GATEWAY, "AI tạm thời không phản hồi, vui lòng thử lại sau.", null, req, res);
         }
     }
 

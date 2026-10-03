@@ -6,6 +6,6 @@ public class AiParseException extends AiServiceException {
     private static final long serialVersionUID = 1L;
 
     public AiParseException(String message, Throwable cause) {
-        super(message, cause, 422);
+        super(message, cause, 422, true);
     }
 }

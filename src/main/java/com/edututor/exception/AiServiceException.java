@@ -16,9 +16,26 @@ public class AiServiceException extends RuntimeException {
         this(message, cause, 0);
     }
 
+    /** true: {@code message} do hệ thống tự viết (hàng đợi AI đầy, AI trả dữ liệu hỏng, ảnh không đọc được) nên được hiển thị. */
+    private final boolean userFacing;
+
     public AiServiceException(String message, Throwable cause, int httpStatus) {
+        this(message, cause, httpStatus, false);
+    }
+
+    public AiServiceException(String message, Throwable cause, int httpStatus, boolean userFacing) {
         super(message, cause);
         this.httpStatus = httpStatus;
+        this.userFacing = userFacing;
+    }
+
+    /** Lỗi do hệ thống tự tạo với thông báo an toàn để hiển thị; mã HTTP trả về đúng bằng {@code httpStatus}. */
+    public static AiServiceException userFacing(String message, int httpStatus) {
+        return new AiServiceException(message, null, httpStatus, true);
+    }
+
+    public boolean isUserFacing() {
+        return userFacing;
     }
 
     public int getHttpStatus() {

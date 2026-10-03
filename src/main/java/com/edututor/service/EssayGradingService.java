@@ -133,7 +133,7 @@ public class EssayGradingService {
 
         // TC-OCR-03: không đọc được bài → 422, KHÔNG lưu ảnh, KHÔNG lưu điểm
         if (Boolean.FALSE.equals(result.legible())) {
-            throw new AiServiceException(ILLEGIBLE_MESSAGE, null, 422);
+            throw AiServiceException.userFacing(ILLEGIBLE_MESSAGE, 422);
         }
 
         double score = ScoreUtil.roundQuarter(result.score());

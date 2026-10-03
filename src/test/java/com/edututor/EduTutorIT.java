@@ -66,6 +66,9 @@ class EduTutorIT {
     }
 
     static final ObjectMapper JSON = new ObjectMapper();
+    /** Mã BCrypt của mật khẩu seed '123456' (chỉ băm một lần cho cả lớp test). */
+    static final String SEED_BCRYPT =
+            new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder().encode("123456");
     static Tomcat tomcat;
     static String base;
     static HttpServer gemini;
@@ -385,9 +388,8 @@ class EduTutorIT {
         exec("UPDATE Questions SET IsActive = 1");
         exec("UPDATE Lessons SET IsActive = 1");
         exec("UPDATE Topics SET IsActive = 1");
-        // mật khẩu seed '123456' dạng SHA-256 và tài khoản đang hoạt động
-        exec("UPDATE Users SET PasswordHash = '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92', "
-                + "IsActive = 1, [Status] = 'ACTIVE'");
+        // mật khẩu seed '123456' dạng BCrypt và tài khoản đang hoạt động
+        exec("UPDATE Users SET PasswordHash = '" + SEED_BCRYPT + "', IsActive = 1, [Status] = 'ACTIVE'");
         exec("UPDATE AiConfigs SET ConfigValue = 'test-key-123', UpdatedBy = NULL WHERE ConfigKey = 'GEMINI_API_KEY'");
         exec("UPDATE AiConfigs SET ConfigValue = 'gemini-1.5-flash' WHERE ConfigKey = 'DEFAULT_MODEL'");
         exec("UPDATE AiConfigs SET ConfigValue = 'gemini-1.5-pro' WHERE ConfigKey = 'VISION_MODEL'");
@@ -441,20 +443,23 @@ class EduTutorIT {
 
     @Test
     @Order(2)
-    void loginUpgradesLegacySha256ToBcryptAndRejectsBadPassword() throws Exception {
+    void loginRequiresBcryptAndRejectsBadPasswordAndLegacySha256() throws Exception {
         Client c = new Client();
         Resp bad = c.login("student1", "sai-mat-khau");
         assertEquals(200, bad.status(), bad.location() + " " + bad.body());
         assertTrue(bad.has("sai"));
 
-        String before = (String) scalar("SELECT PasswordHash FROM Users WHERE Username = 'student1'");
-        assertFalse(before.startsWith("$2"), "seed vẫn là SHA-256");
+        // FRS 1.4: chỉ BCrypt — mã băm SHA-256 không salt của bản cũ bị từ chối dù đúng mật khẩu
+        exec("UPDATE Users SET PasswordHash = '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92' "
+                + "WHERE Username = 'student1'");
+        Resp legacy = new Client().login("student1", "123456");
+        assertEquals(200, legacy.status(), legacy.location());
+        assertTrue(legacy.has("sai"));
+        exec("UPDATE Users SET PasswordHash = '" + SEED_BCRYPT + "' WHERE Username = 'student1'");
 
         Resp ok = c.login("student1", "123456");
         assertEquals(302, ok.status());
         assertTrue(ok.location().contains("/student/dashboard"), ok.location());
-        String after = (String) scalar("SELECT PasswordHash FROM Users WHERE Username = 'student1'");
-        assertTrue(after.startsWith("$2"), "đã nâng cấp BCrypt");
 
         Client again = new Client();
         assertEquals(302, again.login("student1", "123456").status());

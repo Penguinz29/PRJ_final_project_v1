@@ -33,7 +33,7 @@ GO
 CREATE TABLE Users (
     UserId        INT IDENTITY(1,1) NOT NULL,
     Username      VARCHAR(50)   NOT NULL,
-    PasswordHash  VARCHAR(64)   NOT NULL,                  -- BCrypt (60 ký tự); tài khoản cũ SHA-256 tự nâng cấp khi đăng nhập
+    PasswordHash  VARCHAR(64)   NOT NULL,                  -- BCrypt (60 ký tự); chỉ chấp nhận BCrypt
     FullName      NVARCHAR(100) NOT NULL,
     Email         VARCHAR(100)  NULL,
     [Role]        VARCHAR(20)   NOT NULL,

@@ -105,7 +105,7 @@ public class RootConfig {
         ex.setQueueCapacity(queue);
         ex.setThreadNamePrefix("ai-");
         ex.setRejectedExecutionHandler((task, executor) -> {
-            throw new AiServiceException("Hệ thống AI đang bận, vui lòng thử lại sau ít phút.", null, 503);
+            throw AiServiceException.userFacing("Hệ thống AI đang bận, vui lòng thử lại sau ít phút.", 503);
         });
         return ex;
     }
