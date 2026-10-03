@@ -151,8 +151,8 @@
                                                             <button type="button"
                                                                 class="btn btn-outline-secondary quiz-nav-btn"
                                                                 id="navBtn_${vs.count}"
-                                                                onclick="document.activeElement.blur(); 
-                                             new bootstrap.Carousel(document.getElementById('quizCarousel')).to(${vs.index})">
+                                                                onclick="document.activeElement.blur();
+                                             bootstrap.Carousel.getOrCreateInstance(document.getElementById('quizCarousel')).to(${vs.index})">
                                                                 ${vs.count}
                                                             </button>
                                                         </c:forEach>
@@ -221,8 +221,7 @@
                                 const radios = document.querySelectorAll('.q-radio');
                                 const doneCount = document.getElementById('doneCount');
                                 const btnSubmit = document.getElementById('btnSubmitQuiz');
-                                const total = ${ fn: length(questions)
-                            };
+                                const total = ${fn:length(questions)};
 
                             radios.forEach(r => {
                                 r.addEventListener('change', (e) => {

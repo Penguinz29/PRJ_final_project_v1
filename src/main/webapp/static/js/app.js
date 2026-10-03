@@ -173,96 +173,6 @@
     }
   }
 
-  /* ── 7.6 Quiz điều hướng ── */
-  function initQuiz() {
-    var quizForm = qs('#quizForm');
-    if (!quizForm) return;
-
-    var cards = qsa('.question-card', quizForm);
-    var dots  = qsa('.quiz-dot');
-    var bar   = qs('#quizProgressBar');
-    var current = 0;
-
-    // Thêm class js lên html để CSS ẩn câu
-    document.documentElement.classList.add('js');
-
-    function showCard(idx) {
-      cards.forEach(function (c, i) {
-        c.style.display = i === idx ? '' : 'none';
-      });
-      dots.forEach(function (d, i) {
-        d.classList.toggle('current', i === idx);
-      });
-      current = idx;
-      updateProgress();
-      qs('#btnPrev') && (qs('#btnPrev').disabled = idx === 0);
-      qs('#btnNext') && (qs('#btnNext').style.display = idx < cards.length - 1 ? '' : 'none');
-      qs('#btnSubmit') && (qs('#btnSubmit').style.display = idx === cards.length - 1 ? '' : 'none');
-    }
-
-    function countAnswered() {
-      var cnt = 0;
-      cards.forEach(function (c) {
-        if (c.querySelector('input[type="radio"]:checked')) cnt++;
-      });
-      return cnt;
-    }
-
-    function updateProgress() {
-      if (bar) {
-        var pct = cards.length ? Math.round((countAnswered() / cards.length) * 100) : 0;
-        bar.style.width = pct + '%';
-        bar.setAttribute('aria-valuenow', pct);
-      }
-      // Cập nhật dots
-      cards.forEach(function (c, i) {
-        var dot = dots[i];
-        if (!dot) return;
-        dot.classList.toggle('answered', !!c.querySelector('input[type="radio"]:checked'));
-      });
-    }
-
-    // Lắng nghe radio
-    quizForm.addEventListener('change', function () { updateProgress(); });
-
-    // Nút Trước / Tiếp
-    var btnPrev = qs('#btnPrev');
-    var btnNext = qs('#btnNext');
-    if (btnPrev) btnPrev.addEventListener('click', function () { if (current > 0) showCard(current - 1); });
-    if (btnNext) btnNext.addEventListener('click', function () { if (current < cards.length - 1) showCard(current + 1); });
-
-    // Click dot
-    dots.forEach(function (d, i) {
-      d.addEventListener('click', function () { showCard(i); });
-    });
-
-    // Xác nhận nộp
-    var btnSubmit = qs('#btnSubmit');
-    if (btnSubmit) {
-      btnSubmit.addEventListener('click', function (e) {
-        e.preventDefault();
-        var unanswered = cards.length - countAnswered();
-        var msg = unanswered > 0
-          ? 'Bạn còn ' + unanswered + ' câu chưa trả lời. Vẫn nộp bài?'
-          : 'Xác nhận nộp bài?';
-        if (confirm(msg)) {
-          btnSubmit.disabled = true;
-          quizForm.submit();
-        }
-      });
-    }
-
-    // Chống thoát nhầm
-    window.addEventListener('beforeunload', function (e) {
-      if (countAnswered() > 0) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    });
-
-    showCard(0);
-  }
-
   /* ── 7.7 Dropzone ảnh ── */
   function initDropzone() {
     var zone = qs('.dropzone');
@@ -478,7 +388,6 @@
     initPasswordToggle();
     initConfirmModal();
     initAutoOpenModal();
-    initQuiz();
     initDropzone();
     initKaTeX();
     initQuestionTypeSwitch();
