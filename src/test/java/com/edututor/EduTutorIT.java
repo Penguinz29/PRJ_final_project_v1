@@ -1868,6 +1868,72 @@ class EduTutorIT {
         exec("DELETE FROM LessonMaterials WHERE Title LIKE N'it[_]%'");
     }
 
+    /** FR-TEA-08: kết quả theo câu hỏi — số lượt làm, tỉ lệ đúng và điểm TB thang 10 hiển thị song song. */
+    @Test
+    @Order(57)
+    void teacherSeesResultsPerQuestion() throws Exception {
+        Client t = new Client();
+        t.login("teacher1", "123456");
+        int teacher1 = count("SELECT UserId FROM Users WHERE Username = 'teacher1'");
+        int topicId = count("SELECT TOP 1 TopicId FROM Topics WHERE TeacherId = ? AND IsActive = 1 ORDER BY TopicId", teacher1);
+        t.form("/teacher/lessons", Map.of("action", "create", "topicId", "" + topicId, "title", "it_Bài thống kê",
+                "summary", "s", "content", "c", "youtubeUrl", ""));
+        int lessonId = count("SELECT LessonId FROM Lessons WHERE Title = N'it_Bài thống kê'");
+        for (String content : new String[]{"it_Câu khó", "it_Câu chưa ai làm"}) {
+            Map<String, String> q = new LinkedHashMap<>();
+            q.put("action", "create");
+            q.put("lessonId", "" + lessonId);
+            q.put("type", "MCQ");
+            q.put("level", "2");
+            q.put("content", content);
+            q.put("explanation", "g");
+            q.put("correctOption", "A");
+            for (String l : new String[]{"A", "B", "C", "D"}) {
+                q.put("opt_" + l, "pa " + l);
+            }
+            t.form("/teacher/questions", q);
+        }
+        int hard = count("SELECT QuestionId FROM Questions WHERE Content = N'it_Câu khó'");
+        int right = count("SELECT OptionId FROM QuestionOptions WHERE QuestionId = ? AND OptionLetter = 'A'", hard);
+        int wrong = count("SELECT OptionId FROM QuestionOptions WHERE QuestionId = ? AND OptionLetter = 'B'", hard);
+        try {
+            // 3 lượt (2 học sinh): 1 đúng, 2 sai → tỉ lệ đúng 33.3%, điểm TB 3.33
+            Client s1 = new Client();
+            s1.login("student1", "123456");
+            Client s2 = new Client();
+            s2.login("student2", "123456");
+            s1.json("/api/student/submit-quiz-answer", "{\"questionId\":" + hard + ",\"selectedOptionId\":" + right + "}");
+            s1.json("/api/student/submit-quiz-answer", "{\"questionId\":" + hard + ",\"selectedOptionId\":" + wrong + "}");
+            s2.json("/api/student/submit-quiz-answer", "{\"questionId\":" + hard + ",\"selectedOptionId\":" + wrong + "}");
+
+            assertEquals(200, t.get("/teacher/results").status(), "mặc định chọn bài học đầu tiên");
+            Resp page = t.get("/teacher/results?lessonId=" + lessonId);
+            assertEquals(200, page.status(), page.body());
+            String html = page.body();
+            assertTrue(html.contains("33.3%"), "tỉ lệ đúng");
+            assertTrue(html.contains("3.33"), "điểm TB thang 10 = tỉ lệ đúng / 10");
+            assertTrue(html.contains("Chưa có lượt làm"), "câu chưa ai làm");
+            assertTrue(html.indexOf("it_Câu khó") < html.indexOf("it_Câu chưa ai làm"), "tỉ lệ đúng thấp nhất lên đầu");
+            assertTrue(html.contains("3 / 2"), "tổng hợp: 3 lượt / 2 học sinh");
+
+            // Câu đã xóa mềm không còn trong thống kê quản lý
+            exec("UPDATE Questions SET IsActive = 0 WHERE QuestionId = ?", hard);
+            assertFalse(t.get("/teacher/results?lessonId=" + lessonId).has("it_Câu khó"));
+
+            // Phân quyền: Admin xem được, học sinh bị 403
+            Client adm = new Client();
+            adm.login("admin", "123456");
+            assertEquals(200, adm.get("/teacher/results?lessonId=" + lessonId).status());
+            assertEquals(403, s1.get("/teacher/results").status());
+            // Tham số phân trang ngoài {10,20,50} / lessonId lạ không gây lỗi
+            assertEquals(200, t.get("/teacher/results?lessonId=999999&size=7&page=-3").status());
+        } finally {
+            exec("DELETE FROM Submissions WHERE QuestionId IN (SELECT QuestionId FROM Questions WHERE LessonId = ?)", lessonId);
+            exec("DELETE FROM Questions WHERE LessonId = ?", lessonId);
+            exec("DELETE FROM Lessons WHERE LessonId = ?", lessonId);
+        }
+    }
+
     /** BR-13 / NFR-06 / TC-AI-08: vượt hạn mức gọi AI → 429; hạn mức học sinh và giáo viên độc lập; ping không bị giới hạn. */
     @Test
     @Order(55)

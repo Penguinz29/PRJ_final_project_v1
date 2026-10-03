@@ -69,6 +69,10 @@
                                     class="sidebar-link ${param.active == 'teacher-students' ? 'active' : ''}">
                                     <i class="bi bi-people"></i> Học sinh của tôi
                                 </a>
+                                <a href="${pageContext.request.contextPath}/teacher/results"
+                                    class="sidebar-link ${param.active == 'teacher-results' ? 'active' : ''}">
+                                    <i class="bi bi-bar-chart-line"></i> Kết quả học sinh
+                                </a>
                                 <a href="${pageContext.request.contextPath}/teacher/submissions"
                                     class="sidebar-link ${param.active == 'teacher-submissions' ? 'active' : ''}">
                                     <i class="bi bi-pencil-square"></i> Bài tự luận

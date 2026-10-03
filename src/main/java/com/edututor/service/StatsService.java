@@ -1,14 +1,19 @@
 package com.edututor.service;
 
+import com.edututor.dto.PageResult;
+import com.edututor.dto.QuestionResultView;
 import com.edututor.model.QuestionType;
 import com.edututor.model.Role;
 import com.edututor.repository.LessonRepository;
 import com.edututor.repository.QuestionRepository;
+import com.edututor.repository.QuestionResultRow;
 import com.edututor.repository.SubmissionRepository;
 import com.edututor.repository.TopicRepository;
 import com.edututor.repository.UserRepository;
+import com.edututor.util.Pager;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,6 +53,25 @@ public class StatsService {
         m.put("myStudents", (int) users.countByRole(Role.STUDENT));
         m.put("pendingSubmissions", (int) submissions.countByQuestionTypeAndReviewed(QuestionType.ESSAY, false));
         return m;
+    }
+
+    /** UC-TEA-08: kết quả trắc nghiệm theo câu hỏi của bài học, phân trang ở CSDL (VAL-22). */
+    public PageResult<QuestionResultView> questionResults(int lessonId, int page, int size) {
+        return PageResult.of(submissions.findQuestionResults(lessonId, Pager.pageRequest(page, size, Sort.unsorted())),
+                StatsService::toResultView);
+    }
+
+    /** Dòng tổng hợp cả bài học. */
+    public QuestionResultView lessonResultSummary(int lessonId) {
+        return toResultView(submissions.lessonResultSummary(lessonId));
+    }
+
+    private static QuestionResultView toResultView(QuestionResultRow r) {
+        Double pct = r.getCorrectPct() == null ? null : Math.round(r.getCorrectPct() * 10) / 10.0;
+        Double avg = pct == null ? null : Math.round(pct * 10) / 100.0; // = correct_pct / 10 (33.3% → 3.33)
+        return new QuestionResultView(r.getQuestionId() == null ? 0 : r.getQuestionId(), r.getContent(),
+                r.getLevel() == null ? 0 : r.getLevel(), r.getAttempts() == null ? 0 : r.getAttempts(),
+                r.getStudents() == null ? 0 : r.getStudents(), pct, avg);
     }
 
     public Map<String, Object> studentStats(int studentId) {
