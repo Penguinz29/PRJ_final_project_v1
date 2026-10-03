@@ -47,6 +47,17 @@
                                 </button>
                                 <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0">
                                     <li>
+                                        <a class="dropdown-item" href="${pageContext.request.contextPath}/profile">
+                                            <i class="bi bi-person-circle me-2"></i>Hồ sơ cá nhân
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" href="${pageContext.request.contextPath}/profile/password">
+                                            <i class="bi bi-key me-2"></i>Đổi mật khẩu
+                                        </a>
+                                    </li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li>
                                         <form action="${pageContext.request.contextPath}/logout" method="post" class="m-0">
                                             <input type="hidden" name="_csrf" value="${sessionScope.CSRF_TOKEN}">
                                             <button type="submit" class="dropdown-item text-danger">

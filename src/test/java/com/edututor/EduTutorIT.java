@@ -1268,6 +1268,72 @@ class EduTutorIT {
 
     // ---------------------------------------------------------------- TEACHER
 
+    /** FR-AUTH-04 / FR-AUTH-05: hồ sơ cá nhân và tự đổi mật khẩu cho mọi vai trò. */
+    @Test
+    @Order(45)
+    void userEditsProfileAndChangesPassword() throws Exception {
+        assertEquals(302, new Client().get("/profile").status(), "chưa đăng nhập → /login");
+        for (String u : new String[]{"admin", "teacher1", "student1"}) {
+            Client any = new Client();
+            any.login(u, "123456");
+            Resp page = any.get("/profile");
+            assertEquals(200, page.status(), u + " -> " + page.body());
+            assertTrue(page.has(u), "hiện tên đăng nhập");
+            assertEquals(200, any.get("/profile/password").status());
+        }
+
+        int uid = count("SELECT UserId FROM Users WHERE Username = 'student5'");
+        String oldName = (String) scalar("SELECT FullName FROM Users WHERE UserId = ?", uid);
+        String oldEmail = (String) scalar("SELECT Email FROM Users WHERE UserId = ?", uid);
+        String oldHash = (String) scalar("SELECT PasswordHash FROM Users WHERE UserId = ?", uid);
+        Client c = new Client();
+        assertEquals(302, c.login("student5", "123456").status());
+        try {
+            // UC-AUTH-04: sửa họ tên, email; username / role gửi kèm bị bỏ qua
+            Resp ok = c.form("/profile", Map.of("fullName", "it Học Sinh Năm", "email", "it_hs5@example.com",
+                    "username", "hacker", "role", "ADMIN"));
+            assertEquals(302, ok.status(), ok.body());
+            assertEquals("it Học Sinh Năm", scalar("SELECT FullName FROM Users WHERE UserId = ?", uid));
+            assertEquals("it_hs5@example.com", scalar("SELECT Email FROM Users WHERE UserId = ?", uid));
+            assertEquals("student5", scalar("SELECT Username FROM Users WHERE UserId = ?", uid));
+            assertEquals("STUDENT", scalar("SELECT [Role] FROM Users WHERE UserId = ?", uid));
+            Resp after = c.get("/profile");
+            assertTrue(after.has("Đã cập nhật hồ sơ cá nhân"));
+            assertTrue(after.has("it Học Sinh Năm"), "tên mới hiện ngay (session đã cập nhật)");
+
+            // Email trùng người khác / họ tên chứa thẻ HTML → lỗi tại trường, CSDL không đổi
+            String takenEmail = (String) scalar("SELECT Email FROM Users WHERE Username = 'student1'");
+            Resp dup = c.form("/profile", Map.of("fullName", "it Tên khác", "email", takenEmail));
+            assertEquals(200, dup.status());
+            assertTrue(dup.has("Email đã được sử dụng"), dup.body());
+            assertEquals("it Học Sinh Năm", scalar("SELECT FullName FROM Users WHERE UserId = ?", uid));
+            Resp html = c.form("/profile", Map.of("fullName", "<b>x</b>", "email", "it_hs5@example.com"));
+            assertTrue(html.has("không được chứa ký tự"), html.body());
+
+            // UC-AUTH-05: sai mật khẩu cũ / xác nhận không khớp / yếu / trùng mật khẩu cũ → báo lỗi, không đổi
+            Resp wrong = c.form("/profile/password", Map.of("currentPassword", "sai-mat-khau",
+                    "newPassword", "MatKhauMoi1", "confirmPassword", "MatKhauMoi1"));
+            assertTrue(wrong.has("Mật khẩu hiện tại không đúng"), wrong.body());
+            assertTrue(c.form("/profile/password", Map.of("currentPassword", "123456",
+                    "newPassword", "MatKhauMoi1", "confirmPassword", "KhacNhau1")).has("không khớp"));
+            assertTrue(c.form("/profile/password", Map.of("currentPassword", "123456",
+                    "newPassword", "abc", "confirmPassword", "abc")).has("từ 8 đến 64"));
+            assertEquals(oldHash, scalar("SELECT PasswordHash FROM Users WHERE UserId = ?", uid));
+
+            Resp changed = c.form("/profile/password", Map.of("currentPassword", "123456",
+                    "newPassword", "MatKhauMoi1", "confirmPassword", "MatKhauMoi1"));
+            assertEquals(302, changed.status(), changed.body());
+            assertTrue(((String) scalar("SELECT PasswordHash FROM Users WHERE UserId = ?", uid)).startsWith("$2"),
+                    "lưu BCrypt");
+            assertTrue(c.form("/profile/password", Map.of("currentPassword", "MatKhauMoi1",
+                    "newPassword", "MatKhauMoi1", "confirmPassword", "MatKhauMoi1")).has("phải khác mật khẩu hiện tại"));
+            assertEquals(302, new Client().login("student5", "MatKhauMoi1").status(), "đăng nhập bằng mật khẩu mới");
+            assertEquals(200, new Client().login("student5", "123456").status(), "mật khẩu cũ không còn dùng được");
+        } finally {
+            exec("UPDATE Users SET FullName = ?, Email = ?, PasswordHash = ? WHERE UserId = ?", oldName, oldEmail, oldHash, uid);
+        }
+    }
+
     @Test
     @Order(50)
     void teacherManagesTopicsAndLessons() throws Exception {

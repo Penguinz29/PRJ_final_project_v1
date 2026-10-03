@@ -1,10 +1,13 @@
 package com.edututor.service;
 
 import com.edututor.dto.PageResult;
+import com.edututor.dto.PasswordChangeForm;
+import com.edututor.dto.ProfileForm;
 import com.edututor.dto.RegisterForm;
 import com.edututor.dto.SessionUser;
 import com.edututor.dto.UserView;
 import com.edututor.exception.ConflictException;
+import com.edututor.exception.NotFoundException;
 import com.edututor.model.Role;
 import com.edututor.model.User;
 import com.edututor.model.UserStatus;
@@ -65,6 +68,65 @@ public class UserService {
         }
         return ok ? new SessionUser(user.getUserId(), user.getUsername(), user.getFullName(), user.getRole().name())
                 : null;
+    }
+
+    // ---------- Hồ sơ cá nhân (UC-AUTH-04, UC-AUTH-05) ----------
+
+    /** Thông tin tài khoản của chính người dùng (không chứa mã băm mật khẩu). */
+    @Transactional(readOnly = true)
+    public UserView getProfile(int userId) {
+        return ViewMapper.toView(requireUser(userId), null);
+    }
+
+    /**
+     * UC-AUTH-04: cập nhật họ tên, email (VAL-03, 04). Username và vai trò không đổi được.
+     *
+     * @return SessionUser mới để thay vào session (họ tên hiển thị trên thanh điều hướng)
+     * @throws ConflictException email đã thuộc tài khoản khác (kèm tên trường)
+     */
+    @Transactional
+    public SessionUser updateProfile(int userId, ProfileForm form) {
+        User u = requireUser(userId);
+        if (userRepository.existsByEmailIgnoreCaseAndUserIdNot(form.getEmail(), userId)) {
+            throw new ConflictException("Email đã được sử dụng bởi tài khoản khác.", "email");
+        }
+        u.setFullName(form.getFullName());
+        u.setEmail(form.getEmail());
+        return new SessionUser(u.getUserId(), u.getUsername(), u.getFullName(), u.getRole().name());
+    }
+
+    /**
+     * UC-AUTH-05: đổi mật khẩu. Phải đúng mật khẩu cũ (BCrypt), xác nhận khớp, mật khẩu mới khác mật khẩu cũ.
+     *
+     * @throws ConflictException sai mật khẩu cũ / xác nhận không khớp / trùng mật khẩu cũ (kèm tên trường)
+     */
+    @Transactional
+    public void changePassword(int userId, PasswordChangeForm form) {
+        User u = requireUser(userId);
+        if (!passwordMatches(u, form.getCurrentPassword())) {
+            throw new ConflictException("Mật khẩu hiện tại không đúng.", "currentPassword");
+        }
+        if (!form.getNewPassword().equals(form.getConfirmPassword())) {
+            throw new ConflictException("Mật khẩu xác nhận không khớp.", "confirmPassword");
+        }
+        if (form.getNewPassword().equals(form.getCurrentPassword())) {
+            throw new ConflictException("Mật khẩu mới phải khác mật khẩu hiện tại.", "newPassword");
+        }
+        u.setPasswordHash(passwordEncoder.encode(form.getNewPassword()));
+    }
+
+    private User requireUser(int userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException("Tài khoản không tồn tại."));
+    }
+
+    /** So khớp mật khẩu với mã băm đã lưu (BCrypt; tài khoản cũ còn SHA-256). */
+    private boolean passwordMatches(User user, String plain) {
+        String stored = user.getPasswordHash();
+        if (stored == null || plain == null) {
+            return false;
+        }
+        return isBcrypt(stored) ? passwordEncoder.matches(plain, stored) : stored.equalsIgnoreCase(sha256Hex(plain));
     }
 
     private static boolean isBcrypt(String hash) {
