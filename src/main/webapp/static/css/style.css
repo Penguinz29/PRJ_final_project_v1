@@ -1332,3 +1332,264 @@ h6 {
     font-size: 1.4rem;
   }
 }
+
+/* ═══════════════════════════════════════════
+   TOAST / FLASH NOTIFICATION
+═══════════════════════════════════════════ */
+.toast-alert {
+  display: flex;
+  align-items: center;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  min-width: 300px;
+  max-width: 420px;
+  padding: 1rem 1.25rem;
+  border-left: 4px solid var(--border);
+  box-shadow: var(--shadow-md) !important;
+}
+
+.toast-alert.alert-success {
+  border-left-color: var(--success);
+}
+
+.toast-alert.alert-success i {
+  color: var(--success);
+}
+
+.toast-alert.alert-danger {
+  border-left-color: var(--danger);
+}
+
+.toast-alert.alert-danger i {
+  color: var(--danger);
+}
+
+.toast-alert .toast-content {
+  flex: 1;
+  font-weight: 500;
+  font-size: .95rem;
+  margin-left: .75rem;
+  word-break: break-word;
+}
+
+.toast-alert .btn-close {
+  position: static;
+  padding: 0;
+  margin-left: 1rem;
+  opacity: .5;
+}
+
+/* ═══════════════════════════════════════════
+   PAGINATION
+═══════════════════════════════════════════ */
+.pagination-custom {
+  gap: .35rem;
+}
+
+.pagination-custom .page-link {
+  border: none;
+  border-radius: var(--radius-xs);
+  min-width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  font-weight: 500;
+  font-size: .9rem;
+  background: transparent;
+  transition: all var(--transition);
+}
+
+.pagination-custom .page-item .page-link:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+.pagination-custom .page-item.active .page-link {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.pagination-custom .page-item.disabled .page-link {
+  background: transparent;
+  color: var(--muted-light);
+  cursor: not-allowed;
+}
+
+/* === Student: Topic accordion === */
+
+/* ── Topic card ── */
+.st-accordion .st-topic-card {
+  border-radius: var(--card-radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+
+.st-accordion .st-topic-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, .05);
+}
+
+/* ── Topic header button ── */
+.st-topic-btn {
+  background: var(--surface) !important;
+  padding: 1rem 1.25rem !important;
+  border: none !important;
+  border-radius: 0 !important;
+  font-size: 1.2rem;
+  transition: background var(--transition);
+}
+
+.st-topic-btn::after {
+  display: none !important;
+  /* hide default Bootstrap chevron */
+}
+
+.st-topic-btn:not(.collapsed) {
+  background: var(--primary-soft) !important;
+  border-left: 4px solid var(--primary) !important;
+}
+
+/* ── Number box ── */
+.st-topic-num {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 1.3rem;
+  line-height: 1;
+  background: var(--primary-soft);
+  color: var(--primary);
+  transition: background var(--transition), color var(--transition);
+}
+
+/* Opened state – button is NOT collapsed */
+.st-topic-btn:not(.collapsed) .st-topic-num {
+  background: var(--primary);
+  color: #fff;
+}
+
+/* ── Topic title ── */
+.st-topic-title {
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: var(--text);
+  line-height: 1.35;
+  margin-bottom: 2px;
+}
+
+/* ── Lesson-count badge ── */
+.st-lesson-count {
+  display: inline-block;
+  font-size: .9rem;
+  font-weight: 500;
+  padding: .15em .65em;
+  border-radius: 20px;
+  background: #f1f5f9;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+/* ── Chevron (topic header) ── */
+.st-chevron {
+  font-size: 1rem;
+  color: var(--muted-light);
+  flex-shrink: 0;
+  transition: transform .3s ease;
+  margin-left: auto;
+}
+
+.st-topic-btn:not(.collapsed) .st-chevron {
+  transform: rotate(180deg);
+  color: var(--primary);
+}
+
+/* ── Lesson row ── */
+.st-lesson-row {
+  border: none !important;
+  transition: background var(--transition);
+  text-decoration: none;
+  color: var(--text);
+}
+
+.st-lesson-row:hover {
+  background: var(--bg-app) !important;
+}
+
+.st-lesson-row+.st-lesson-row {
+  border-top: 1px solid var(--border) !important;
+}
+
+/* Lesson icon – fixed width column */
+.st-lesson-icon {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 1.15rem;
+}
+
+/* Lesson title */
+.st-lesson-title {
+  font-weight: 600;
+  font-size: 1.08rem;
+  color: var(--primary);
+  margin-bottom: 2px;
+  line-height: 1.35;
+}
+
+/* Lesson summary */
+.st-lesson-summary {
+  font-size: .95rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+/* Lesson chevron arrow */
+.st-lesson-arrow {
+  font-size: .95rem;
+  color: var(--muted-light);
+  flex-shrink: 0;
+  transition: transform var(--transition);
+}
+
+.st-lesson-row:hover .st-lesson-arrow {
+  transform: translateX(3px);
+  color: var(--primary);
+}
+
+/* ── Subtitle responsive ── */
+.st-subtitle {
+  font-size: 1.08rem;
+}
+
+@media (min-width: 768px) {
+  .st-subtitle {
+    margin-top: .25rem;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .st-subtitle {
+    margin-top: .35rem;
+    font-size: 1rem;
+  }
+}
+
+/* === End: Student Topic accordion === */

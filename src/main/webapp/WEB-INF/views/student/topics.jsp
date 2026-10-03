@@ -19,8 +19,10 @@
                             <ui:flash />
 
                             <div class="page-header mb-4 border-bottom-0 pb-0">
-                                <h1><i class="bi bi-book me-2 text-primary"></i>Danh sách Chủ đề</h1>
-                                <p class="text-muted mb-0">Chọn bài giảng để bắt đầu học và làm bài tập</p>
+                                <div>
+                                    <h1><i class="bi bi-book me-2 text-primary"></i>Danh sách Chủ đề</h1>
+                                    <p class="st-subtitle text-muted mb-0">Chọn bài giảng để bắt đầu học và làm bài tập</p>
+                                </div>
                             </div>
 
                             <c:choose>
@@ -31,29 +33,27 @@
                                     </div>
                                 </c:when>
                                 <c:otherwise>
-                                    <div class="accordion" id="topicsAccordion">
+                                    <div class="accordion st-accordion" id="topicsAccordion">
                                         <c:forEach var="t" items="${topics}" varStatus="tVs">
-                                            <div class="accordion-item border-0 card mb-3 shadow-sm"
-                                                style="overflow:hidden;">
+                                            <div class="accordion-item border-0 st-topic-card mb-3">
                                                 <h2 class="accordion-header">
                                                     <button
-                                                        class="accordion-button fw-bold fs-5 shadow-none ${tVs.first ? '' : 'collapsed'}"
+                                                        class="accordion-button st-topic-btn shadow-none ${tVs.first ? '' : 'collapsed'}"
                                                         type="button" data-bs-toggle="collapse"
                                                         data-bs-target="#collapse${t.topicId}">
-                                                        <div class="d-flex align-items-center w-100">
-                                                            <div class="stat-icon blue me-3"
-                                                                style="width:40px;height:40px;font-size:1.1rem;flex-shrink:0;">
+                                                        <div class="d-flex align-items-center gap-3 w-100">
+                                                            <div class="st-topic-num">
                                                                 <c:out value="${tVs.count}" />
                                                             </div>
-                                                            <div>
-                                                                <div class="mb-1">
+                                                            <div class="flex-grow-1 min-w-0">
+                                                                <div class="st-topic-title">
                                                                     <c:out value="${t.topicName}" />
                                                                 </div>
-                                                                <span
-                                                                    class="badge bg-secondary-subtle text-secondary fw-normal">
+                                                                <span class="st-lesson-count">
                                                                     ${empty t.lessons ? 0 : t.lessons.size()} bài giảng
                                                                 </span>
                                                             </div>
+                                                            <i class="bi bi-chevron-down st-chevron"></i>
                                                         </div>
                                                     </button>
                                                 </h2>
@@ -71,22 +71,20 @@
                                                                     <c:forEach var="l" items="${t.lessons}"
                                                                         varStatus="lVs">
                                                                         <a href="${pageContext.request.contextPath}/student/lesson?id=${l.lessonId}"
-                                                                            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center p-3">
-                                                                            <div>
-                                                                                <h6
-                                                                                    class="mb-1 fw-semibold text-primary">
-                                                                                    <i
-                                                                                        class="bi bi-file-earmark-text me-2"></i>Bài
-                                                                                    ${lVs.count}:
+                                                                            class="list-group-item list-group-item-action st-lesson-row d-flex align-items-center gap-3 p-3">
+                                                                            <div class="st-lesson-icon">
+                                                                                <i class="bi bi-file-earmark-text"></i>
+                                                                            </div>
+                                                                            <div class="flex-grow-1 min-w-0">
+                                                                                <div class="st-lesson-title">
+                                                                                    Bài ${lVs.count}:
                                                                                     <c:out value="${l.title}" />
-                                                                                </h6>
-                                                                                <div class="text-muted"
-                                                                                    style="font-size:0.85rem;">
+                                                                                </div>
+                                                                                <div class="st-lesson-summary">
                                                                                     <c:out value="${l.summary}" />
                                                                                 </div>
                                                                             </div>
-                                                                            <i
-                                                                                class="bi bi-chevron-right text-muted opacity-50"></i>
+                                                                            <i class="bi bi-chevron-right st-lesson-arrow"></i>
                                                                         </a>
                                                                     </c:forEach>
                                                                 </div>
