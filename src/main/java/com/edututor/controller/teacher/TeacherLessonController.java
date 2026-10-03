@@ -45,7 +45,7 @@ public class TeacherLessonController {
                 || "create".equals(action) || "edit".equals(action);
         if (formPage) {
             if ("edit".equals(action)) {
-                LessonView lesson = lessonService.getLessonById(id);
+                LessonView lesson = lessonService.getLessonForEdit(id, user.getUserId(), user.isAdmin()); // BR-03
                 if (lesson == null) {
                     return "redirect:/teacher/lessons";
                 }
@@ -64,21 +64,22 @@ public class TeacherLessonController {
     }
 
     @PostMapping("/teacher/lessons")
-    public String save(@Valid @ModelAttribute LessonForm form, BindingResult result, RedirectAttributes redirect) {
+    public String save(@Valid @ModelAttribute LessonForm form, BindingResult result,
+                       @SessionAttribute(AuthInterceptor.SESSION_USER) SessionUser user, RedirectAttributes redirect) {
         try {
             switch (form.getAction()) {
                 case "create" -> {
                     FormErrors.requireValid(result);
-                    lessonService.createLesson(form);
+                    lessonService.createLesson(form, user.getUserId(), user.isAdmin());
                     redirect.addFlashAttribute("flash", "Thêm bài giảng thành công.");
                 }
                 case "update" -> {
                     FormErrors.requireValid(result);
-                    lessonService.updateLesson(form);
+                    lessonService.updateLesson(form, user.getUserId(), user.isAdmin());
                     redirect.addFlashAttribute("flash", "Cập nhật bài giảng thành công.");
                 }
                 case "delete" -> {
-                    boolean hard = lessonService.deleteLesson(form.getId());
+                    boolean hard = lessonService.deleteLesson(form.getId(), user.getUserId(), user.isAdmin());
                     redirect.addFlashAttribute("flash", hard ? "Xóa bài giảng thành công."
                             : "Đã ẩn bài giảng (xóa mềm) vì còn bài làm của học sinh liên quan; lịch sử được giữ nguyên.");
                 }

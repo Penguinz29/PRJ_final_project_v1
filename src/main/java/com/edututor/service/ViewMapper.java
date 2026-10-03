@@ -72,6 +72,7 @@ final class ViewMapper {
         v.setSummary(l.getSummary());
         v.setContent(l.getContent());
         v.setDisplayOrder(l.getDisplayOrder());
+        v.setCreatedById(l.getCreatedBy().getUserId());
         v.setCreatedAt(toDate(l.getCreatedAt()));
         v.setQuestionCount(questionCount);
         return v;

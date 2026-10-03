@@ -96,4 +96,10 @@ public class LessonView implements Serializable {
 
     public String getDeleteMode() { return deleteMode; }
     public void setDeleteMode(String deleteMode) { this.deleteMode = deleteMode; }
+
+    /** Người tạo bài học (BR-03): giao diện chỉ hiện nút Sửa / Xóa cho người tạo hoặc Admin. */
+    private int createdById;
+
+    public int getCreatedById() { return createdById; }
+    public void setCreatedById(int createdById) { this.createdById = createdById; }
 }

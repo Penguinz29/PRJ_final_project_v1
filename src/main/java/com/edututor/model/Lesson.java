@@ -44,6 +44,11 @@ public class Lesson {
     @Column(name = "DisplayOrder")
     private int displayOrder;
 
+    /** Người tạo bài học (BR-03: chỉ người tạo hoặc Admin được sửa / xóa). */
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "CreatedBy", nullable = false)
+    private User createdBy;
+
     /** Xóa mềm (BR-05): false = đã xóa, ẩn khỏi danh sách nhưng giữ lịch sử. */
     @Column(name = "IsActive", nullable = false)
     private boolean active = true;
@@ -66,6 +71,8 @@ public class Lesson {
     public void setSummary(String summary) { this.summary = summary; }
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content; }
+    public User getCreatedBy() { return createdBy; }
+    public void setCreatedBy(User createdBy) { this.createdBy = createdBy; }
     public int getDisplayOrder() { return displayOrder; }
     public void setDisplayOrder(int displayOrder) { this.displayOrder = displayOrder; }
     public boolean isActive() { return active; }

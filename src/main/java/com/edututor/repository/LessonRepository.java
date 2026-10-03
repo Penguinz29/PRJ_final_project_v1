@@ -46,6 +46,9 @@ public interface LessonRepository extends JpaRepository<Lesson, Integer> {
 
     long countByTopic_Teacher_UserIdAndActiveTrue(Integer teacherId);
 
+    /** Xóa tài khoản: giáo viên đã tạo bài học → chỉ được xóa mềm (BR-06). */
+    boolean existsByCreatedBy_UserId(Integer userId);
+
     /** Tổng số bài học (kể cả đã xóa mềm) của nhiều chuyên đề: dự báo xóa hẳn / xóa mềm chuyên đề. */
     @Query("select l.topic.topicId as id, count(l) as total from Lesson l "
             + "where l.topic.topicId in :topicIds group by l.topic.topicId")

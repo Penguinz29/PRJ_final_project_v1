@@ -3,6 +3,7 @@ package com.edututor.service;
 import com.edututor.dto.LessonForm;
 import com.edututor.dto.LessonView;
 import com.edututor.exception.ConflictException;
+import com.edututor.exception.ForbiddenException;
 import com.edututor.exception.NotFoundException;
 import com.edututor.model.Lesson;
 import com.edututor.model.Topic;
@@ -12,6 +13,7 @@ import com.edututor.repository.QuestionRepository;
 import com.edututor.repository.SubmissionRepository;
 import com.edututor.repository.TopicRepository;
 import com.edututor.repository.TutorSessionRepository;
+import com.edututor.repository.UserRepository;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -29,10 +31,12 @@ public class LessonService {
     private final QuestionRepository questionRepository;
     private final SubmissionRepository submissionRepository;
     private final TutorSessionRepository tutorSessionRepository;
+    private final UserRepository userRepository;
 
     public LessonService(LessonRepository lessonRepository, TopicRepository topicRepository,
                          QuestionRepository questionRepository, SubmissionRepository submissionRepository,
-                         TutorSessionRepository tutorSessionRepository) {
+                         TutorSessionRepository tutorSessionRepository, UserRepository userRepository) {
+        this.userRepository = userRepository;
         this.lessonRepository = lessonRepository;
         this.topicRepository = topicRepository;
         this.questionRepository = questionRepository;
@@ -92,19 +96,39 @@ public class LessonService {
         }).toList();
     }
 
+    /**
+     * Form sửa bài học: chỉ người tạo hoặc Admin (BR-03).
+     *
+     * @return bài học, hoặc null nếu không tồn tại / đã xóa mềm
+     * @throws ForbiddenException khi không phải người tạo
+     */
+    @Transactional(readOnly = true)
+    public LessonView getLessonForEdit(int lessonId, int actingUserId, boolean admin) {
+        Lesson l = lessonRepository.findByLessonIdAndActiveTrue(lessonId).orElse(null);
+        if (l == null) {
+            return null;
+        }
+        requireOwner(l, actingUserId, admin);
+        return getLessonById(lessonId);
+    }
+
+    /** BR-03: giáo viên chỉ thêm bài học vào chủ đề của mình (Admin: mọi chủ đề). */
     @Transactional
-    public void createLesson(LessonForm form) {
+    public void createLesson(LessonForm form, int actingUserId, boolean admin) {
         Lesson l = new Lesson();
-        apply(l, form);
+        apply(l, form, actingUserId, admin);
+        l.setCreatedBy(userRepository.getReferenceById(actingUserId));
         l.setDisplayOrder(form.getDisplayOrder() == null ? 0 : form.getDisplayOrder());
         lessonRepository.save(l);
     }
 
+    /** BR-03: chỉ người tạo hoặc Admin được sửa. */
     @Transactional
-    public void updateLesson(LessonForm form) {
+    public void updateLesson(LessonForm form, int actingUserId, boolean admin) {
         Lesson l = lessonRepository.findByLessonIdAndActiveTrue(form.getId())
                 .orElseThrow(() -> new NotFoundException("Bài học không tồn tại."));
-        apply(l, form);
+        requireOwner(l, actingUserId, admin);
+        apply(l, form, actingUserId, admin);
         if (form.getDisplayOrder() != null) {
             l.setDisplayOrder(form.getDisplayOrder());
         }
@@ -118,9 +142,10 @@ public class LessonService {
      * @return true nếu xóa cứng, false nếu xóa mềm
      */
     @Transactional
-    public boolean deleteLesson(int lessonId) {
+    public boolean deleteLesson(int lessonId, int actingUserId, boolean admin) {
         Lesson l = lessonRepository.findByLessonIdAndActiveTrue(lessonId)
                 .orElseThrow(() -> new NotFoundException("Bài học không tồn tại."));
+        requireOwner(l, actingUserId, admin); // BR-03
         if (questionRepository.countByLesson_LessonIdAndActiveTrue(lessonId) > 0) {
             throw new ConflictException("Bài học còn câu hỏi đang hoạt động nên không thể xóa. Hãy xóa các câu hỏi trước.");
         }
@@ -133,9 +158,21 @@ public class LessonService {
         return true;
     }
 
-    private void apply(Lesson l, LessonForm form) {
+    /** BR-03: giáo viên chỉ sửa / xóa bài học do mình tạo; Admin có toàn quyền. */
+    private void requireOwner(Lesson l, int actingUserId, boolean admin) {
+        if (!admin && !l.getCreatedBy().getUserId().equals(actingUserId)) {
+            throw new ForbiddenException("Bạn chỉ được sửa hoặc xóa bài học do mình tạo.");
+        }
+    }
+
+    private void apply(Lesson l, LessonForm form, int actingUserId, boolean admin) {
         Topic topic = topicRepository.findByTopicIdAndActiveTrue(form.getTopicId())
                 .orElseThrow(() -> new IllegalArgumentException("Chủ đề không hợp lệ."));
+        // Bài học chỉ được đặt vào chủ đề của chính giáo viên (Admin: mọi chủ đề)
+        if (!admin && !topic.getTeacher().getUserId().equals(actingUserId)
+                && (l.getTopic() == null || !l.getTopic().getTopicId().equals(topic.getTopicId()))) {
+            throw new ForbiddenException("Bạn chỉ được thêm bài học vào chủ đề do mình tạo.");
+        }
         l.setTopic(topic);
         l.setTitle(form.getTitle());
         l.setSummary(form.getSummary());

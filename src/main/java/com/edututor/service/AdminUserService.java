@@ -11,6 +11,7 @@ import com.edututor.model.User;
 import com.edututor.model.UserStatus;
 import com.edututor.repository.AiConfigRepository;
 import com.edututor.repository.LessonMaterialRepository;
+import com.edututor.repository.LessonRepository;
 import com.edututor.repository.QuestionRepository;
 import com.edututor.repository.SubmissionRepository;
 import com.edututor.repository.TopicRepository;
@@ -39,6 +40,7 @@ public class AdminUserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final TopicRepository topicRepository;
+    private final LessonRepository lessonRepository;
     private final QuestionRepository questionRepository;
     private final LessonMaterialRepository materialRepository;
     private final SubmissionRepository submissionRepository;
@@ -46,12 +48,14 @@ public class AdminUserService {
     private final AiConfigRepository aiConfigRepository;
 
     public AdminUserService(UserRepository userRepository, PasswordEncoder passwordEncoder,
-                            TopicRepository topicRepository, QuestionRepository questionRepository,
+                            TopicRepository topicRepository, LessonRepository lessonRepository,
+                            QuestionRepository questionRepository,
                             LessonMaterialRepository materialRepository, SubmissionRepository submissionRepository,
                             TutorSessionRepository tutorSessionRepository, AiConfigRepository aiConfigRepository) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.topicRepository = topicRepository;
+        this.lessonRepository = lessonRepository;
         this.questionRepository = questionRepository;
         this.materialRepository = materialRepository;
         this.submissionRepository = submissionRepository;
@@ -220,6 +224,7 @@ public class AdminUserService {
     /** Dữ liệu liên quan khiến chỉ được xóa mềm: nội dung đã tạo, bài làm, phiên gia sư, cấu hình AI, học sinh phụ trách. */
     private boolean hasRelatedData(int userId) {
         return topicRepository.existsByTeacher_UserId(userId)
+                || lessonRepository.existsByCreatedBy_UserId(userId)
                 || questionRepository.existsByTeacher_UserId(userId)
                 || materialRepository.existsByCreatedBy_UserId(userId)
                 || submissionRepository.existsByStudent_UserId(userId)

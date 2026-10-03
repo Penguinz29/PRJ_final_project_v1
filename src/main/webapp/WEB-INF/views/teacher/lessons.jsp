@@ -104,6 +104,8 @@
                                                                         class="btn btn-sm btn-outline-secondary me-1"
                                                                         title="Quản lý bài giảng (video, link, văn bản)"><i
                                                                             class="bi bi-collection-play"></i></a>
+                                                                    <%-- BR-03: chỉ người tạo bài học hoặc Admin được sửa / xóa --%>
+                                                                    <c:if test="${sessionScope.LOGGED_IN_USER.admin or l.createdById == sessionScope.LOGGED_IN_USER.userId}">
                                                                     <a href="${pageContext.request.contextPath}/teacher/lessons?action=edit&id=${l.lessonId}"
                                                                         class="btn btn-sm btn-outline-primary me-1"><i
                                                                             class="bi bi-pencil"></i></a>
@@ -120,6 +122,7 @@
                                                                         question="Xóa bài học '${l.title}'?"
                                                                         softNote="Bài học đã có học sinh làm bài nên chỉ được ẩn khỏi trang quản lý (xóa mềm); học sinh vẫn ôn tập được, lịch sử giữ nguyên."
                                                                         blockedReason="Không thể xóa: bài học còn ${l.questionCount} câu hỏi. Hãy xóa các câu hỏi trước." />
+                                                                    </c:if>
                                                                 </td>
                                                             </tr>
                                                         </c:forEach>
