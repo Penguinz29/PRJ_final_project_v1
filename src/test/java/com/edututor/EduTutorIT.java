@@ -43,7 +43,7 @@ import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 /**
  * Kiểm thử tích hợp end-to-end (tên *IT: không chạy trong {@code mvn package}): Tomcat nhúng + toàn bộ Spring MVC +
  * Spring Data JPA/Hibernate + SQL Server thật + Gemini giả (mock HTTP).
- * Cần CSDL đã nạp document/sql/01..05; chạy riêng:
+ * Cần CSDL đã nạp document/sql/01..06 (06 tạo bảng LessonMaterials); chạy riêng:
  * <pre>
  * mvn verify -Pintegration -Dit.db.url="jdbc:sqlserver://localhost:1433;databaseName=MathTutorDB_verify;encrypt=true;trustServerCertificate=true"
  *            -Dit.db.user=sa -Dit.db.pass=123
@@ -318,6 +318,7 @@ class EduTutorIT {
 
     /** Đưa CSDL về trạng thái seed để chạy lại được nhiều lần. */
     static void resetDatabase() throws Exception {
+        exec("DELETE FROM LessonMaterials WHERE Title LIKE N'it[_]%'");
         exec("DELETE FROM TutorMessages");
         exec("DELETE FROM TutorSessions");
         exec("DELETE FROM Submissions");
@@ -1122,6 +1123,81 @@ class EduTutorIT {
         Resp hist = st.get("/student/history?type=ESSAY");
         assertEquals(200, hist.status());
         assertTrue(hist.has("8.5"), hist.body());
+    }
+
+    @Test
+    @Order(54)
+    void teacherManagesLessonMaterialsAndStudentSeesThem() throws Exception {
+        Client t1 = new Client();
+        t1.login("teacher1", "123456");
+        assertEquals(200, t1.get("/teacher/lessons/1/materials").status());
+        assertEquals(404, t1.get("/teacher/lessons/9999/materials").status());
+        assertTrue(t1.get("/teacher/lessons").has("/teacher/lessons/1/materials"), "có nút Bài giảng ở danh sách bài học");
+
+        String base = "/teacher/lessons/1/materials";
+        // 4 loại hợp lệ; không nhập thứ tự -> tự xếp cuối
+        assertEquals(302, t1.form(base, Map.of("materialType", "YOUTUBE", "title", "it_Video YouTube",
+                "url", "https://www.youtube.com/watch?v=zSnMIO2D4oE&si=abc")).status());
+        assertEquals(302, t1.form(base, Map.of("materialType", "VIDEO", "title", "it_Video mp4",
+                "url", "https://example.com/media/bai1.mp4?x=1")).status());
+        assertEquals(302, t1.form(base, Map.of("materialType", "LINK", "title", "it_Trang web",
+                "url", "https://vi.wikipedia.org/wiki/Luy_thua")).status());
+        assertEquals(302, t1.form(base, Map.of("materialType", "TEXT", "title", "it_Văn bản",
+                "contentText", "Công thức $a^m$ <script>alert(1)</script>")).status());
+        assertEquals(4, count("SELECT COUNT(*) FROM LessonMaterials WHERE Title LIKE N'it[_]%'"));
+        assertEquals(3, count("SELECT MAX(OrderIndex) - MIN(OrderIndex) FROM LessonMaterials "
+                + "WHERE LessonId = 1 AND Title LIKE N'it[_]%'"), "thứ tự tự tăng dần");
+        assertTrue(t1.get(base).has("it_Video YouTube"));
+
+        // VAL-08: dữ liệu sai bị chặn, báo lỗi tiếng Việt, không ghi CSDL
+        t1.form(base, Map.of("materialType", "YOUTUBE", "title", "it_sai1", "url", "https://example.com/video"));
+        assertTrue(t1.get(base).has("Link YouTube không hợp lệ"));
+        t1.form(base, Map.of("materialType", "LINK", "title", "it_sai2", "url", "javascript:alert(1)"));
+        assertTrue(t1.get(base).has("http://"));
+        t1.form(base, Map.of("materialType", "VIDEO", "title", "it_sai3", "url", "https://example.com/a.exe"));
+        assertTrue(t1.get(base).has(".mp4"));
+        t1.form(base, Map.of("materialType", "TEXT", "title", "it_sai4", "contentText", "   "));
+        assertTrue(t1.get(base).has("phải có nội dung"));
+        t1.form(base, Map.of("materialType", "KHAC", "title", "it_sai5", "url", "https://a.com"));
+        t1.get(base);
+        assertEquals(0, count("SELECT COUNT(*) FROM LessonMaterials WHERE Title LIKE N'it[_]sai%'"));
+
+        // Học sinh xem trong trang bài học: YouTube nhúng, video, link mở tab mới, văn bản được làm sạch
+        Client st = new Client();
+        st.login("student1", "123456");
+        Resp lesson = st.get("/student/lesson?id=1");
+        assertEquals(200, lesson.status());
+        assertTrue(lesson.has("youtube-nocookie.com/embed/zSnMIO2D4oE"), "iframe YouTube");
+        assertTrue(lesson.has("<video controls"));
+        assertTrue(lesson.has("bai1.mp4"));
+        assertTrue(lesson.has("rel=\"noopener noreferrer\""));
+        assertTrue(lesson.has("it_Văn bản") && lesson.has("a^m"));
+        assertFalse(lesson.has("<script>alert(1)"), "văn bản được escape");
+        // Học sinh không được quản lý bài giảng
+        assertEquals(403, st.get(base).status());
+        assertEquals(403, st.form(base, Map.of("materialType", "LINK", "title", "it_hs", "url", "https://a.com")).status());
+
+        // BR-03: giáo viên khác không sửa / xóa được; người tạo thì được
+        int mid = count("SELECT MaterialId FROM LessonMaterials WHERE Title = N'it_Trang web'");
+        Client t2 = new Client();
+        t2.login("teacher2", "123456");
+        assertEquals(403, t2.form("/teacher/materials/" + mid + "/update", Map.of("materialType", "LINK",
+                "title", "it_hack", "url", "https://a.com", "lessonId", "1")).status());
+        assertEquals(403, t2.form("/teacher/materials/" + mid + "/delete", Map.of()).status());
+        assertEquals("it_Trang web", scalar("SELECT Title FROM LessonMaterials WHERE MaterialId = ?", mid));
+
+        assertEquals(302, t1.form("/teacher/materials/" + mid + "/update", Map.of("materialType", "LINK",
+                "title", "it_Trang web sửa", "url", "https://vi.wikipedia.org", "orderIndex", "9", "lessonId", "1")).status());
+        assertEquals("it_Trang web sửa", scalar("SELECT Title FROM LessonMaterials WHERE MaterialId = ?", mid));
+        assertEquals(9, count("SELECT OrderIndex FROM LessonMaterials WHERE MaterialId = ?", mid));
+        // Admin có toàn quyền
+        Client admin = new Client();
+        admin.login("admin", "123456");
+        assertEquals(302, admin.form("/teacher/materials/" + mid + "/delete", Map.of()).status());
+        assertEquals(0, count("SELECT COUNT(*) FROM LessonMaterials WHERE MaterialId = ?", mid));
+        assertEquals(404, t1.form("/teacher/materials/" + mid + "/delete", Map.of()).status());
+
+        exec("DELETE FROM LessonMaterials WHERE Title LIKE N'it[_]%'");
     }
 
     @Test

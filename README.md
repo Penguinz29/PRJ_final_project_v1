@@ -9,7 +9,7 @@
 ## 📖 1. Giới thiệu tổng quan
 
 **EduTutor Math 12** là hệ thống web hỗ trợ học tập, ôn luyện và kiểm tra đánh giá môn **Toán lớp 12** theo chương trình THPT Quốc gia. Nền tảng kết hợp giữa quản lý học tập truyền thống (LMS) với các tính năng đột phá từ **Trí tuệ nhân tạo (Google Gemini AI)** nhằm hỗ trợ cả Học sinh, Giáo viên và Quản trị viên:
-- **Học sinh:** Ôn tập lý thuyết, luyện trắc nghiệm bấm giờ, xem giải thích chi tiết, nộp bài viết tay và theo dõi lịch sử học tập.
+- **Học sinh:** Ôn tập lý thuyết, xem bài giảng (YouTube, video, liên kết, văn bản), luyện trắc nghiệm bấm giờ, xem giải thích chi tiết, nộp bài viết tay và theo dõi lịch sử học tập.
 - **Giáo viên:** Soạn giáo án, quản lý ngân hàng câu hỏi, sinh đề trắc nghiệm tự động bằng AI, duyệt và điều chỉnh điểm bài tự luận viết tay của học sinh.
 - **Quản trị viên:** Quản lý tài khoản người dùng (khóa/mở khóa), theo dõi số liệu toàn trường và quản lý cấu hình kết nối AI.
 
@@ -104,7 +104,7 @@ PRJ_final_project_v1/
 - Maven đi kèm NetBeans (hoặc Maven 3.9+ độc lập).
 
 ### Bước 2: Thiết lập Cơ sở Dữ liệu
-Chạy lần lượt trong SSMS các file trong `document/sql/`: `01_schema.sql` -> `02_seed.sql` -> `03_ai_configs.sql` -> `04_update_submissions.sql` -> `05_tutor_and_explanation.sql` -> `06_target_schema_additions.sql` (bổ sung cột/bảng theo thiết kế chuẩn 10 bảng; không bắt buộc để chạy ứng dụng hiện tại). (`01_schema.sql` **xóa và tạo lại** CSDL `MathTutorDB`.)
+Chạy lần lượt trong SSMS các file trong `document/sql/`: `01_schema.sql` -> `02_seed.sql` -> `03_ai_configs.sql` -> `04_update_submissions.sql` -> `05_tutor_and_explanation.sql` -> `06_target_schema_additions.sql` (tạo bảng `LessonMaterials`, chuyển "video hướng dẫn" cũ `Lessons.YoutubeUrl` thành bài giảng, và các cột bổ sung theo thiết kế chuẩn 10 bảng; **cần chạy** để dùng chức năng Bài giảng, nếu bỏ qua ứng dụng vẫn chạy nhưng trang bài học không hiện bài giảng). (`01_schema.sql` **xóa và tạo lại** CSDL `MathTutorDB`.)
 
 > Nếu chạy bằng `sqlcmd`, thêm cờ `-x` (tắt thay thế biến) vì dữ liệu mẫu chứa ký tự `$(`: `sqlcmd -S localhost -U sa -P 123 -C -x -f 65001 -i 02_seed.sql`.
 
@@ -125,7 +125,7 @@ Hoặc dòng lệnh: `mvn clean package` rồi chép `target/edututor.war` vào 
 
 ### Bước 5 (tùy chọn): Chạy kiểm thử
 ```bash
-mvn clean package            # build WAR + 15 unit test, không cần CSDL
+mvn clean package            # build WAR + 17 unit test, không cần CSDL
 # Kiểm thử tích hợp (Tomcat nhúng + SQL Server thật + Gemini giả + đếm số câu SQL chống N+1). Dùng CSDL riêng đã nạp 01..05:
 mvn clean verify -Pintegration -Dit.db.url="jdbc:sqlserver://localhost:1433;databaseName=MathTutorDB_test;encrypt=true;trustServerCertificate=true" -Dit.db.user=sa -Dit.db.pass=123
 ```
@@ -150,7 +150,7 @@ Tất cả các tài khoản mặc định có mật khẩu là: **`EduTutor@123
 
 ## ⚙️ 7. Lưu ý Kỹ thuật quan trọng
 - **Mật khẩu:** tài khoản seed dùng BCrypt (`EduTutor@123`). Tài khoản cũ còn băm SHA-256 vẫn đăng nhập được và tự được băm lại bằng BCrypt ở lần đăng nhập thành công đầu tiên.
-- **Tầng dữ liệu:** Entity JPA ánh xạ **1-1 với 9 bảng hiện có** (không đổi cấu trúc CSDL). Mọi quan hệ `LAZY`; Service map Entity sang DTO bên trong `@Transactional`; không bật Open-Session-In-View; câu hỏi làm bài chỉ chọn cột được phép (không lộ đáp án/lời giải trước khi nộp).
+- **Tầng dữ liệu:** Entity JPA ánh xạ **1-1 với 10 bảng** (9 bảng gốc + `LessonMaterials` do script 06 tạo). Mọi quan hệ `LAZY`; Service map Entity sang DTO bên trong `@Transactional`; không bật Open-Session-In-View; câu hỏi làm bài chỉ chọn cột được phép (không lộ đáp án/lời giải trước khi nộp).
 - **Giao dịch & AI:** các lời gọi Gemini nằm **ngoài** transaction; phần ghi DB của gia sư AI nằm ở bean riêng `TutorPersistence`. Các endpoint `/api/tutor/next-step`, `/api/teacher/generate-questions`, `/api/student/submit-essay-ocr`, `/api/admin/ai-config/test-connection` trả `CompletableFuture`, chạy trên thread pool `aiExecutor` nên không chặn luồng Tomcat.
 - **Phản hồi API thống nhất:** mọi `/api/**` trả `{"success", "message", "data", "errors"}`; `GlobalExceptionHandler` ánh xạ lỗi sang mã HTTP (400 dữ liệu sai, 401, 403, 404, 409 xung đột, 422 AI trả dữ liệu không dùng được, 502/503/504 lỗi AI, 500 kèm mã tham chiếu `ERR-yyyyMMdd-xxxx`) và chuyển về trang trước kèm thông báo cho trang thường.
 - **CSRF:** mọi form POST có trường ẩn `_csrf`; `fetch` dùng `csrfFetch()` (header `X-CSRF-TOKEN` lấy từ `<meta name="csrf-token">`). Đăng xuất là `POST /logout`.

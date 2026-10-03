@@ -40,9 +40,6 @@ public class Lesson {
     @Column(name = "Content", columnDefinition = "NVARCHAR(MAX)")
     private String content;
 
-    @Column(name = "YoutubeUrl", length = 255)
-    private String youtubeUrl;
-
     @Column(name = "DisplayOrder")
     private int displayOrder;
 
@@ -60,8 +57,6 @@ public class Lesson {
     public void setSummary(String summary) { this.summary = summary; }
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content; }
-    public String getYoutubeUrl() { return youtubeUrl; }
-    public void setYoutubeUrl(String youtubeUrl) { this.youtubeUrl = youtubeUrl; }
     public int getDisplayOrder() { return displayOrder; }
     public void setDisplayOrder(int displayOrder) { this.displayOrder = displayOrder; }
     public LocalDateTime getCreatedAt() { return createdAt; }

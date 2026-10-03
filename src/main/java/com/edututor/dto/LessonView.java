@@ -9,7 +9,6 @@ public class LessonView implements Serializable {
     private String title;
     private String summary;
     private String content;
-    private String youtubeUrl;
     private int displayOrder;
     private Date createdAt;
 
@@ -58,19 +57,6 @@ public class LessonView implements Serializable {
 
     public void setContent(String content) {
         this.content = content;
-    }
-
-    /** Link nhúng iframe (youtube.com/embed/ID) suy ra từ link YouTube đã lưu; null nếu không phải link YouTube hợp lệ. */
-    public String getEmbedUrl() {
-        return com.edututor.util.YoutubeUtil.getEmbedUrl(youtubeUrl);
-    }
-
-    public String getYoutubeUrl() {
-        return youtubeUrl;
-    }
-
-    public void setYoutubeUrl(String youtubeUrl) {
-        this.youtubeUrl = youtubeUrl;
     }
 
     public int getDisplayOrder() {

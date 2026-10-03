@@ -301,4 +301,46 @@ class UnitTests {
         assertEquals(200, csrf("POST", null, "OK"));
         assertEquals(403, csrf("DELETE", null, null));
     }
+
+    // ---------- Bài giảng (VAL-08) ----------
+
+    private void invalid(com.edututor.model.MaterialType t, String url, String text, String expectedPart) {
+        IllegalArgumentException e = org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> com.edututor.service.MaterialService.validateContent(t, url, text));
+        assertTrue(e.getMessage().contains(expectedPart), e.getMessage());
+    }
+
+    @Test
+    void materialRulesFollowVal08() {
+        var y = com.edututor.model.MaterialType.YOUTUBE;
+        var v = com.edututor.model.MaterialType.VIDEO;
+        var l = com.edututor.model.MaterialType.LINK;
+        var tx = com.edututor.model.MaterialType.TEXT;
+        com.edututor.service.MaterialService.validateContent(y, "https://www.youtube.com/watch?v=zSnMIO2D4oE", null);
+        com.edututor.service.MaterialService.validateContent(y, "https://youtu.be/zSnMIO2D4oE", null);
+        com.edututor.service.MaterialService.validateContent(y, "https://www.youtube.com/embed/zSnMIO2D4oE?si=x", null);
+        com.edututor.service.MaterialService.validateContent(v, "https://cdn.example.com/a/b.MP4?token=1", null);
+        com.edututor.service.MaterialService.validateContent(l, "http://example.com/trang", null);
+        com.edututor.service.MaterialService.validateContent(tx, null, "Cho $x^2$");
+        invalid(y, "https://example.com/watch?v=zSnMIO2D4oE", null, "YouTube");
+        invalid(y, "ftp://youtube.com/watch?v=zSnMIO2D4oE", null, "http");
+        invalid(v, "https://example.com/a.exe", null, ".mp4");
+        invalid(l, "javascript:alert(1)", null, "http");
+        invalid(l, "data:text/html,<script>1</script>", null, "http");
+        invalid(l, "", null, "URL");
+        invalid(tx, null, "  ", "nội dung");
+        invalid(tx, null, "x".repeat(20001), "20.000");
+    }
+
+    @Test
+    void youtubeUtilExtractsIdFromAllLinkForms() {
+        assertEquals("zSnMIO2D4oE", com.edututor.util.YoutubeUtil.extractId("https://www.youtube.com/watch?v=zSnMIO2D4oE&t=5"));
+        assertEquals("zSnMIO2D4oE", com.edututor.util.YoutubeUtil.extractId("https://youtu.be/zSnMIO2D4oE?si=abc"));
+        assertEquals("zSnMIO2D4oE", com.edututor.util.YoutubeUtil.extractId("https://www.youtube.com/embed/zSnMIO2D4oE?si=62w8J9"));
+        assertEquals("zSnMIO2D4oE", com.edututor.util.YoutubeUtil.extractId("https://www.youtube.com/shorts/zSnMIO2D4oE"));
+        assertNull(com.edututor.util.YoutubeUtil.extractId("https://example.com/video"));
+        assertNull(com.edututor.util.YoutubeUtil.extractId(null));
+        assertEquals("https://www.youtube.com/embed/zSnMIO2D4oE",
+                com.edututor.util.YoutubeUtil.getEmbedUrl("https://youtu.be/zSnMIO2D4oE"));
+    }
 }

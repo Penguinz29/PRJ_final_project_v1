@@ -85,3 +85,23 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Questions_Lesson_Activ
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Submissions_Student')
     CREATE INDEX IX_Submissions_Student ON Submissions(StudentId, SubmittedAt DESC);
 GO
+
+-- 8) Hợp nhất "video hướng dẫn" cũ (Lessons.YoutubeUrl) vào bài giảng (LessonMaterials)
+--    Mỗi bài học có YoutubeUrl hợp lệ được chuyển thành 1 bài giảng (link YouTube -> YOUTUBE, link khác -> LINK),
+--    người tạo = giáo viên sở hữu chủ đề. Sau khi chuyển, YoutubeUrl được xóa trắng (cột giữ lại, ứng dụng không còn dùng).
+--    Idempotent: chạy lại không tạo trùng.
+INSERT INTO LessonMaterials (LessonId, MaterialType, Title, Url, OrderIndex, CreatedBy)
+SELECT l.LessonId,
+       CASE WHEN l.YoutubeUrl LIKE '%youtube.com/%' OR l.YoutubeUrl LIKE '%youtu.be/%' THEN 'YOUTUBE' ELSE 'LINK' END,
+       N'Video bài giảng', LTRIM(RTRIM(l.YoutubeUrl)), 1, t.TeacherId
+FROM Lessons l
+JOIN Topics t ON t.TopicId = l.TopicId
+WHERE l.YoutubeUrl IS NOT NULL
+  AND (LTRIM(RTRIM(l.YoutubeUrl)) LIKE 'http://%' OR LTRIM(RTRIM(l.YoutubeUrl)) LIKE 'https://%')
+  AND NOT EXISTS (SELECT 1 FROM LessonMaterials m WHERE m.LessonId = l.LessonId AND m.Url = LTRIM(RTRIM(l.YoutubeUrl)));
+GO
+UPDATE l SET YoutubeUrl = NULL
+FROM Lessons l
+WHERE l.YoutubeUrl IS NOT NULL
+  AND EXISTS (SELECT 1 FROM LessonMaterials m WHERE m.LessonId = l.LessonId AND m.Url = LTRIM(RTRIM(l.YoutubeUrl)));
+GO

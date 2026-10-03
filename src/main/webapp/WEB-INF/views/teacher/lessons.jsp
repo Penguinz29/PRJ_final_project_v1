@@ -56,7 +56,6 @@
                                                     <th>#</th>
                                                     <th>Tiêu đề</th>
                                                     <th>Chủ đề</th>
-                                                    <th>Video</th>
                                                     <th>Câu hỏi</th>
                                                     <th style="width:120px">Thao tác</th>
                                                 </tr>
@@ -65,7 +64,7 @@
                                                 <c:choose>
                                                     <c:when test="${empty lessons}">
                                                         <tr>
-                                                            <td colspan="6">
+                                                            <td colspan="5">
                                                                 <div class="empty-state">
                                                                     <i class="bi bi-journal empty-icon"></i>
                                                                     <p>Chưa có bài giảng nào.</p>
@@ -95,22 +94,16 @@
                                                                         <c:out value="${l.topicName}" />
                                                                     </span></td>
                                                                 <td>
-                                                                    <c:choose>
-                                                                        <c:when test="${not empty l.youtubeUrl}">
-                                                                            <i
-                                                                                class="bi bi-play-btn-fill text-danger"></i>
-                                                                        </c:when>
-                                                                        <c:otherwise><span class="text-muted">—</span>
-                                                                        </c:otherwise>
-                                                                    </c:choose>
-                                                                </td>
-                                                                <td>
                                                                     <a href="${pageContext.request.contextPath}/teacher/questions?lessonId=${l.lessonId}"
                                                                         class="badge bg-primary-subtle text-primary text-decoration-none">
                                                                         ${l.questionCount} câu
                                                                     </a>
                                                                 </td>
                                                                 <td>
+                                                                    <a href="${pageContext.request.contextPath}/teacher/lessons/${l.lessonId}/materials"
+                                                                        class="btn btn-sm btn-outline-secondary me-1"
+                                                                        title="Quản lý bài giảng (video, link, văn bản)"><i
+                                                                            class="bi bi-collection-play"></i></a>
                                                                     <a href="${pageContext.request.contextPath}/teacher/lessons?action=edit&id=${l.lessonId}"
                                                                         class="btn btn-sm btn-outline-primary me-1"><i
                                                                             class="bi bi-pencil"></i></a>

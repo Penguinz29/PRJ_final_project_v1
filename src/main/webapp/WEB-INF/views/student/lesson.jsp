@@ -49,7 +49,7 @@
                         </div>
 
                         <div class="row g-4">
-                            <div class="col-lg-8">
+                            <div class="col-12 col-xl-10">
                                 <div class="card shadow-sm border-0 mb-4">
                                     <div class="card-header bg-white py-3">
                                         <i class="bi bi-book-half me-2 text-primary"></i>Nội dung lý thuyết
@@ -58,22 +58,44 @@
                                         <c:out value="${lesson.content}" />
                                     </div>
                                 </div>
-                            </div>
-
-                            <div class="col-lg-4">
-                                <c:if test="${not empty lesson.embedUrl}">
-                                    <div class="card shadow-sm border-0 mb-4"
-                                        style="position:sticky;top:calc(var(--navbar-h) + 1rem);">
+                                <%-- Bài giảng: YouTube / video / liên kết / văn bản (lesson_materials) --%>
+                                <c:if test="${not empty materials}">
+                                    <div class="card shadow-sm border-0 mb-4">
                                         <div class="card-header bg-white py-3">
-                                            <i class="bi bi-youtube me-2 text-danger"></i>Video hướng dẫn
+                                            <i class="bi bi-collection-play me-2 text-primary"></i>Bài giảng
                                         </div>
-                                        <div class="card-body p-2">
-                                            <%-- Assuming lesson.youtubeUrl contains the embed URL here via FileUtil
-                                                mapping --%>
-                                                <div class="ratio ratio-16x9">
-                                                    <iframe src="${lesson.embedUrl}" allowfullscreen
-                                                        class="rounded"></iframe>
+                                        <div class="card-body p-4">
+                                            <c:forEach var="m" items="${materials}" varStatus="vs">
+                                                <div class="${vs.last ? '' : 'mb-4 pb-4 border-bottom'}">
+                                                    <h6 class="fw-bold mb-3"><c:out value="${m.title}" /></h6>
+                                                    <c:choose>
+                                                        <c:when test="${m.materialType == 'YOUTUBE' and not empty m.youtubeEmbedUrl}">
+                                                            <div class="ratio ratio-16x9">
+                                                                <iframe src="${m.youtubeEmbedUrl}" title="<c:out value='${m.title}'/>"
+                                                                    allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                                                    referrerpolicy="strict-origin-when-cross-origin" loading="lazy"
+                                                                    allowfullscreen class="rounded"></iframe>
+                                                            </div>
+                                                        </c:when>
+                                                        <c:when test="${m.materialType == 'VIDEO'}">
+                                                            <video controls preload="metadata" class="w-100 rounded"
+                                                                src="<c:out value='${m.url}'/>">
+                                                                Trình duyệt không hỗ trợ phát video.
+                                                            </video>
+                                                        </c:when>
+                                                        <c:when test="${m.materialType == 'LINK'}">
+                                                            <a href="<c:out value='${m.url}'/>" target="_blank"
+                                                                rel="noopener noreferrer" class="btn btn-outline-primary">
+                                                                <i class="bi bi-box-arrow-up-right me-2"></i>Mở liên kết
+                                                            </a>
+                                                            <div class="small text-muted mt-1 text-break"><c:out value="${m.url}" /></div>
+                                                        </c:when>
+                                                        <c:when test="${m.materialType == 'TEXT'}">
+                                                            <div class="latex-content" style="white-space:pre-wrap;line-height:1.7;"><c:out value="${m.contentText}" /></div>
+                                                        </c:when>
+                                                    </c:choose>
                                                 </div>
+                                            </c:forEach>
                                         </div>
                                     </div>
                                 </c:if>

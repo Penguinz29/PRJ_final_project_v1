@@ -316,40 +316,6 @@
     }
   }
 
-  /* ── 7.8 YouTube preview ── */
-  function initYoutubePreview() {
-    var input = qs('#youtubeUrl');
-    var previewWrap = qs('#youtubePreviewWrap');
-    var iframe = qs('#youtubePreview');
-    if (!input) return;
-
-    function toEmbed(url) {
-      if (!url) return null;
-      var m;
-      m = url.match(/[?&]v=([^&]+)/);       if (m) return 'https://www.youtube.com/embed/' + m[1];
-      m = url.match(/youtu\.be\/([^?]+)/);   if (m) return 'https://www.youtube.com/embed/' + m[1];
-      m = url.match(/shorts\/([^?]+)/);      if (m) return 'https://www.youtube.com/embed/' + m[1];
-      return null;
-    }
-
-    function update() {
-      var embed = toEmbed(input.value.trim());
-      if (embed) {
-        input.classList.remove('is-invalid');
-        if (iframe) iframe.src = embed;
-        if (previewWrap) previewWrap.style.display = '';
-      } else {
-        if (input.value.trim()) input.classList.add('is-invalid');
-        else input.classList.remove('is-invalid');
-        if (previewWrap) previewWrap.style.display = 'none';
-        if (iframe) iframe.src = '';
-      }
-    }
-
-    input.addEventListener('input', update);
-    update();
-  }
-
   /* ── 7.10 MCQ/ESSAY switch ── */
   function initQuestionTypeSwitch() {
     var radios = qsa('[name="type"]');
@@ -514,7 +480,6 @@
     initAutoOpenModal();
     initQuiz();
     initDropzone();
-    initYoutubePreview();
     initKaTeX();
     initQuestionTypeSwitch();
     initAiPreviewCounter();

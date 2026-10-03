@@ -82,8 +82,9 @@ class QueryCountIT {
     @Test
     void entityManagerFactoryStartsWithSchemaManagementDisabled() {
         assertTrue(ctx.getBean(EntityManagerFactory.class).isOpen());
-        // 9 Entity khớp 9 bảng của CSDL hiện có (Users, Topics, Lessons, Questions, QuestionOptions, Submissions, AiConfigs, TutorSessions, TutorMessages)
-        assertEquals(9, ctx.getBean(EntityManagerFactory.class).getMetamodel().getEntities().size());
+        // 10 Entity (Users, Topics, Lessons, LessonMaterials, Questions, QuestionOptions, Submissions, AiConfigs,
+        // TutorSessions, TutorMessages)
+        assertEquals(10, ctx.getBean(EntityManagerFactory.class).getMetamodel().getEntities().size());
     }
 
     @Test
@@ -98,6 +99,12 @@ class QueryCountIT {
     /** Danh sách phân trang: Spring Data bỏ câu COUNT khi trang đầu chưa đầy, nên chỉ cần "không quá" giới hạn. */
     private void assertAtMost(long max, long actual, String message) {
         assertTrue(actual <= max, message + " (thực tế " + actual + " câu SQL, tối đa " + max + ")");
+    }
+
+    @Test
+    void lessonMaterialsLoadInOneQuery() {
+        assertEquals(1, statements(() -> ctx.getBean(com.edututor.service.MaterialService.class).getByLesson(1)),
+                "bài giảng + người tạo trong một câu SQL (EntityGraph)");
     }
 
     @Test

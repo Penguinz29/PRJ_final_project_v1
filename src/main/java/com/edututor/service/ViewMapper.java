@@ -70,7 +70,6 @@ final class ViewMapper {
         v.setTitle(l.getTitle());
         v.setSummary(l.getSummary());
         v.setContent(l.getContent());
-        v.setYoutubeUrl(l.getYoutubeUrl());
         v.setDisplayOrder(l.getDisplayOrder());
         v.setCreatedAt(toDate(l.getCreatedAt()));
         v.setQuestionCount(questionCount);

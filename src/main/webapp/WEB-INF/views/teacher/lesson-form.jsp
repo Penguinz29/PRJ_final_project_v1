@@ -1,6 +1,6 @@
 <%-- File: WEB-INF/views/teacher/lesson-form.jsp Servlet: TeacherLessonServlet (GET ?action=create|edit) Attributes:
     lesson(Lesson - null nếu create), topics(List<Topic>), isEdit(boolean)
-    POST fields: title, topicId, summary, content, youtubeUrl, action(create|update), id
+    POST fields: title, topicId, summary, content, action(create|update), id
     --%>
     <%@ page contentType="text/html;charset=UTF-8" pageEncoding="UTF-8" %>
         <%@ taglib prefix="ui" tagdir="/WEB-INF/tags" %>
@@ -90,23 +90,16 @@
                                         </div>
                                     </div>
 
-                                    <div class="card mt-3">
-                                        <div class="card-header"><i class="bi bi-youtube me-2 text-danger"></i>Video
-                                            YouTube (tùy chọn)</div>
-                                        <div class="card-body">
-                                            <div class="mb-3">
-                                                <label class="form-label fw-semibold" for="youtubeUrl">Link
-                                                    YouTube</label>
-                                                <input type="url" class="form-control" id="youtubeUrl" name="youtubeUrl"
-                                                    value="<c:out value='${lesson.youtubeUrl}'/>" maxlength="500"
-                                                    placeholder="https://www.youtube.com/watch?v=...">
-                                                <div class="invalid-feedback">URL không hợp lệ.</div>
-                                            </div>
-                                            <div id="youtubePreviewWrap" style="display:none;">
-                                                <iframe id="youtubePreview" width="100%" height="220" frameborder="0"
-                                                    allowfullscreen class="rounded"></iframe>
-                                            </div>
-                                        </div>
+                                    <div class="alert alert-info mt-3 mb-0 small">
+                                        <i class="bi bi-collection-play me-1"></i>
+                                        Video YouTube, video tệp, liên kết website và bài giảng dạng văn bản được quản lý riêng:
+                                        <c:choose>
+                                            <c:when test="${isEdit}">
+                                                <a href="${pageContext.request.contextPath}/teacher/lessons/${lesson.lessonId}/materials"
+                                                    class="alert-link">mở trang Bài giảng của bài học này</a>.
+                                            </c:when>
+                                            <c:otherwise>lưu bài học trước, rồi bấm nút <strong>Bài giảng</strong> ở danh sách bài học.</c:otherwise>
+                                        </c:choose>
                                     </div>
 
                                     <div class="d-flex gap-2 mt-3">

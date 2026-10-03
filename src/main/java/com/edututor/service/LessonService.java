@@ -98,6 +98,5 @@ public class LessonService {
         l.setTitle(form.getTitle());
         l.setSummary(form.getSummary());
         l.setContent(form.getContent());
-        l.setYoutubeUrl(form.getYoutubeUrl());
     }
 }
