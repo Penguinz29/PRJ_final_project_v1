@@ -25,7 +25,7 @@
     <c:choose>
         <c:when test="${empty item}">
             <div class="alert alert-warning py-2 mb-0 small">
-                Khóa này chưa có trong CSDL. Hãy chạy <code>document/sql/07_ai_configs_full.sql</code>.
+                Khóa này chưa có trong CSDL. Hãy chạy <code>document/sql/02_data.sql</code>.
             </div>
         </c:when>
         <c:when test="${inputType == 'password'}">

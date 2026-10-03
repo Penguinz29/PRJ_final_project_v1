@@ -9,6 +9,7 @@ import com.edututor.exception.AiServiceException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
+import java.time.Duration;
 import java.util.List;
 import java.util.function.Function;
 import org.slf4j.Logger;
@@ -24,6 +25,11 @@ import org.springframework.stereotype.Service;
 public class GeminiService {
 
     private static final Logger log = LoggerFactory.getLogger(GeminiService.class);
+
+    /** Tổng thời gian tối đa cho một yêu cầu AI kể cả các lần thử lại (FRS 4.3). */
+    private static final Duration TOTAL_BUDGET = Duration.ofSeconds(90);
+    /** Không bắt đầu lần thử lại nếu còn ít hơn số giây này. */
+    private static final long MIN_ATTEMPT_SECONDS = 5;
 
     private final GeminiClient client;
     private final AiConfigService config;
@@ -56,10 +62,22 @@ public class GeminiService {
                 Math.max(config.getMaxOutputTokens(), minTokens),
                 vision ? timeout * 2 : timeout);
 
+        // FRS 4.3: tổng thời gian chờ của một yêu cầu <= 90 giây (nhỏ hơn timeout async 100 giây của WebConfig),
+        // để luồng AI không còn chạy và ghi CSDL sau khi client đã nhận lỗi.
+        long deadline = System.nanoTime() + TOTAL_BUDGET.toNanos();
         Exception last = null;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            long remainingSeconds = (deadline - System.nanoTime()) / 1_000_000_000L;
+            if (attempt > 1 && remainingSeconds < MIN_ATTEMPT_SECONDS) {
+                log.warn("Hết ngân sách thời gian {} giây, dừng thử lại ở lần {}/{}", TOTAL_BUDGET.toSeconds(),
+                        attempt - 1, maxAttempts);
+                break;
+            }
+            Settings attemptSettings = new Settings(settings.apiKey(), settings.model(), settings.temperature(),
+                    settings.maxOutputTokens(),
+                    (int) Math.max(1, Math.min(settings.timeoutSeconds(), remainingSeconds)));
             try {
-                String raw = client.generate(settings, systemInstruction, turns, true);
+                String raw = client.generate(attemptSettings, systemInstruction, turns, true);
                 return parser.apply(mapper.readTree(AiJsonParser.extractJson(raw)));
             } catch (AiServiceException e) {
                 // Chưa cấu hình / HTTP 4xx (trừ 429): thử lại cũng vô ích

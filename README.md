@@ -38,12 +38,12 @@
 ### 🛡️ Quản trị viên (Admin)
 - **Tổng quan hệ thống:** Thống kê số lượng học sinh, giáo viên, chủ đề và câu hỏi.
 - **Quản lý người dùng:** Tìm kiếm, lọc theo vai trò/trạng thái, phân trang; tạo, sửa, đổi vai trò, khóa/mở khóa, xóa (cứng hoặc mềm) và đặt lại mật khẩu.
-- **Cấu hình AI (FR-ADM-01/02):** Tùy chỉnh Gemini API Key, Provider, Model (`gemini-1.5-flash`) và nút **Ping Test** kiểm tra kết nối Google AI trực tiếp.
+- **Cấu hình AI (FR-ADM-01/02):** Tùy chỉnh Gemini API Key, Provider, Model (mặc định `gemini-3.5-flash`, đổi được trên giao diện) và nút **Test kết nối** kiểm tra kết nối Google AI trực tiếp.
 - **Quản lý dữ liệu gốc:** Toàn quyền quản trị Chủ đề, Bài giảng và Ngân hàng câu hỏi.
 
 ### 👨‍🏫 Giáo viên (Teacher)
 - **Quản lý chuyên đề & bài giảng:** Tạo mới, chỉnh sửa chuyên đề Toán 12, nhúng video bài giảng YouTube.
-- **Ngân hàng câu hỏi:** Quản lý câu hỏi trắc nghiệm (MCQ) và tự luận (ESSAY) với 4 mức độ (Dễ, Trung bình, Khó, Vận dụng cao).
+- **Ngân hàng câu hỏi:** Quản lý câu hỏi trắc nghiệm (MCQ) và tự luận (ESSAY) với 3 mức độ (1 - Dễ, 2 - Trung bình, 3 - Khó; CSDL hiện giới hạn `Level` ∈ {1,2,3}, xem FRS mục 10).
 - **Sinh đề AI thông minh (FR-TEA-03):** Giáo viên chọn chủ đề và số lượng câu hỏi, Gemini AI tự động sinh đề kèm đáp án và lời giải chi tiết, xem trước qua KaTeX và lưu hàng loạt vào DB.
 - **Chấm bài tự luận (FR-TEA-04):** Xem ảnh bài làm viết tay của học sinh, xem văn bản nhận diện OCR từ AI, chấm điểm thang 10.0 và gửi nhận xét phản hồi.
 - **Theo dõi học sinh:** Xem tiến độ và lịch sử làm bài chi tiết của từng học sinh.
@@ -87,7 +87,7 @@ PRJ_final_project_v1/
     │       ├── static/                    # css/, js/ (app.js: csrfFetch, renderMath, ...)
     │       └── WEB-INF/
     │           ├── views/                 # JSP: admin, auth, common, error, student, teacher
-    │           └── tags/                  # Tag file dùng lại: pagination.tag, flash.tag, error-card.tag
+    │           └── tags/                  # Tag file dùng lại: pagination.tag, flash.tag, delete-button.tag, config-field.tag, error-card.tag
     └── test/java/com/edututor/            # UnitTests (chạy trong mvn package) + EduTutorIT, QueryCountIT (cần SQL Server)
 ```
 
@@ -109,7 +109,7 @@ PRJ_final_project_v1/
 ### Bước 3: Cấu hình kết nối
 Sửa `src/main/resources/application.properties` (`db.url`, `db.username`, `db.password`) **hoặc** đặt biến môi trường / `-D` `DB_URL`, `DB_USER`, `DB_PASS` (ưu tiên cao hơn). Ảnh bài làm tự luận lưu ở `app.upload-dir` (mặc định `C:/edututor/uploads`, đổi bằng `UPLOAD_DIR`).
 
-Khóa Gemini API, model, temperature, số token **không** nằm trong file này: Admin nhập tại trang **Cấu hình AI** (lưu trong bảng `AiConfigs`, có hiệu lực ngay, không cần khởi động lại). Tên model Gemini thay đổi theo thời gian — hãy kiểm tra tên còn được hỗ trợ rồi bấm **Test Connection**.
+Khóa Gemini API, model, temperature, số token **không** nằm trong file này: Admin nhập tại trang **Cấu hình AI** (lưu trong bảng `AiConfigs`, có hiệu lực ngay, không cần khởi động lại). Tên model Gemini thay đổi theo thời gian — hãy kiểm tra tên còn được hỗ trợ rồi bấm **Test kết nối**.
 
 ### Bước 4: Chạy trên NetBeans 17
 1. *File > Open Project* chọn thư mục dự án (nhận dạng là **Maven Web Application**).
@@ -123,7 +123,7 @@ Hoặc dòng lệnh: `mvn clean package` rồi chép `target/edututor.war` vào 
 
 ### Bước 5 (tùy chọn): Chạy kiểm thử
 ```bash
-mvn clean package            # build WAR + 17 unit test, không cần CSDL
+mvn clean package            # build WAR + 21 unit test, không cần CSDL
 # Kiểm thử tích hợp (Tomcat nhúng + SQL Server thật + Gemini giả + đếm số câu SQL chống N+1).
 # Dùng CSDL riêng: chạy 01_schema.sql + 02_data.sql sau khi đổi tên MathTutorDB thành MathTutorDB_test:
 mvn clean verify -Pintegration -Dit.db.url="jdbc:sqlserver://localhost:1433;databaseName=MathTutorDB_test;encrypt=true;trustServerCertificate=true" -Dit.db.user=sa -Dit.db.pass=123
@@ -149,9 +149,9 @@ Tất cả các tài khoản mặc định có mật khẩu là: **`EduTutor@123
 
 ## ⚙️ 7. Lưu ý Kỹ thuật quan trọng
 - **Mật khẩu:** tài khoản seed dùng BCrypt (`EduTutor@123`). Tài khoản cũ còn băm SHA-256 vẫn đăng nhập được và tự được băm lại bằng BCrypt ở lần đăng nhập thành công đầu tiên.
-- **Tầng dữ liệu:** Entity JPA ánh xạ **1-1 với 10 bảng** (9 bảng gốc + `LessonMaterials` do script 06 tạo). Mọi quan hệ `LAZY`; Service map Entity sang DTO bên trong `@Transactional`; không bật Open-Session-In-View; câu hỏi làm bài chỉ chọn cột được phép (không lộ đáp án/lời giải trước khi nộp).
+- **Tầng dữ liệu:** Entity JPA ánh xạ **1-1 với 10 bảng** (tất cả do `01_schema.sql` tạo). Mọi quan hệ `LAZY`; Service map Entity sang DTO bên trong `@Transactional`; không bật Open-Session-In-View; câu hỏi làm bài chỉ chọn cột được phép (không lộ đáp án/lời giải trước khi nộp).
 - **Giao dịch & AI:** các lời gọi Gemini nằm **ngoài** transaction; phần ghi DB của gia sư AI nằm ở bean riêng `TutorPersistence`. Các endpoint `/api/tutor/next-step`, `/api/teacher/generate-questions`, `/api/student/submit-essay-ocr`, `/api/admin/ai-config/test-connection` trả `CompletableFuture`, chạy trên thread pool `aiExecutor` nên không chặn luồng Tomcat.
 - **Phản hồi API thống nhất:** mọi `/api/**` trả `{"success", "message", "data", "errors"}`; `GlobalExceptionHandler` ánh xạ lỗi sang mã HTTP (400 dữ liệu sai, 401, 403, 404, 409 xung đột, 422 AI trả dữ liệu không dùng được, 502/503/504 lỗi AI, 500 kèm mã tham chiếu `ERR-yyyyMMdd-xxxx`) và chuyển về trang trước kèm thông báo cho trang thường.
 - **CSRF:** mọi form POST có trường ẩn `_csrf`; `fetch` dùng `csrfFetch()` (header `X-CSRF-TOKEN` lấy từ `<meta name="csrf-token">`). Đăng xuất là `POST /logout`.
-- **Cấu hình bằng Java, không cần `web.xml`** (tệp `WEB-INF/web.xml` còn sót chỉ lặp lại cấu hình session/trang lỗi và có thể xóa): `WebAppInitializer` đăng ký DispatcherServlet, UTF-8 filter, multipart, session timeout 30 phút, cookie `HttpOnly` + `SameSite=Lax`. Trang lỗi nằm ở `WEB-INF/views/error/`.
+- **Cấu hình bằng Java, không cần `web.xml`** (dự án không có `web.xml`): `WebAppInitializer` đăng ký DispatcherServlet, UTF-8 filter, multipart, session timeout 30 phút, cookie `HttpOnly` + `SameSite=Lax`. Trang lỗi nằm ở `WEB-INF/views/error/`.
 - **Phiên bản trước (Servlet thuần, JDBC thủ công; rồi JdbcTemplate)** đã được thay thế hoàn toàn; không còn `DBContext`, `*DAO`, `JdbcTemplate`, `@WebServlet`, `build.xml`/`nbproject` (Ant).

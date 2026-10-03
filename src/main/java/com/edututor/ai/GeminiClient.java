@@ -1,5 +1,6 @@
 package com.edututor.ai;
 
+import com.edututor.exception.AiConfigException;
 import com.edututor.exception.AiServiceException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -76,7 +77,7 @@ public class GeminiClient {
      */
     public String generate(Settings s, String systemInstruction, List<Turn> turns, boolean json) {
         if (s.apiKey() == null || s.apiKey().isBlank()) {
-            throw new AiServiceException("Chưa cấu hình GEMINI_API_KEY. Vui lòng vào Quản trị > Cấu hình AI để cập nhật.");
+            throw new AiConfigException("Chưa cấu hình GEMINI_API_KEY", 0);
         }
         String body = buildBody(s, systemInstruction, turns, json);
         JsonNode root = post(s.apiKey(), s.model(), body, Duration.ofSeconds(s.timeoutSeconds()));
@@ -144,7 +145,7 @@ public class GeminiClient {
 
     private JsonNode post(String apiKey, String model, String body, Duration timeout) {
         if (model == null || model.isBlank()) {
-            throw new AiServiceException("Chưa cấu hình model Gemini. Vui lòng vào Quản trị > Cấu hình AI để cập nhật.");
+            throw new AiConfigException("Chưa cấu hình model Gemini", 0);
         }
         String m = model.trim();
         HttpRequest request = HttpRequest.newBuilder()
@@ -159,8 +160,13 @@ public class GeminiClient {
             if (resp.statusCode() == 200) {
                 return mapper.readTree(resp.body());
             }
-            throw new AiServiceException("Gemini API lỗi HTTP " + resp.statusCode() + ": "
-                    + extractErrorMessage(resp.body()), null, resp.statusCode());
+            int status = resp.statusCode();
+            String detail = "Gemini API lỗi HTTP " + status + ": " + extractErrorMessage(resp.body());
+            // 400/401/403 (khóa hoặc model sai), 404 (model không tồn tại): lỗi cấu hình, thử lại cũng vô ích (FRS 4.3)
+            if (status == 400 || status == 401 || status == 403 || status == 404) {
+                throw new AiConfigException(detail, status);
+            }
+            throw new AiServiceException(detail, null, status);
         } catch (HttpTimeoutException e) {
             throw new AiServiceException("Gemini API không phản hồi kịp thời gian cho phép.", e, 504);
         } catch (IOException e) {

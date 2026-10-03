@@ -122,17 +122,28 @@ public class GlobalExceptionHandler {
         respond(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage(), null, req, res);
     }
 
-    /** Lỗi gọi Gemini: 504 hết thời gian, 503 hệ thống bận, 422 dữ liệu không dùng được, còn lại 502. */
+    /** Cấu hình AI sai (khóa / model / prompt) → 503 kèm lời nhắn báo quản trị viên; chi tiết chỉ ghi log. */
+    @ExceptionHandler(AiConfigException.class)
+    public void handleAiConfig(AiConfigException ex, HttpServletRequest req, HttpServletResponse res)
+            throws IOException {
+        log.warn("Cấu hình AI chưa đúng: {}", ex.getDetail());
+        respond(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), null, req, res);
+    }
+
+    /**
+     * Lỗi gọi Gemini: 504 hết thời gian, 503 hệ thống bận, 422 dữ liệu không dùng được, còn lại 502.
+     * Nội dung lỗi thô của Gemini (429/5xx hết lần thử, nội dung bị chặn...) chỉ ghi log, không hiện cho người dùng.
+     */
     @ExceptionHandler(AiServiceException.class)
     public void handleAi(AiServiceException ex, HttpServletRequest req, HttpServletResponse res) throws IOException {
         log.warn("Lỗi dịch vụ AI: {}", ex.getMessage());
-        HttpStatus status = switch (ex.getHttpStatus()) {
-            case 504 -> HttpStatus.GATEWAY_TIMEOUT;
-            case 503 -> HttpStatus.SERVICE_UNAVAILABLE;
-            case 422 -> HttpStatus.UNPROCESSABLE_ENTITY;
-            default -> HttpStatus.BAD_GATEWAY;
-        };
-        respond(status, ex.getMessage(), null, req, res);
+        switch (ex.getHttpStatus()) {
+            case 504 -> respond(HttpStatus.GATEWAY_TIMEOUT, "AI phản hồi quá chậm, vui lòng thử lại.", null, req, res);
+            case 503 -> respond(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), null, req, res);
+            case 422 -> respond(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), null, req, res);
+            default -> respond(HttpStatus.BAD_GATEWAY, "AI tạm thời không phản hồi, vui lòng thử lại sau.", null,
+                    req, res);
+        }
     }
 
     /** Mọi ngoại lệ còn lại → ghi log chi tiết kèm mã tham chiếu, trả 500 với thông báo thân thiện. */

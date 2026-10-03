@@ -75,12 +75,6 @@
                         </a>
                     </div>
                 </div>
-                <!-- EXCEPTION DETAIL
-                <c:if test="${not empty exception}">
-                    Message: ${exception.message}
-                    <% exception.printStackTrace(new java.io.PrintWriter(out)); %>
-                </c:if>
-                -->
                 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
             </body>
 

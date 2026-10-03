@@ -3,6 +3,7 @@ package com.edututor.service;
 import com.edututor.ai.GeminiClient.Part;
 import com.edututor.ai.GeminiClient.Turn;
 import com.edututor.ai.PromptBuilder;
+import com.edututor.ai.RateLimiter;
 import com.edututor.dto.EssayGradingResult;
 import com.edututor.dto.EssayOcrResponse;
 import com.edututor.model.Question;
@@ -50,11 +51,14 @@ public class EssayGradingService {
     private final SubmissionService submissionService;
     private final FileStorageService storage;
     private final ObjectMapper mapper;
+    private final RateLimiter rateLimiter;
     private final long maxFileSize;
 
     public EssayGradingService(GeminiService gemini, AiConfigService config, QuestionRepository questionRepository,
                                SubmissionService submissionService, FileStorageService storage,
-                               ObjectMapper mapper, @Value("${app.upload.max-bytes:5242880}") long maxFileSize) {
+                               ObjectMapper mapper, RateLimiter rateLimiter,
+                               @Value("${app.upload.max-bytes:5242880}") long maxFileSize) {
+        this.rateLimiter = rateLimiter;
         this.gemini = gemini;
         this.config = config;
         this.questionRepository = questionRepository;
@@ -93,6 +97,8 @@ public class EssayGradingService {
             }
             image = ImageValidator.validate(imageBytes);
         }
+        // BR-13: dùng chung hạn mức học sinh với gia sư; chỉ trừ lượt sau khi dữ liệu và ảnh đã hợp lệ (UC-OCR-01)
+        rateLimiter.check(studentId, RateLimiter.Action.STUDENT_AI);
 
         // System instruction = GRADING_PROMPT (đề + đáp án tham khảo) + cấu trúc JSON + phần chốt cố định
         String reference = question.getExplanationLatex();

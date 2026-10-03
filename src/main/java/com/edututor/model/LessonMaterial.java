@@ -19,7 +19,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 /**
  * Entity bảng LessonMaterials: bài giảng của một bài học (VIDEO / YOUTUBE / LINK dùng {@code url};
- * TEXT dùng {@code contentText}). Bảng được tạo bởi document/sql/06_target_schema_additions.sql.
+ * TEXT dùng {@code contentText}). Bảng được tạo bởi document/sql/01_schema.sql.
  */
 @Entity
 @Table(name = "LessonMaterials")

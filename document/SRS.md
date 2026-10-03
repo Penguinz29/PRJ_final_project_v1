@@ -5,7 +5,7 @@
 | Thông tin | Nội dung |
 |---|---|
 | Đồ án | PRJ301 — Java Web Application |
-| Phiên bản tài liệu | 2.1.2 (đồng bộ với mã nguồn: script SQL 01–10, BR-03 áp dụng khi tạo bài học, trắc nghiệm ngẫu nhiên + chấm từng câu, tiến độ theo lần làm gần nhất; hiện trạng triển khai ở FRS mục 10). 2.1.1: BR-05 xóa mềm chỉ ẩn khỏi trang quản lý, học sinh vẫn ôn tập được; nút Xóa báo trước kết quả. 2.1.0: chuyển tầng dữ liệu sang JPA; bổ sung validation nhiều lớp, đối chiếu rubric, phụ lục Q&A |
+| Phiên bản tài liệu | 2.1.3 (rà soát tài liệu so với mã nguồn: sửa các lỗi XSS tiêu đề / lộ stack trace, ngân sách thời gian AI ≤ 90 s, `AiConfigException` → 503, sinh đề AI loại câu lỗi + cảnh báo, hạn mức AI chỉ trừ sau khi dữ liệu hợp lệ, xóa người dùng kiểm tra cả `reviewed_by`; các chỗ còn khác đặc tả liệt kê ở FRS mục 10). 2.1.2 (đồng bộ với mã nguồn: script SQL `01_schema.sql` + `02_data.sql`, BR-03 áp dụng khi tạo bài học, trắc nghiệm ngẫu nhiên + chấm từng câu, tiến độ theo lần làm gần nhất; hiện trạng triển khai ở FRS mục 10). 2.1.1: BR-05 xóa mềm chỉ ẩn khỏi trang quản lý, học sinh vẫn ôn tập được; nút Xóa báo trước kết quả. 2.1.0: chuyển tầng dữ liệu sang JPA; bổ sung validation nhiều lớp, đối chiếu rubric, phụ lục Q&A |
 | Kiến trúc | Spring MVC 6 (framework chọn từ danh sách của rubric), Jakarta Servlet 6.0, **Spring Data JPA + Hibernate 6.6**, Jakarta Bean Validation, SQL Server |
 | Giao diện | JSP + JSTL + **Bootstrap 5.3** (framework UI duy nhất) + KaTeX |
 | AI | Google Gemini REST API (model cấu hình được trong CSDL) |

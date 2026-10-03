@@ -2,6 +2,7 @@ package com.edututor.service;
 
 import com.edututor.ai.GeminiClient.Turn;
 import com.edututor.ai.PromptBuilder;
+import com.edututor.ai.RateLimiter;
 import com.edututor.dto.TutorAiResult;
 import com.edututor.dto.TutorInteractionRequest;
 import com.edututor.dto.TutorMessageView;
@@ -71,13 +72,15 @@ public class AiTutorService {
     private final GeminiService gemini;
     private final AiConfigService config;
     private final ObjectMapper mapper;
+    private final RateLimiter rateLimiter;
 
     public AiTutorService(TutorPersistence persistence, GeminiService gemini, AiConfigService config,
-                          ObjectMapper mapper) {
+                          ObjectMapper mapper, RateLimiter rateLimiter) {
         this.persistence = persistence;
         this.gemini = gemini;
         this.config = config;
         this.mapper = mapper;
+        this.rateLimiter = rateLimiter;
     }
 
     /**
@@ -97,6 +100,8 @@ public class AiTutorService {
         final int maxSteps = config.getTutorMaxSteps();
         String system = buildSystem(ctx.lessonTitle(), ctx.problemText(), ctx.reference(), 1, 0,
                 "KHỞI ĐẦU", minSteps, maxSteps);
+        // BR-13: chỉ trừ hạn mức sau khi dữ liệu và quyền sở hữu đã hợp lệ (FRS UC-TUT-01 bước 1 → 2)
+        rateLimiter.check(studentId, RateLimiter.Action.STUDENT_AI);
         TutorAiResult raw = callAi(system, List.of(Turn.user(ctx.openingText())), TurnKind.START);
 
         TutorStepResponse step = normalize(raw, TurnKind.START, 1, 0, minSteps, maxSteps);
@@ -151,6 +156,8 @@ public class AiTutorService {
                 : "HỌC SINH TRẢ LỜI BƯỚC " + prevStep;
         String system = buildSystem(ctx.lessonTitle(), ctx.problemText(), ctx.reference(), prevStep,
                 ctx.totalSteps(), turnLabel, minSteps, maxSteps);
+        // BR-13: sau khi đã xác nhận chủ phiên (403) và phiên còn ACTIVE (409)
+        rateLimiter.check(studentId, RateLimiter.Action.STUDENT_AI);
         TutorAiResult raw = callAi(system, turns, kind);
 
         // 4. Chuẩn hóa theo quy tắc phía server, 5. lưu (transaction ngắn ở bean riêng)

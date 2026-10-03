@@ -1,6 +1,5 @@
 package com.edututor.controller.api;
 
-import com.edututor.ai.RateLimiter;
 import com.edututor.dto.ApiResponse;
 import com.edututor.dto.SessionUser;
 import com.edututor.dto.TutorInteractionRequest;
@@ -23,19 +22,16 @@ import org.springframework.web.bind.annotation.SessionAttribute;
 /**
  * Gia sư AI từng bước (UC-TUT-01..04). Các lời gọi AI chạy bất đồng bộ trên executor AI (CompletableFuture)
  * nên không chiếm luồng Tomcat trong lúc chờ Gemini (NFR-02). studentId lấy từ session (đọc ở đây, trước khi
- * chuyển sang luồng khác); hạn mức gọi AI được kiểm tra trên luồng request (BR-13 → 429).
+ * chuyển sang luồng khác); hạn mức gọi AI (BR-13 → 429) được AiTutorService kiểm tra sau khi dữ liệu hợp lệ.
  */
 @RestController
 public class TutorApiController {
 
     private final AiTutorService tutorService;
-    private final RateLimiter rateLimiter;
     private final Executor aiExecutor;
 
-    public TutorApiController(AiTutorService tutorService, RateLimiter rateLimiter,
-                              @Qualifier("aiExecutor") Executor aiExecutor) {
+    public TutorApiController(AiTutorService tutorService, @Qualifier("aiExecutor") Executor aiExecutor) {
         this.tutorService = tutorService;
-        this.rateLimiter = rateLimiter;
         this.aiExecutor = aiExecutor;
     }
 
@@ -45,7 +41,6 @@ public class TutorApiController {
             @Valid @RequestBody TutorStartRequest req,
             @SessionAttribute(AuthInterceptor.SESSION_USER) SessionUser user) {
         final int studentId = user.getUserId();
-        rateLimiter.check(studentId, RateLimiter.Action.STUDENT_AI); // BR-13: vượt hạn mức → 429
         return CompletableFuture.supplyAsync(
                 () -> ResponseEntity.ok(ApiResponse.ok(tutorService.start(studentId, req))), aiExecutor);
     }
@@ -56,7 +51,6 @@ public class TutorApiController {
             @Valid @RequestBody TutorInteractionRequest req,
             @SessionAttribute(AuthInterceptor.SESSION_USER) SessionUser user) {
         final int studentId = user.getUserId();
-        rateLimiter.check(studentId, RateLimiter.Action.STUDENT_AI); // BR-13: vượt hạn mức → 429
         return CompletableFuture.supplyAsync(
                 () -> ResponseEntity.ok(ApiResponse.ok(tutorService.nextStep(studentId, req))), aiExecutor);
     }

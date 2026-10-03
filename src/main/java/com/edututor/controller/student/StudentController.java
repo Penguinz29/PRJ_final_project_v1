@@ -87,11 +87,11 @@ public class StudentController {
         }
         model.addAttribute("lesson", lesson);
         // Bài giảng (video / YouTube / link / văn bản). Nếu bảng LessonMaterials chưa được tạo
-        // (chưa chạy document/sql/06_*.sql) thì vẫn hiển thị bài học bình thường.
+        // (chưa chạy document/sql/01_schema.sql) thì vẫn hiển thị bài học bình thường.
         try {
             model.addAttribute("materials", materialService.getByLesson(id));
         } catch (DataAccessException e) {
-            log.warn("Không đọc được LessonMaterials (đã chạy document/sql/06_target_schema_additions.sql chưa?): {}",
+            log.warn("Không đọc được LessonMaterials (đã chạy document/sql/01_schema.sql chưa?): {}",
                     e.getMostSpecificCause().getMessage());
             model.addAttribute("materials", List.of());
         }

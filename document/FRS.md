@@ -5,7 +5,7 @@
 | Thông tin | Nội dung |
 |---|---|
 | Đồ án | PRJ301 — Spring MVC 6 + Spring Data JPA (Hibernate) + SQL Server + Gemini API |
-| Phiên bản | 2.1.2 (đồng bộ với mã nguồn: script SQL 07–10, BR-03 bài học, OCR `legible`/WebP, BR-09 tách điểm, hồ sơ cá nhân, kết quả theo câu, tiến độ BR-10, dashboard Admin, trắc nghiệm ngẫu nhiên + chấm từng câu; thêm mục 10 "Hiện trạng triển khai"). 2.1.1: BR-05 xóa mềm chỉ ẩn ở phía quản lý, học sinh vẫn ôn tập được; nút Xóa báo trước kết quả. 2.1.0: chuyển tầng dữ liệu sang JPA; bổ sung Bean Validation, đối chiếu rubric |
+| Phiên bản | 2.1.3 (rà soát tài liệu so với mã nguồn: cập nhật 1.1, UC-ADM-04/08, UC-TEA-05, UC-STU-07, 4.3, 6.1 và viết lại mục 10 theo hiện trạng). 2.1.2 (đồng bộ với mã nguồn: script SQL `01_schema.sql` + `02_data.sql`, BR-03 bài học, OCR `legible`/WebP, BR-09 tách điểm, hồ sơ cá nhân, kết quả theo câu, tiến độ BR-10, dashboard Admin, trắc nghiệm ngẫu nhiên + chấm từng câu; thêm mục 10 "Hiện trạng triển khai"). 2.1.1: BR-05 xóa mềm chỉ ẩn ở phía quản lý, học sinh vẫn ôn tập được; nút Xóa báo trước kết quả. 2.1.0: chuyển tầng dữ liệu sang JPA; bổ sung Bean Validation, đối chiếu rubric |
 | Liên quan | `EduTutor_SRS.md` (yêu cầu), `EduTutor_Database.sql` (CSDL) |
 | Quy ước tham chiếu | Bộ tài liệu gốc đặt trong `docs/`. Trong repo hiện tại: `document/SRS.md` ≙ `EduTutor_SRS.md`, `document/FRS.md` ≙ `EduTutor_FRS.md`, `document/sql/01_schema.sql` + `02_data.sql` ≙ `EduTutor_Database.sql` (cấu trúc + dữ liệu mẫu, xem mục 1.7). Tài khoản mẫu `admin`, `teacher1`, `student1`…, mật khẩu **`EduTutor@123`** |
 
@@ -23,10 +23,12 @@ com.edututor
 ├── interceptor   AuthInterceptor, CsrfInterceptor
 ├── controller    Page controllers (@Controller → JSP)
 │   └── api       REST controllers (@RestController → JSON)
-├── service       UserService, CatalogService, QuestionService, QuizService,
-│                 AiConfigService, AiExamService, AiTutorService, AiGradingService,
-│                 EssayService, FileStorageService, RateLimiter
-├── ai            GeminiClient, GeminiRequest, GeminiResponse, PromptBuilder, AiJsonParser
+├── service       UserService, AdminUserService, TopicService, LessonService, MaterialService, QuestionService,
+│                 SubmissionService (làm trắc nghiệm, tiến độ, lịch sử), StatsService (dashboard, kết quả),
+│                 AiConfigService, GeminiService (cổng gọi AI: cấu hình + thử lại), AiExamService, AiTutorService,
+│                 TutorPersistence (ghi DB của gia sư), EssayGradingService (chấm tự luận qua ảnh),
+│                 FileStorageService, ViewMapper (Entity → DTO)
+├── ai            GeminiClient, PromptBuilder, AiJsonParser, RateLimiter
 ├── repository    Interface Spring Data JPA: UserRepository, TopicRepository, LessonRepository,
 │                 MaterialRepository, QuestionRepository, SubmissionRepository, AiConfigRepository,
 │                 TutorSessionRepository, TutorMessageRepository
@@ -34,12 +36,13 @@ com.edututor
 ├── model         Entity JPA (@Entity): User, Topic, Lesson, LessonMaterial, Question, QuestionOption,
 │                 Submission, AiConfig, TutorSession, TutorMessage + enum (Role, UserStatus, …)
 ├── dto           Form/Request/Response DTO (tách riêng khỏi Entity; Form có chú thích Bean Validation)
-├── exception     AiException, AiConfigException, AiRateLimitException, ForbiddenException,
-│                 NotFoundException, ValidationException, GlobalExceptionHandler
-└── util          PasswordUtil, HtmlSanitizer, YoutubeUtil, ScoreUtil
+├── exception     AiServiceException (gốc), AiConfigException, AiParseException, AiRateLimitException,
+│                 ForbiddenException, NotFoundException, ConflictException, ConfigValidationException,
+│                 GlobalExceptionHandler
+└── util          HtmlSanitizer, YoutubeUtil, ScoreUtil, ImageValidator, Pager, FormErrors, WebUtil
 resources             application.properties, messages.properties (thông báo validation tiếng Việt, UTF-8)
-webapp/WEB-INF/views   layout.jsp + auth/ admin/ teacher/ student/ error/
-webapp/WEB-INF/tags    pagination.tag, flash.tag, field-error.tag, math.tag (thành phần dùng lại)
+webapp/WEB-INF/views   common/ (head, navbar, sidebar, footer, confirm-modal, error) + auth/ admin/ teacher/ student/ error/
+webapp/WEB-INF/tags    pagination.tag, flash.tag, delete-button.tag, config-field.tag, error-card.tag (thành phần dùng lại)
 webapp/static          css/ js/ (katex, app.js) img/
 ```
 
@@ -61,7 +64,7 @@ webapp/static          css/ js/ (katex, app.js) img/
 | HTTP | Khi nào |
 |---|---|
 | 200 | Thành công |
-| 400 | Sai dữ liệu / validation (`ValidationException`, `IllegalArgumentException`) |
+| 400 | Sai dữ liệu / validation (`IllegalArgumentException`, `ConfigValidationException`, lỗi Bean Validation) |
 | 401 | Chưa đăng nhập (API) |
 | 403 | Sai vai trò, sai chủ sở hữu, sai CSRF |
 | 404 | Không tìm thấy tài nguyên |
@@ -154,7 +157,7 @@ Cấu hình AI (khóa, model, prompt…) **không** nằm ở đây mà ở bả
 |---|---|---|
 | 1. Trình duyệt | HTML5 (`required`, `pattern`, `maxlength`) + JS | Báo lỗi sớm, không thay thế server |
 | 2. Cú pháp (server) | **Bean Validation** trên Form/DTO: `@NotBlank`, `@Size`, `@Pattern`, `@Email`, `@Min/@Max`; controller dùng `@Valid` + `BindingResult`; API dùng `@Valid @RequestBody` → `MethodArgumentNotValidException` → 400 `errors[]` | VAL-01…05, 06, 07, 09, 11, 12, 19, 20, 21, 22 |
-| 3. Nghiệp vụ (Service) | Ném `ValidationException`/`ConflictException`; ràng buộc liên trường dùng constraint tùy biến cấp lớp | BR-04 (đúng 1 đáp án), VAL-08 (URL theo loại, YouTube), VAL-15 (MIN ≤ MAX), BR-02 |
+| 3. Nghiệp vụ (Service) | Ném `IllegalArgumentException`/`ConfigValidationException`/`ConflictException`; ràng buộc liên trường dùng constraint tùy biến cấp lớp | BR-04 (đúng 1 đáp án), VAL-08 (URL theo loại, YouTube), VAL-15 (MIN ≤ MAX), BR-02 |
 | 4. CSDL | `UNIQUE`, `CHECK`, `FOREIGN KEY` trong script SQL | Trùng username/email → `DataIntegrityViolationException` → 409 |
 
 Thông báo lỗi đặt trong `messages.properties` (tiếng Việt, UTF-8) và hiển thị tại từng trường bằng `<form:errors>`.
@@ -329,7 +332,7 @@ Nếu kết quả = 0 và thay đổi làm mất Admin → 409 "Phải còn ít 
 | `SUSPENDED` | Khóa tạm thời | Không | **Mở khóa** → `ACTIVE`; Xóa |
 | `INACTIVE` | Đã xóa mềm (do có dữ liệu liên kết) | Không | **Khôi phục** (`POST …/restore`) → `ACTIVE`; dữ liệu liên quan còn nguyên nên dùng lại được ngay. Khóa / mở khóa / sửa / đặt lại mật khẩu bị chặn (409 "Tài khoản đã bị xóa…") cho tới khi khôi phục; khôi phục tài khoản chưa bị xóa trả 409 |
 
-**Xóa:** kiểm tra có dữ liệu liên quan (`topics/lessons/questions/lesson_materials.created_by`, `submissions.student_id`, `tutor_sessions.student_id`, `ai_configs.updated_by`) bằng các hàm `existsByCreatedBy(userId)`, `existsByStudentId(userId)`… trên từng Repository.
+**Xóa:** kiểm tra có dữ liệu liên quan (`topics/lessons/questions/lesson_materials.created_by`, `submissions.student_id`, **`submissions.reviewed_by`** (giáo viên / Admin đã duyệt bài tự luận), `tutor_sessions.student_id`, `ai_configs.updated_by`, `users.teacher_id` của học sinh được gán) bằng các hàm `existsByCreatedBy(userId)`, `existsByStudentId(userId)`… trên từng Repository.
 - Không có → `DELETE FROM users WHERE user_id = ?`.
 - Có → chuyển `status = 'INACTIVE'` (xóa mềm, BR-06) và báo cho Admin.
 - Admin không tự xóa/khóa chính mình; áp dụng BR-02.
@@ -400,7 +403,7 @@ WHERE config_key = ?
 SELECT role, status, COUNT(*) AS n FROM users GROUP BY role, status;
 SELECT COUNT(*) AS total, SUM(CAST(is_ai_generated AS INT)) AS ai FROM questions WHERE is_active = 1;
 SELECT CAST(submitted_at AS DATE) AS d, COUNT(*) AS n FROM submissions
-WHERE submitted_at >= DATEADD(DAY, -7, SYSDATETIME()) GROUP BY CAST(submitted_at AS DATE) ORDER BY d;
+WHERE submitted_at >= DATEADD(DAY, -6, CAST(SYSDATETIME() AS DATE)) GROUP BY CAST(submitted_at AS DATE) ORDER BY d;  -- hôm nay + 6 ngày trước = 7 cột
 SELECT COUNT(*) AS tutor_sessions FROM tutor_sessions;                                   -- phiên gia sư AI đã tạo
 SELECT COUNT(*) AS ai_questions   FROM questions   WHERE is_ai_generated = 1;            -- câu hỏi do AI sinh
 SELECT COUNT(*) AS ai_graded_essays FROM submissions WHERE submission_type = 'ESSAY';    -- tự luận đã chấm qua AI
@@ -527,20 +530,21 @@ OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
 4. `PromptBuilder` thay placeholder `{{COUNT}} {{TOPIC}} {{LESSON}} {{DIFFICULTY}}` và nối **phần chốt cố định** (4.4): bắt buộc JSON, LaTeX trong `$…$`.
 5. `GeminiClient.generate(...)` với `responseMimeType = application/json`.
 6. `AiJsonParser` (Jackson) → `List<QuestionGenerationDTO>`. Lỗi parse → thử lại tối đa 3 lần (4.3).
-7. **Kiểm tra từng câu phía server:** đủ 4 phương án nhãn A–D, đúng 1 `isCorrect`, `questionText` và `explanationLatex` không rỗng, văn bản được sanitize, loại bỏ câu trùng nội dung. Câu không hợp lệ bị loại; nếu còn ít hơn `count` thì trả kèm `warning` ("AI chỉ sinh được 4/5 câu hợp lệ").
+7. **Kiểm tra từng câu phía server:** đủ 4 phương án nhãn A–D, đúng 1 `isCorrect`, nội dung câu hỏi và lời giải không rỗng, văn bản được sanitize, loại bỏ câu trùng nội dung. Câu không hợp lệ hoặc trùng bị loại (chỉ khi không còn câu nào mới thử lại, rồi trả 422); số câu trả về không vượt quá `count`; nếu còn ít hơn `count` thì thông báo `message` của phản hồi mang cảnh báo ("AI chỉ sinh được 4/5 câu hợp lệ."), modal xem trước hiển thị cảnh báo này. Mức độ khó của mỗi câu luôn là mức giáo viên yêu cầu (không để AI ghi đè).
 8. Trả JSON cho modal xem trước. **Chưa ghi CSDL** (BR-08).
 
-`QuestionGenerationDTO`
+`QuestionGenerationDTO` (tên trường thực tế trong mã nguồn)
 ```json
 {
-  "questionText": "Tính $\\int_0^1 (3x^2+1)\\,dx$.",
+  "content": "Tính $\\int_0^1 (3x^2+1)\\,dx$.",
+  "level": 3,
   "options": [
-    { "label": "A", "text": "$1$",  "isCorrect": false },
-    { "label": "B", "text": "$2$",  "isCorrect": true  },
-    { "label": "C", "text": "$3$",  "isCorrect": false },
-    { "label": "D", "text": "$4$",  "isCorrect": false }
+    { "letter": "A", "content": "$1$",  "isCorrect": false },
+    { "letter": "B", "content": "$2$",  "isCorrect": true  },
+    { "letter": "C", "content": "$3$",  "isCorrect": false },
+    { "letter": "D", "content": "$4$",  "isCorrect": false }
   ],
-  "explanationLatex": "$\\int_0^1 (3x^2+1)dx=(x^3+x)\\big|_0^1=2$"
+  "explanation": "$\\int_0^1 (3x^2+1)dx=(x^3+x)\\big|_0^1=2$"
 }
 ```
 
@@ -715,7 +719,7 @@ GROUP BY l.lesson_id, l.lesson_name
 ```
 
 #### UC-STU-07 — Chọn câu tự luận để luyện (FR-STU-07)
-`GET /student/essay?lessonId={id}` liệt kê câu `ESSAY` đang hoạt động của bài (kèm lần chấm gần nhất nếu có); chọn một câu → `GET /student/essay/{questionId}` hiển thị đề (KaTeX) và vùng **chọn ảnh/chụp ảnh** (`<input type="file" accept="image/*" capture="environment">`), có xem trước ảnh trước khi gửi. Gửi ảnh xử lý ở UC-OCR-01.
+`GET /student/essay?lessonId={id}` liệt kê câu `ESSAY` của bài, **kể cả câu giáo viên đã xóa mềm** để học sinh ôn tập (BR-05) (kèm lần chấm gần nhất nếu có); chọn một câu → `GET /student/essay/{questionId}` hiển thị đề (KaTeX) và vùng **chọn ảnh/chụp ảnh** (`<input type="file" accept="image/*" capture="environment">`), có xem trước ảnh trước khi gửi. Gửi ảnh xử lý ở UC-OCR-01.
 
 ---
 
@@ -942,10 +946,10 @@ Header:  x-goog-api-key: <GEMINI_API_KEY>      Content-Type: application/json
 | JSON sai cú pháp / thiếu trường bắt buộc | **Thử lại tối đa 3 lần** (tổng 1 + 3 lần gọi), lần sau nhắc "Chỉ trả về JSON hợp lệ" |
 | HTTP 429, 500, 502, 503 | Thử lại tối đa 2 lần, chờ 1 s rồi 3 s (lũy tiến) |
 | HTTP 400/401/403 (khóa/model sai) | Không retry → `AiConfigException` ("Cấu hình AI chưa đúng, báo quản trị viên") |
-| HTTP 404 (model không tồn tại/ngừng) | Không retry → thông báo model không khả dụng |
-| Hết retry | `AiException` → 502 (hoặc 504 nếu timeout) / 422 (nếu không parse được) |
+| HTTP 404 (model không tồn tại/ngừng) | Không retry → `AiConfigException` với thông báo "Model AI không khả dụng hoặc đã ngừng hỗ trợ, vui lòng báo quản trị viên." |
+| Hết retry | `AiServiceException` → 502 (hoặc 504 nếu timeout) / 422 (nếu không parse được) |
 
-Tổng thời gian chờ tối đa của một yêu cầu bị giới hạn (≤ 90 giây) để không giữ luồng quá lâu.
+Tổng thời gian chờ tối đa của một yêu cầu bị giới hạn (≤ 90 giây, `GeminiService`: mỗi lần thử bị cắt theo thời gian còn lại, không bắt đầu lần thử lại khi còn dưới 5 giây) để không giữ luồng quá lâu và để luồng AI luôn kết thúc trước timeout async 100 giây của `WebConfig` (tránh ghi CSDL sau khi client đã nhận lỗi). `AiConfigException` cũng được ném khi thiếu khóa API / model / prompt trong `ai_configs` (HTTP 503).
 
 ### 4.4. Phần chốt cố định (không chỉnh được từ giao diện)
 
@@ -1105,14 +1109,14 @@ sequenceDiagram
 
 | Ngoại lệ | HTTP | Trang / JSON |
 |---|---|---|
-| `ValidationException`, `IllegalArgumentException`, `MethodArgumentNotValidException`, `BindException`, `ConstraintViolationException`, `MaxUploadSizeExceededException` | 400 | JSON có `errors[]`; trang form: trả lại form kèm lỗi theo trường |
+| `ConfigValidationException`, `IllegalArgumentException`, `MethodArgumentNotValidException`, `BindException`, `ConstraintViolationException`, `MaxUploadSizeExceededException` | 400 | JSON có `errors[]`; trang form: trả lại form kèm lỗi theo trường |
 | `ForbiddenException`, CSRF sai | 403 | `error/403.jsp` / JSON |
 | `NotFoundException` | 404 | `error/404.jsp` / JSON |
 | `ConflictException` (trùng, ràng buộc nghiệp vụ) | 409 | Flash/JSON |
 | `AiRateLimitException` | 429 | JSON kèm số phút chờ |
 | `AiConfigException` | 503 | "Cấu hình AI chưa đúng, báo quản trị viên" |
-| `AiException` (timeout) | 504 | "AI phản hồi quá chậm, vui lòng thử lại" |
-| `AiException` (lỗi Gemini) | 502 | "AI tạm thời không phản hồi" |
+| `AiServiceException` (timeout) | 504 | "AI phản hồi quá chậm, vui lòng thử lại." |
+| `AiServiceException` (lỗi Gemini, hết lần thử) | 502 | "AI tạm thời không phản hồi, vui lòng thử lại sau." (nội dung lỗi thô của Gemini chỉ ghi log) |
 | `AiParseException` | 422 | "AI trả kết quả không dùng được, vui lòng thử lại" |
 | `DuplicateKeyException`, `DataIntegrityViolationException` | 409 | Thông báo thân thiện (không lộ SQL) |
 | `Exception` | 500 | Ghi log đầy đủ stack trace kèm mã tham chiếu `ERR-yyyyMMdd-xxxx`; người dùng chỉ thấy mã và lời nhắn thân thiện |
@@ -1236,11 +1240,28 @@ Mục này ghi những chỗ mã nguồn **hiện tại** còn khác đặc tả
 | Mục | Hiện tại |
 |---|---|
 | VAL-11 (4 mức độ khó, `reference_solution`) | CSDL còn `Level` 1–3; chưa có cột `reference_solution` — chấm tự luận dùng `explanation_latex` làm `{{REFERENCE}}` |
-| FRS 4.3 (thử lại 1 + 3 lần, chờ 1 s / 3 s, `MAX_TOKENS`, ping "OK" 15 s) | Thử lại tối đa 3 lần gọi chung cho JSON hỏng và 429/5xx, chờ 0,7 s / 1,4 s; chưa xử lý `MAX_TOKENS` |
-| UC-AUTH-01 | Chưa tách thông báo tài khoản bị khóa, chưa chặn sau 5 lần sai, chưa quay lại trang định vào sau đăng nhập |
+| FRS 4.3 (thử lại 1 + 3 lần, chờ 1 s / 3 s, `MAX_TOKENS`) | Thử lại tối đa 3 lần gọi chung cho JSON hỏng và 429/5xx, chờ 0,7 s / 1,4 s, lần thử lại gửi lại đúng prompt cũ (chưa nhắc "Chỉ trả về JSON hợp lệ"); chưa xử lý `MAX_TOKENS` (JSON bị cắt chỉ được thử lại như JSON hỏng); `SAFETY` trả 502 chứ chưa có thông báo riêng; timeout kết nối 15 s (spec 10 s). Ngân sách tổng ≤ 90 s đã áp dụng |
+| UC-ADM-07 (test kết nối) | Ping gửi "Ping. Reply with: Pong" (`maxOutputTokens` 50) với timeout 60 s (spec: "OK", 64 token, 15 s); nhận form-param `GEMINI_API_KEY` / `DEFAULT_MODEL` (spec: JSON `{apiKey, model}`); lỗi vẫn trả HTTP 200 kèm `success:false`; thành công chưa trả `data{model, latencyMs}`; chưa bỏ qua khóa là chuỗi đã che khi thử |
+| UC-AUTH-01 | Chưa tách thông báo tài khoản bị khóa trên form đăng nhập (gộp chung thông báo sai thông tin); chưa chặn sau 5 lần sai; chưa quay lại trang định vào sau đăng nhập; trang `/login?locked=1` (bị khóa khi đang dùng) chưa hiện thông báo; đăng nhập chưa cân bằng thời gian phản hồi giữa user không tồn tại và user có thật |
+| UC-AUTH-02 | Đăng ký xong chuyển về `/login` kèm flash message, không dùng `?registered=1` (tương đương hành vi) |
+| BR-02 | Kiểm tra "còn Admin hoạt động" là đếm rồi mới ghi, chưa có khóa / isolation `SERIALIZABLE` (chỉ rủi ro khi hai Admin khóa nhau đúng lúc) |
+| UC-ADM-04 / UC-ADM-05 | Đổi mật khẩu hoặc đặt lại mật khẩu chưa hủy các session đang mở của người đó; đổi vai trò giáo viên chưa xử lý `teacher_id` của học sinh được gán |
 | UC-OCR-01 bước 4 | Chưa thu nhỏ ảnh trước khi gửi AI |
-| UC-TUT-04 | Danh sách phiên gia sư: 15 phiên gần nhất, chưa phân trang / lọc trạng thái |
-| Giao diện (Claude.md 4.5) | Chưa có `layout.jsp` chung, `field-error.tag`, `math.tag`; Bootstrap / KaTeX tải từ CDN (demo cần mạng) |
-| Cấu hình `application.properties` | `db.url` dùng CSDL `MathTutorDB` (không phải `EduTutorMath12` như 1.5) |
+| UC-TUT-02 | `TutorPersistence.saveTurn` chưa kiểm tra lại phiên còn `ACTIVE` / còn ở đúng bước sau khi AI trả lời (hủy phiên giữa chừng hoặc gửi đúp từ hai tab vẫn có thể ghi tin nhắn); khi AI bỏ trống `isStepCorrect` ở lượt trả lời, server coi là sai; việc "không nêu đáp án cuối trước bước cuối" chỉ được ép bằng prompt |
+| UC-TUT-04 | Danh sách phiên gia sư: 15 phiên gần nhất, chưa phân trang / lọc trạng thái. Trang `ai-tutor.jsp` mở từ `mode=QUESTION|SUBMISSION` gọi `POST /start` mỗi lần tải trang (làm mới trang có thể tạo phiên trùng) |
+| UC-TEA-04 | Danh sách câu hỏi chưa có lọc `keyword` và tham số `size` (cố định 10 dòng), chưa chọn được cột sắp xếp; danh sách lịch sử học sinh cũng cố định 10 dòng. Giao diện hiện nút Sửa / Xóa cho mọi câu hỏi (server vẫn chặn 403 theo BR-03). Cho phép đổi loại câu hỏi MCQ ↔ ESSAY khi đã có bài nộp |
+| UC-TEA-01 / UC-TEA-02 | `TopicForm` chưa có `orderIndex` (danh sách sắp theo ngày tạo); danh sách chủ đề / bài học (giáo viên, Admin, học sinh) chưa phân trang; `/teacher/topics` chỉ liệt kê chủ đề của chính giáo viên; `MaterialService.create` chưa kiểm tra quyền sở hữu bài học |
+| UC-TEA-06 | Lưu hàng loạt trả về lỗi đầu tiên ("Câu n: …") chứ chưa phải danh sách lỗi theo chỉ số; chưa kiểm tra nhãn A–D là duy nhất và giới hạn số câu; `difficultyLevel` ở cấp request bị bỏ qua (dùng `level` từng câu, mặc định 1) |
+| UC-TEA-07 / UC-TEA-09 | `/teacher/submissions` chưa có `size` / `lessonId`, mặc định lọc "chưa duyệt"; dashboard giáo viên hiện 5 bài tự luận mới nhất của mọi giáo viên và số liệu theo chủ đề do mình tạo, chưa có "5 câu hỏi mới nhất của giáo viên" |
+| UC-STU-01 / 02 / 07 | Trang chủ đề chưa hiện số câu hỏi, số bài giảng, tiến độ theo bài; chưa có nút "Hỏi gia sư AI về bài này"; bài học / quiz không tồn tại thì chuyển về `/student/topics` thay vì 404; chưa có trang chọn câu tự luận riêng (tự chọn câu đầu và hiện các nút "Câu 1…n") |
+| Sanitize (FRS 1.4) | `HtmlSanitizer` mới áp dụng cho bài giảng, câu hỏi AI lưu hàng loạt và đầu ra AI; nội dung câu hỏi / phương án / tóm tắt bài học nhập tay chưa sanitize (JSP vẫn escape bằng `<c:out>`). Khi sanitize phát hiện mẫu nguy hiểm, văn bản bị escape thực thể và hiện nguyên dạng `&lt;` trên giao diện |
+| Giao diện (Claude.md 4.5) | Chưa có `layout.jsp` chung (các trang tự `include` `common/head|navbar|sidebar|footer`), `field-error.tag`, `math.tag`; chỉ `register`, `profile`, `user-form` dùng `<form:form>` / `<form:errors>`, các form khác hiện lỗi bằng khối `invalid-feedback` tĩnh; breadcrumb mới có ở 6 trang; chưa có nút "Quay lại" ở nhiều trang; `app.js` chưa ánh xạ lỗi theo mã HTTP và chưa xử lý `AbortError` (timeout hiện thông báo thô của trình duyệt); `setLoading` / `showToast` hầu như chưa dùng |
+| Thư viện giao diện | Bootstrap, Bootstrap Icons, KaTeX và font "Be Vietnam Pro" tải từ CDN (`common/head.jsp`, `footer.jsp`, `login.jsp`, `register.jsp`, `error.jsp`); chưa có `static/vendor/` nên demo cần mạng |
+| Hồ sơ nộp (Claude.md mục 8) | Chưa có `docs/ERD.png`, `BAO_CAO.md`, `DEMO_SCRIPT.md`, `QA_BAO_VE.md`, `HUONG_DAN_NETBEANS.md` (tài liệu hiện nằm ở `document/`) |
+| Cấu hình `application.properties` | `db.url` dùng CSDL `MathTutorDB` (không phải `EduTutorMath12` như 1.5); thiếu khóa `ai.config.cacheTtlSeconds` (mặc định trong code là 60); thêm các khóa `gemini.baseUrl`, `gemini.connectTimeoutSeconds`, `gemini.requestTimeoutSeconds`, `gemini.maxParseRetries`; `db.password` đặt mặc định cho môi trường dev (ghi đè bằng biến môi trường `DB_PASS`) |
+| Ánh xạ dữ liệu | Một số cột có DB default nhưng entity ánh xạ kiểu nguyên thủy (`boolean`, `int`) nên nếu chèn NULL bằng tay Hibernate sẽ lỗi khi nạp; vài truy vấn native thống kê (`countLastSevenDays`, `findQuestionResults`, `lessonResultSummary`) nằm ngoài danh mục "NEWID / CTE" của Claude.md 4.3 nhưng vẫn dùng tham số có tên; chưa có chỉ mục duy nhất theo điều kiện cho `topic_name` (tên chủ đề chỉ được kiểm tra duy nhất ở tầng ứng dụng) |
+| Kiểm thử | `QueryCountIT` chưa phủ `getTopicsByTeacher`, `findQuestionResults`, `topicProgress` / `lessonProgress` và dashboard học sinh |
+
+**Đã khắc phục trong lần rà soát 2.1.3:** XSS ở `<title>` (`head.jsp`); scriptlet `printStackTrace` trong `error.jsp`; ngân sách thời gian AI ≤ 90 s; xóa người dùng kiểm tra cả `reviewed_by` (BR-06); khóa API dạng chuỗi che không còn ghi đè khóa thật; sinh đề AI loại câu lỗi / trùng, giới hạn theo `count`, trả cảnh báo; hạn mức AI chỉ trừ sau khi dữ liệu và quyền hợp lệ; `AiConfigException` → 503 và thông báo thân thiện cho lỗi Gemini; thông báo còn nhắc script SQL cũ.
 
 **Quyết định của nhóm (khác đặc tả gốc, đã cập nhật vào SRS / FRS):** BR-05 — nội dung xóa mềm chỉ ẩn ở phía quản lý, học sinh vẫn ôn tập được.

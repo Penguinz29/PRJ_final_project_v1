@@ -385,6 +385,9 @@
                                             }
 
                                             renderPreviewQuestions(generatedList);
+                                            if (data.message && data.message !== 'OK') {
+                                                showAlert(data.message, 'warning');
+                                            }
                                         })
                                         .catch(err => {
                                             loading.classList.add('d-none');

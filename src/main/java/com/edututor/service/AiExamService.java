@@ -10,8 +10,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
@@ -20,6 +24,8 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class AiExamService {
+
+    private static final Logger log = LoggerFactory.getLogger(AiExamService.class);
 
     public static final int MAX_QUESTIONS = 10;
 
@@ -48,7 +54,7 @@ public class AiExamService {
      * @throws IllegalArgumentException tham số không hợp lệ
      * @throws com.edututor.exception.AiServiceException khi gọi AI thất bại
      */
-    public List<QuestionGenerationDTO> generateQuestions(GenerateQuestionsRequest req) {
+    public Result generateQuestions(GenerateQuestionsRequest req) {
         // Tên chuyên đề / bài học luôn tra từ lessonId trong CSDL, không tin tên do client gửi
         LessonView lesson = lessonService.getLessonById(req.lessonId());
         if (lesson == null) {
@@ -68,11 +74,23 @@ public class AiExamService {
 
         // 700 token cho mỗi câu (kèm lời giải) để không bị cắt cụt JSON
         int minTokens = Math.min(8192, 700 * count + 512);
-        return gemini.generateJson(system, List.of(Turn.user(request)), false, config.getQuizTemperature(),
-                minTokens, node -> parse(node, level));
+        List<QuestionGenerationDTO> questions = gemini.generateJson(system, List.of(Turn.user(request)), false,
+                config.getQuizTemperature(), minTokens, node -> parse(node, level, count));
+        String warning = questions.size() < count
+                ? "AI chỉ sinh được " + questions.size() + "/" + count + " câu hợp lệ."
+                : null;
+        return new Result(questions, warning);
     }
 
-    private List<QuestionGenerationDTO> parse(JsonNode root, int defaultLevel) {
+    /** Kết quả sinh đề: các câu hợp lệ và cảnh báo (null nếu đủ số câu yêu cầu). */
+    public record Result(List<QuestionGenerationDTO> questions, String warning) {
+    }
+
+    /**
+     * UC-TEA-05 bước 7: kiểm tra từng câu phía server. Câu không hợp lệ hoặc trùng nội dung bị loại; chỉ khi không
+     * còn câu nào mới ném lỗi để GeminiService thử lại. Số câu trả về không vượt quá {@code count}.
+     */
+    private List<QuestionGenerationDTO> parse(JsonNode root, int level, int count) {
         JsonNode array = root;
         if (root.isObject()) {
             array = root.has("questions") ? root.get("questions") : root.elements().next();
@@ -81,19 +99,34 @@ public class AiExamService {
             throw new IllegalArgumentException("Không có câu hỏi nào trong phản hồi.");
         }
         List<QuestionGenerationDTO> result = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
         for (JsonNode item : array) {
-            QuestionGenerationDTO dto = mapper.convertValue(item, QuestionGenerationDTO.class);
-            result.add(validateAndClean(dto, defaultLevel));
-            if (result.size() >= MAX_QUESTIONS) {
+            if (result.size() >= count) {
                 break;
             }
+            try {
+                QuestionGenerationDTO dto = validateAndClean(mapper.convertValue(item, QuestionGenerationDTO.class),
+                        level);
+                String key = dto.content().replaceAll("\\s+", " ").toLowerCase();
+                if (seen.add(key)) {
+                    result.add(dto);
+                }
+            } catch (IllegalArgumentException e) {
+                log.warn("Loại một câu AI sinh không hợp lệ: {}", e.getMessage());
+            }
+        }
+        if (result.isEmpty()) {
+            throw new IllegalArgumentException("Không có câu hỏi hợp lệ trong phản hồi.");
         }
         return result;
     }
 
-    private QuestionGenerationDTO validateAndClean(QuestionGenerationDTO dto, int defaultLevel) {
-        if (dto.content() == null || dto.content().isBlank()) {
+    private QuestionGenerationDTO validateAndClean(QuestionGenerationDTO dto, int level) {
+        if (dto == null || dto.content() == null || dto.content().isBlank()) {
             throw new IllegalArgumentException("Câu hỏi thiếu nội dung.");
+        }
+        if (dto.explanation() == null || dto.explanation().isBlank()) {
+            throw new IllegalArgumentException("Câu hỏi thiếu lời giải.");
         }
         if (dto.options() == null || dto.options().size() != 4) {
             throw new IllegalArgumentException("Câu hỏi phải có đúng 4 phương án.");
@@ -116,10 +149,9 @@ public class AiExamService {
         if (!"ABCD".equals(letters) || correct != 1) {
             throw new IllegalArgumentException("Phương án phải là A-B-C-D và có đúng một đáp án đúng.");
         }
-        Integer lv = dto.level();
-        int level = (lv != null && lv >= 1 && lv <= 3) ? lv : defaultLevel;
+        // Mức độ luôn là mức giáo viên yêu cầu, không để AI ghi đè
         return new QuestionGenerationDTO(HtmlSanitizer.clean(dto.content().trim()), level,
-                HtmlSanitizer.clean(dto.explanation() == null ? "" : dto.explanation().trim()), sorted);
+                HtmlSanitizer.clean(dto.explanation().trim()), sorted);
     }
 
     /** Chấp nhận 1|2|3 hoặc EASY|MEDIUM|HARD|ADVANCED; để trống nghĩa là mức 1. */

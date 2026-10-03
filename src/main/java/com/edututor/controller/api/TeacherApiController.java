@@ -58,9 +58,16 @@ public class TeacherApiController {
     public CompletableFuture<ResponseEntity<ApiResponse<List<QuestionGenerationDTO>>>> generateQuestions(
             @Valid @RequestBody GenerateQuestionsRequest req,
             @SessionAttribute(AuthInterceptor.SESSION_USER) SessionUser user) {
+        // Kiểm tra dữ liệu trước, để request không hợp lệ không bị trừ lượt AI (FRS UC-TEA-05 bước 1 → 2)
+        if (lessonService.getLessonById(req.lessonId()) == null) {
+            throw new IllegalArgumentException("Bài học không tồn tại.");
+        }
         rateLimiter.check(user.getUserId(), RateLimiter.Action.QUIZ_GEN); // BR-13: hạn mức giáo viên → 429
-        return CompletableFuture.supplyAsync(
-                () -> ResponseEntity.ok(ApiResponse.ok(aiExamService.generateQuestions(req))), aiExecutor);
+        return CompletableFuture.supplyAsync(() -> {
+            AiExamService.Result r = aiExamService.generateQuestions(req);
+            // warning (nếu có) nằm ở message để modal xem trước hiển thị: "AI chỉ sinh được 4/5 câu hợp lệ."
+            return ResponseEntity.ok(ApiResponse.ok(r.warning() != null ? r.warning() : "OK", r.questions()));
+        }, aiExecutor);
     }
 
     @PostMapping(value = "/api/teacher/questions/batch-save", consumes = MediaType.APPLICATION_JSON_VALUE)

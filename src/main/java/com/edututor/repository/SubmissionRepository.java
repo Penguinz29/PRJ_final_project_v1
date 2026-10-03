@@ -67,6 +67,9 @@ public interface SubmissionRepository extends JpaRepository<Submission, Integer>
 
     boolean existsByStudent_UserId(Integer studentId);
 
+    /** Người dùng đã duyệt bài tự luận nào chưa (khóa ngoại Submissions.ReviewedBy; BR-06). */
+    boolean existsByReviewedBy_UserId(Integer reviewerId);
+
     // ---------- UC-STU-06 / BR-10: tiến độ tính theo lần làm GẦN NHẤT của mỗi câu (CTE ROW_NUMBER()) ----------
     // Phía học sinh không lọc IsActive: nội dung giáo viên đã xóa mềm vẫn được ôn tập (quyết định của nhóm).
 

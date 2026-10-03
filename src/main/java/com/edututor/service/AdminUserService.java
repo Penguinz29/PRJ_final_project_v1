@@ -228,6 +228,7 @@ public class AdminUserService {
                 || questionRepository.existsByTeacher_UserId(userId)
                 || materialRepository.existsByCreatedBy_UserId(userId)
                 || submissionRepository.existsByStudent_UserId(userId)
+                || submissionRepository.existsByReviewedBy_UserId(userId)
                 || tutorSessionRepository.existsByStudent_UserId(userId)
                 || aiConfigRepository.existsByUpdatedBy_UserId(userId)
                 || userRepository.existsByTeacherId(userId);

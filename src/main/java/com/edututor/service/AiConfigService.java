@@ -3,7 +3,7 @@ package com.edututor.service;
 import com.edututor.ai.GeminiClient;
 import com.edututor.ai.PromptBuilder;
 import com.edututor.dto.AiConfigView;
-import com.edututor.exception.AiServiceException;
+import com.edututor.exception.AiConfigException;
 import com.edututor.exception.ConfigValidationException;
 import com.edututor.model.AiConfig;
 import com.edututor.repository.AiConfigRepository;
@@ -160,12 +160,12 @@ public class AiConfigService {
     /**
      * Prompt Admin cấu hình (TUTOR_SYSTEM_PROMPT / QUIZ_GEN_PROMPT / GRADING_PROMPT).
      *
-     * @throws AiServiceException khi prompt chưa có trong CSDL (chưa chạy document/sql/07_ai_configs_full.sql)
+     * @throws AiConfigException khi prompt chưa có trong CSDL (chưa chạy document/sql/02_data.sql)
      */
     public String getPrompt(String key) {
         String prompt = value(key);
         if (prompt == null || prompt.isBlank()) {
-            throw new AiServiceException("Chưa cấu hình " + key + ". Vui lòng vào Quản trị > Cấu hình AI để cập nhật.");
+            throw new AiConfigException("Chưa cấu hình " + key, 0);
         }
         return prompt;
     }
@@ -209,6 +209,10 @@ public class AiConfigService {
                 continue;
             }
             String v = e.getValue() == null ? "" : e.getValue().trim();
+            // UC-ADM-06: để trống hoặc gửi lại chuỗi đã che (AIza****abcd) nghĩa là giữ nguyên khóa hiện có
+            if (KEY_API_KEY.equals(key) && (v.isEmpty() || v.contains("****"))) {
+                continue;
+            }
             String error = validate(key, v);
             if (error != null) {
                 errors.put(key, error);
@@ -232,7 +236,7 @@ public class AiConfigService {
         }
         for (Map.Entry<String, String> e : clean.entrySet()) {
             AiConfig cfg = repository.findByConfigKey(e.getKey()).orElseThrow(() -> new ConfigValidationException(
-                    Map.of(e.getKey(), "Khóa " + e.getKey() + " chưa có trong CSDL. Hãy chạy document/sql/07_ai_configs_full.sql.")));
+                    Map.of(e.getKey(), "Khóa " + e.getKey() + " chưa có trong CSDL. Hãy chạy document/sql/02_data.sql.")));
             cfg.setConfigValue(e.getValue());
             cfg.setUpdatedBy(userRepository.getReferenceById(updatedBy));
         }
