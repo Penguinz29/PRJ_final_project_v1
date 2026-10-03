@@ -95,10 +95,16 @@ public class QuestionService {
                 }).toList();
     }
 
-    /** Câu hỏi kèm phương án (có cờ đúng) để giáo viên sửa; null nếu không tồn tại. */
+    /**
+     * Câu hỏi kèm phương án (có cờ đúng) để giáo viên sửa; null nếu không tồn tại.
+     * BR-03: chỉ người tạo hoặc Admin được mở form (form lộ đáp án đúng và lời giải).
+     *
+     * @throws ForbiddenException khi không phải người tạo
+     */
     @Transactional(readOnly = true)
-    public QuestionView getQuestionForEdit(int questionId) {
+    public QuestionView getQuestionForEdit(int questionId, int actingUserId, boolean admin) {
         return questionRepository.findWithOptionsByQuestionIdAndActiveTrue(questionId).map(q -> {
+            requireOwner(q, actingUserId, admin);
             QuestionView v = ViewMapper.toView(q);
             List<OptionView> options = new ArrayList<>();
             for (QuestionOption o : q.getOptions()) {

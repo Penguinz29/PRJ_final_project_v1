@@ -65,7 +65,7 @@ public class TeacherQuestionController {
         if (formPage) {
             model.addAttribute("lessons", lessonService.getAllLessons());
             if ("edit".equals(action)) {
-                QuestionView q = questionService.getQuestionForEdit(id);
+                QuestionView q = questionService.getQuestionForEdit(id, user.getUserId(), user.isAdmin()); // BR-03
                 if (q == null) {
                     return "redirect:/teacher/questions";
                 }
