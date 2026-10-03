@@ -44,7 +44,8 @@ import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 /**
  * Kiểm thử tích hợp end-to-end (tên *IT: không chạy trong {@code mvn package}): Tomcat nhúng + toàn bộ Spring MVC +
  * Spring Data JPA/Hibernate + SQL Server thật + Gemini giả (mock HTTP).
- * Cần CSDL đã nạp document/sql/01..08 (06 tạo bảng LessonMaterials, 07 khóa ai_configs, 08 trạng thái phiên gia sư);
+ * Cần CSDL đã nạp document/sql/01..09 (06 bảng LessonMaterials, 07 khóa ai_configs, 08 trạng thái phiên gia sư,
+ * 09 tách AiScore / FinalScore);
  * chạy riêng:
  * <pre>
  * mvn verify -Pintegration -Dit.db.url="jdbc:sqlserver://localhost:1433;databaseName=MathTutorDB_verify;encrypt=true;trustServerCertificate=true"
@@ -791,7 +792,10 @@ class EduTutorIT {
         assertEquals(url, scalar("SELECT EssayImagePath FROM Submissions WHERE SubmissionId = ?", sid));
         assertTrue(((String) scalar("SELECT AiFeedback FROM Submissions WHERE SubmissionId = ?", sid)).contains("Sai dấu"));
         assertEquals(0, count("SELECT CAST(IsReviewed AS INT) FROM Submissions WHERE SubmissionId = ?", sid));
-        assertEquals(7.5, ((Number) scalar("SELECT Score FROM Submissions WHERE SubmissionId = ?", sid)).doubleValue());
+        assertEquals(7.5, ((Number) scalar("SELECT AiScore FROM Submissions WHERE SubmissionId = ?", sid)).doubleValue());
+        assertEquals(7.5, ((Number) scalar("SELECT FinalScore FROM Submissions WHERE SubmissionId = ?", sid)).doubleValue(),
+                "final_score ban đầu = ai_score");
+        assertEquals("AI_GRADED", scalar("SELECT [Status] FROM Submissions WHERE SubmissionId = ?", sid));
 
         // Ảnh chỉ phục vụ cho chủ bài / giáo viên / admin (TC-SEC-07); người ẩn danh bị chuyển về /login
         Resp img = c.get(url);
@@ -1117,7 +1121,7 @@ class EduTutorIT {
         assertTrue(c.get("/admin/users").has("Đã xóa tài khoản"));
 
         int s4 = count("SELECT UserId FROM Users WHERE Username = 'student4'");
-        exec("INSERT INTO Submissions (StudentId, LessonId, QuestionId, QuestionType, StudentAnswer, IsCorrect, Score, IsReviewed) "
+        exec("INSERT INTO Submissions (StudentId, LessonId, QuestionId, QuestionType, StudentAnswer, IsCorrect, FinalScore, IsReviewed) "
                 + "VALUES (?, 1, 1, 'MCQ', 'A', 1, 10, 1)", s4);
         assertEquals(302, c.form("/admin/users/" + s4 + "/delete", Map.of()).status());
         assertEquals("INACTIVE", scalar("SELECT [Status] FROM Users WHERE UserId = ?", s4), "xóa mềm vì đã có bài làm");
@@ -1544,11 +1548,26 @@ class EduTutorIT {
         assertEquals(200, detail.status(), detail.body());
         assertTrue(detail.has("/uploads/"), "hiển thị ảnh bài làm");
         assertTrue(detail.has("Sai dấu"), "hiển thị nhận xét AI");
+        assertTrue(detail.has("Điểm AI đề xuất") && detail.has("Duyệt giữ nguyên điểm AI"));
+        exec("UPDATE Submissions SET [Status] = 'AI_GRADED', IsReviewed = 0, ReviewedBy = NULL, ReviewedAt = NULL "
+                + "WHERE SubmissionId = ?", sid);
+        double aiScore = ((Number) scalar("SELECT AiScore FROM Submissions WHERE SubmissionId = ?", sid)).doubleValue();
+
+        // Học sinh thấy điểm AI là điểm tạm thời trong lúc chờ duyệt (FR-OCR-03)
+        Client pending = new Client();
+        pending.login("student1", "123456");
+        assertTrue(pending.get("/student/history?type=ESSAY").has("Điểm tạm thời"));
 
         Resp post = c.form("/teacher/submissions", Map.of("submissionId", "" + sid, "score", "8,5", "isCorrect", "true",
                 "teacherFeedback", "Cô chấm lại"));
         assertEquals(302, post.status());
-        assertEquals(8.5, ((Number) scalar("SELECT Score FROM Submissions WHERE SubmissionId = ?", sid)).doubleValue());
+        assertEquals(8.5, ((Number) scalar("SELECT FinalScore FROM Submissions WHERE SubmissionId = ?", sid)).doubleValue());
+        // BR-09: ai_score giữ nguyên; trạng thái REVIEWED kèm người duyệt và thời điểm duyệt
+        assertEquals(aiScore, ((Number) scalar("SELECT AiScore FROM Submissions WHERE SubmissionId = ?", sid)).doubleValue());
+        assertEquals("REVIEWED", scalar("SELECT [Status] FROM Submissions WHERE SubmissionId = ?", sid));
+        assertEquals(count("SELECT UserId FROM Users WHERE Username = 'teacher1'"),
+                count("SELECT ReviewedBy FROM Submissions WHERE SubmissionId = ?", sid));
+        assertNotNull(scalar("SELECT ReviewedAt FROM Submissions WHERE SubmissionId = ?", sid));
         assertEquals(1, count("SELECT CAST(IsReviewed AS INT) FROM Submissions WHERE SubmissionId = ?", sid));
         assertEquals("Cô chấm lại", scalar("SELECT TeacherFeedback FROM Submissions WHERE SubmissionId = ?", sid));
         assertTrue(c.get("/teacher/submissions?status=reviewed").has("Nguyễn Văn A"));
@@ -1559,7 +1578,11 @@ class EduTutorIT {
         assertTrue(c.get("/teacher/submissions?id=" + sid).has("từ 0 đến 10"));
         c.form("/teacher/submissions", Map.of("submissionId", "" + sid, "score", "7.3"));
         c.get("/teacher/submissions?id=" + sid);
-        assertEquals(8.5, ((Number) scalar("SELECT Score FROM Submissions WHERE SubmissionId = ?", sid)).doubleValue());
+        assertEquals(8.5, ((Number) scalar("SELECT FinalScore FROM Submissions WHERE SubmissionId = ?", sid)).doubleValue());
+        // Bỏ trống điểm mà không chọn "Duyệt giữ nguyên điểm AI" → báo lỗi, điểm giữ nguyên
+        c.form("/teacher/submissions", Map.of("submissionId", "" + sid, "score", ""));
+        assertTrue(c.get("/teacher/submissions?id=" + sid).has("Vui lòng nhập điểm"));
+        assertEquals(8.5, ((Number) scalar("SELECT FinalScore FROM Submissions WHERE SubmissionId = ?", sid)).doubleValue());
         c.form("/teacher/submissions", Map.of("submissionId", "" + sid, "score", "abc"));
         assertTrue(c.get("/teacher/submissions?id=" + sid).has("từ 0 đến 10"));
         assertEquals(302, c.get("/teacher/submissions?id=99999").status());
@@ -1575,6 +1598,12 @@ class EduTutorIT {
         Resp hist = st.get("/student/history?type=ESSAY");
         assertEquals(200, hist.status());
         assertTrue(hist.has("8.5"), hist.body());
+
+        // "Duyệt giữ nguyên điểm AI": final_score = ai_score, ai_score vẫn không đổi
+        c.form("/teacher/submissions", Map.of("submissionId", "" + sid, "keepAiScore", "true", "score", "3"));
+        assertEquals(aiScore, ((Number) scalar("SELECT FinalScore FROM Submissions WHERE SubmissionId = ?", sid)).doubleValue());
+        assertEquals(aiScore, ((Number) scalar("SELECT AiScore FROM Submissions WHERE SubmissionId = ?", sid)).doubleValue());
+        assertEquals("REVIEWED", scalar("SELECT [Status] FROM Submissions WHERE SubmissionId = ?", sid));
     }
 
     @Test

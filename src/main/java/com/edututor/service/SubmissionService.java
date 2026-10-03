@@ -22,6 +22,7 @@ import com.edututor.repository.UserRepository;
 import com.edututor.util.Pager;
 import com.edututor.util.ScoreUtil;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -169,7 +170,7 @@ public class SubmissionService {
         sub.setQuestionType(QuestionType.MCQ);
         sub.setStudentAnswer(letter);
         sub.setIsCorrect(correct);
-        sub.setScore(correct ? MCQ_CORRECT_SCORE : BigDecimal.ZERO.setScale(2));
+        sub.setFinalScore(correct ? MCQ_CORRECT_SCORE : BigDecimal.ZERO.setScale(2)); // BR-07: đúng 10, sai 0
         sub.setStatus(SubmissionStatus.GRADED); // trắc nghiệm tự chấm, không cần giáo viên duyệt
         return sub;
     }
@@ -207,7 +208,9 @@ public class SubmissionService {
         sub.setQuestionType(QuestionType.ESSAY);
         sub.setStudentAnswer(studentAnswer);
         sub.setEssayImagePath(imagePath);
-        sub.setScore(ScoreUtil.toDecimal(score));
+        // BR-09: ai_score là đề xuất, giữ nguyên mãi; final_score ban đầu bằng ai_score cho tới khi giáo viên duyệt
+        sub.setAiScore(ScoreUtil.toDecimal(score));
+        sub.setFinalScore(ScoreUtil.toDecimal(score));
         sub.setAiFeedback(aiFeedback);
         sub.setStatus(SubmissionStatus.AI_GRADED);
         return submissionRepository.saveAndFlush(sub).getSubmissionId();
@@ -246,23 +249,41 @@ public class SubmissionService {
     }
 
     /**
-     * Giáo viên xác nhận / hiệu chỉnh điểm bài tự luận (thang 10, bước 0.25).
+     * UC-TEA-07: giáo viên xác nhận / hiệu chỉnh điểm bài tự luận (VAL-20: 0–10, bước 0.25; VAL-21: nhận xét ≤ 1000).
+     * BR-09: chỉ sửa final_score; ai_score giữ nguyên (cột còn được khóa ở tầng ORM bằng updatable = false).
+     * Bài chuyển AI_GRADED → REVIEWED, ghi người duyệt và thời điểm duyệt.
      *
-     * @throws IllegalArgumentException khi điểm không hợp lệ
+     * @param score       điểm chính thức giáo viên nhập; null khi keepAiScore
+     * @param keepAiScore true: "Duyệt giữ nguyên điểm AI" (final_score = ai_score)
+     * @throws IllegalArgumentException khi điểm không hợp lệ / thiếu điểm
      * @throws NotFoundException        khi bài nộp không tồn tại hoặc không phải tự luận
      */
     @Transactional
-    public void reviewEssay(ReviewForm form, Double score) {
+    public void reviewEssay(ReviewForm form, Double score, boolean keepAiScore, int reviewerId) {
         Submission s = submissionRepository.findById(form.getSubmissionId())
                 .filter(x -> x.getQuestionType() == QuestionType.ESSAY)
                 .orElseThrow(() -> new NotFoundException("Không tìm thấy bài làm tự luận yêu cầu."));
-        if (score != null && (score < 0.0 || score > 10.0 || !ScoreUtil.isQuarterStep(score))) {
-            throw new IllegalArgumentException("Điểm phải từ 0 đến 10, theo bước 0.25.");
+        BigDecimal finalScore;
+        if (keepAiScore) {
+            finalScore = s.getAiScore() != null ? s.getAiScore() : s.getFinalScore();
+            if (finalScore == null) {
+                throw new IllegalArgumentException("Bài này chưa có điểm AI, vui lòng nhập điểm.");
+            }
+        } else {
+            if (score == null) {
+                throw new IllegalArgumentException("Vui lòng nhập điểm (0–10) hoặc chọn \"Duyệt giữ nguyên điểm AI\".");
+            }
+            if (score < 0.0 || score > 10.0 || !ScoreUtil.isQuarterStep(score)) {
+                throw new IllegalArgumentException("Điểm phải từ 0 đến 10, theo bước 0.25.");
+            }
+            finalScore = ScoreUtil.toDecimal(score);
         }
-        boolean correct = form.getIsCorrect() != null ? form.getIsCorrect() : (score != null && score >= 5.0);
+        boolean correct = form.getIsCorrect() != null ? form.getIsCorrect() : finalScore.doubleValue() >= 5.0;
         s.setIsCorrect(correct);
-        s.setScore(score == null ? null : ScoreUtil.toDecimal(score));
+        s.setFinalScore(finalScore);
         s.setTeacherFeedback(form.getTeacherFeedback() == null ? "" : form.getTeacherFeedback().trim());
         s.setStatus(SubmissionStatus.REVIEWED);
+        s.setReviewedBy(userRepository.getReferenceById(reviewerId));
+        s.setReviewedAt(LocalDateTime.now());
     }
 }

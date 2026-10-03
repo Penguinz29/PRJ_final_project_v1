@@ -120,7 +120,11 @@ final class ViewMapper {
         v.setStudentAnswer(s.getStudentAnswer());
         v.setEssayImagePath(s.getEssayImagePath());
         v.setIsCorrect(s.getIsCorrect());
-        v.setScore(s.getScore() == null ? null : s.getScore().doubleValue());
+        v.setScore(s.getFinalScore() == null ? null : s.getFinalScore().doubleValue());
+        v.setAiScore(s.getAiScore() == null ? null : s.getAiScore().doubleValue());
+        v.setStatus(s.getStatus().name());
+        v.setReviewedByName(s.getReviewedBy() == null ? null : s.getReviewedBy().getFullName());
+        v.setReviewedAt(toDate(s.getReviewedAt()));
         v.setAiFeedback(s.getAiFeedback());
         v.setTeacherFeedback(s.getTeacherFeedback());
         v.setReviewed(s.isReviewed());

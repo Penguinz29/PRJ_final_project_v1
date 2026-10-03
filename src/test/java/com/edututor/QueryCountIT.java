@@ -57,7 +57,7 @@ class QueryCountIT {
             st.executeUpdate("DELETE FROM Submissions WHERE StudentAnswer = 'qc'");
             for (int i = 0; i < 5; i++) {
                 st.executeUpdate("INSERT INTO Submissions (StudentId, LessonId, QuestionId, QuestionType, StudentAnswer, "
-                        + "IsCorrect, Score, IsReviewed) VALUES (4, 1, " + (i % 2 + 1) + ", 'MCQ', 'qc', 1, 10, 1)");
+                        + "IsCorrect, FinalScore, IsReviewed) VALUES (4, 1, " + (i % 2 + 1) + ", 'MCQ', 'qc', 1, 10, 1)");
             }
         }
     }

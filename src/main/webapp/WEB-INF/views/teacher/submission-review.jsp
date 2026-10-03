@@ -132,16 +132,33 @@
 <input type="hidden" name="_csrf" value="${sessionScope.CSRF_TOKEN}">
                             <input type="hidden" name="submissionId" value="${sub.submissionId}">
 
-                            <!-- Trạng thái hiện tại -->
+                            <!-- Trạng thái hiện tại (AI_GRADED → REVIEWED) -->
                             <div class="mb-3 p-2 rounded ${sub.reviewed ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-warning-emphasis'}">
                                 <i class="bi ${sub.reviewed ? 'bi-check-circle-fill' : 'bi-hourglass-split'} me-1"></i>
-                                <strong>Trạng thái:</strong> ${sub.reviewed ? 'Đã chấm điểm' : 'Chưa được chấm'}
+                                <strong>Trạng thái:</strong> ${sub.reviewed ? 'Giáo viên đã duyệt' : 'AI đã chấm, chờ giáo viên duyệt'}
+                                <c:if test="${sub.reviewed and not empty sub.reviewedByName}">
+                                    <div class="small mt-1">
+                                        Duyệt bởi <strong><c:out value="${sub.reviewedByName}" /></strong>
+                                        <c:if test="${not empty sub.reviewedAt}">lúc <fmt:formatDate value="${sub.reviewedAt}" pattern="dd/MM/yyyy HH:mm" /></c:if>
+                                    </div>
+                                </c:if>
                             </div>
 
-                            <!-- Điểm số (Thang điểm 10.0, bước 0.25) -->
+                            <!-- BR-09: điểm AI chỉ để tham khảo, không bao giờ bị ghi đè -->
+                            <div class="mb-3 d-flex justify-content-between align-items-center p-2 border rounded bg-light">
+                                <span><i class="bi bi-robot text-ai me-1"></i><strong>Điểm AI đề xuất:</strong></span>
+                                <span class="fs-5 fw-bold">
+                                    <c:choose>
+                                        <c:when test="${sub.aiScore != null}"><fmt:formatNumber value="${sub.aiScore}" pattern="0.00" /> / 10</c:when>
+                                        <c:otherwise><span class="text-muted small">không có</span></c:otherwise>
+                                    </c:choose>
+                                </span>
+                            </div>
+
+                            <!-- Điểm chính thức (Thang điểm 10.0, bước 0.25) -->
                             <div class="mb-3">
                                 <label for="scoreInput" class="form-label fw-bold">
-                                    Điểm số (Thang điểm 10.0):
+                                    Điểm chính thức (Thang điểm 10.0):
                                 </label>
                                 <div class="input-group">
                                     <input type="number" class="form-control form-control-lg fw-bold text-primary"
@@ -151,7 +168,7 @@
                                            placeholder="Ví dụ: 8.5">
                                     <span class="input-group-text fw-bold">/ 10</span>
                                 </div>
-                                <small class="text-muted">Nhập điểm từ 0.00 đến 10.00 (làm tròn tới 0.25 điểm theo quy chế thi THPT).</small>
+                                <small class="text-muted">Nhập điểm từ 0.00 đến 10.00 (bước 0.25). Điểm AI phía trên được giữ nguyên để đối chiếu.</small>
                             </div>
 
                             <!-- Đánh giá kết quả -->
@@ -183,10 +200,18 @@
                             </div>
 
                             <hr>
-                            <div class="d-grid">
+                            <div class="d-grid gap-2">
                                 <button type="submit" class="btn btn-primary btn-lg">
-                                    <i class="bi bi-check-lg me-1"></i>Lưu kết quả chấm điểm
+                                    <i class="bi bi-check-lg me-1"></i>Lưu điểm chính thức
                                 </button>
+                                <c:if test="${sub.aiScore != null}">
+                                    <%-- UC-TEA-07: duyệt giữ nguyên điểm AI (final_score = ai_score) --%>
+                                    <button type="submit" name="keepAiScore" value="true" formnovalidate
+                                            class="btn btn-outline-success">
+                                        <i class="bi bi-robot me-1"></i>Duyệt giữ nguyên điểm AI
+                                        (<fmt:formatNumber value="${sub.aiScore}" pattern="0.00" />)
+                                    </button>
+                                </c:if>
                             </div>
                         </form>
                     </div>

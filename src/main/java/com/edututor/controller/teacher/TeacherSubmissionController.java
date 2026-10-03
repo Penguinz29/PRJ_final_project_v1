@@ -2,7 +2,9 @@ package com.edututor.controller.teacher;
 
 import com.edututor.dto.PageResult;
 import com.edututor.dto.ReviewForm;
+import com.edututor.dto.SessionUser;
 import com.edututor.dto.SubmissionView;
+import com.edututor.interceptor.AuthInterceptor;
 import com.edututor.service.SubmissionService;
 import com.edututor.util.FormErrors;
 import jakarta.validation.Valid;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.SessionAttribute;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 /** UC-TEA-07: giáo viên xem bài tự luận (ảnh, OCR, điểm AI) và duyệt / hiệu chỉnh điểm. */
@@ -51,9 +54,15 @@ public class TeacherSubmissionController {
         return "teacher/submissions";
     }
 
-    /** Giáo viên nhập điểm (thang 10, bước 0.25) và nhận xét; bài chuyển sang trạng thái đã duyệt. */
+    /**
+     * Giáo viên nhập điểm chính thức (thang 10, bước 0.25) và nhận xét, hoặc "Duyệt giữ nguyên điểm AI"
+     * (keepAiScore); bài chuyển sang REVIEWED, điểm AI giữ nguyên (BR-09). Người duyệt lấy từ session.
+     */
     @PostMapping("/teacher/submissions")
-    public String review(@Valid @ModelAttribute ReviewForm form, BindingResult result, RedirectAttributes redirect) {
+    public String review(@Valid @ModelAttribute ReviewForm form, BindingResult result,
+                         @RequestParam(defaultValue = "false") boolean keepAiScore,
+                         @SessionAttribute(AuthInterceptor.SESSION_USER) SessionUser user,
+                         RedirectAttributes redirect) {
         if (form.getSubmissionId() <= 0) {
             redirect.addFlashAttribute("errorFlash", "ID bài nộp không hợp lệ.");
             return "redirect:/teacher/submissions";
@@ -61,14 +70,14 @@ public class TeacherSubmissionController {
         try {
             FormErrors.requireValid(result);
             Double parsed = null;
-            if (form.getScore() != null && !form.getScore().isBlank()) {
+            if (!keepAiScore && form.getScore() != null && !form.getScore().isBlank()) {
                 try {
                     parsed = Double.parseDouble(form.getScore().trim().replace(',', '.'));
                 } catch (NumberFormatException e) {
                     throw new IllegalArgumentException("Điểm số phải là một số từ 0 đến 10.");
                 }
             }
-            submissionService.reviewEssay(form, parsed);
+            submissionService.reviewEssay(form, parsed, keepAiScore, user.getUserId());
             redirect.addFlashAttribute("flash", "Đã lưu kết quả chấm điểm và nhận xét thành công!");
         } catch (IllegalArgumentException | IllegalStateException e) {
             redirect.addFlashAttribute("errorFlash", e.getMessage());

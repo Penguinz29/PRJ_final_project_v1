@@ -15,20 +15,20 @@ import org.springframework.data.repository.query.Param;
 /** Bảng Submissions: bài làm trắc nghiệm / tự luận. Quan hệ to-one nạp bằng @EntityGraph (không N+1). */
 public interface SubmissionRepository extends JpaRepository<Submission, Integer> {
 
-    @EntityGraph(attributePaths = {"student", "question", "lesson"})
+    @EntityGraph(attributePaths = {"student", "question", "lesson", "reviewedBy"})
     Page<Submission> findByStudent_UserId(Integer studentId, Pageable pageable);
 
-    @EntityGraph(attributePaths = {"student", "question", "lesson"})
+    @EntityGraph(attributePaths = {"student", "question", "lesson", "reviewedBy"})
     Page<Submission> findByStudent_UserIdAndQuestionType(Integer studentId, QuestionType type, Pageable pageable);
 
     /** Bài tự luận theo trạng thái đã duyệt hay chưa (phân trang). */
-    @EntityGraph(attributePaths = {"student", "question", "lesson"})
+    @EntityGraph(attributePaths = {"student", "question", "lesson", "reviewedBy"})
     Page<Submission> findByQuestionTypeAndReviewed(QuestionType type, boolean reviewed, Pageable pageable);
 
-    @EntityGraph(attributePaths = {"student", "question", "lesson"})
+    @EntityGraph(attributePaths = {"student", "question", "lesson", "reviewedBy"})
     Page<Submission> findByQuestionType(QuestionType type, Pageable pageable);
 
-    @EntityGraph(attributePaths = {"student", "question", "lesson"})
+    @EntityGraph(attributePaths = {"student", "question", "lesson", "reviewedBy"})
     Optional<Submission> findWithDetailsBySubmissionId(Integer submissionId);
 
     @EntityGraph(attributePaths = {"student"})

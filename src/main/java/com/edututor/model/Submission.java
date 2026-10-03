@@ -54,9 +54,16 @@ public class Submission {
     @Column(name = "IsCorrect")
     private Boolean isCorrect;
 
-    /** Điểm (thang 10 với tự luận; trắc nghiệm: 1 nếu đúng, 0 nếu sai). */
-    @Column(name = "Score", precision = 4, scale = 2)
-    private BigDecimal score;
+    /**
+     * Điểm AI đề xuất cho bài tự luận (thang 10, bước 0.25); trắc nghiệm: null.
+     * BR-09: updatable = false nên Hibernate KHÔNG BAO GIỜ ghi đè cột này sau khi INSERT.
+     */
+    @Column(name = "AiScore", precision = 4, scale = 2, updatable = false)
+    private BigDecimal aiScore;
+
+    /** Điểm chính thức (thang 10): trắc nghiệm 10 / 0; tự luận ban đầu = aiScore, giáo viên duyệt có thể chỉnh. */
+    @Column(name = "FinalScore", precision = 4, scale = 2)
+    private BigDecimal finalScore;
 
     @Nationalized
     @Column(name = "AiFeedback", columnDefinition = "NVARCHAR(MAX)")
@@ -112,8 +119,10 @@ public class Submission {
     public void setEssayImagePath(String essayImagePath) { this.essayImagePath = essayImagePath; }
     public Boolean getIsCorrect() { return isCorrect; }
     public void setIsCorrect(Boolean isCorrect) { this.isCorrect = isCorrect; }
-    public BigDecimal getScore() { return score; }
-    public void setScore(BigDecimal score) { this.score = score; }
+    public BigDecimal getAiScore() { return aiScore; }
+    public void setAiScore(BigDecimal aiScore) { this.aiScore = aiScore; }
+    public BigDecimal getFinalScore() { return finalScore; }
+    public void setFinalScore(BigDecimal finalScore) { this.finalScore = finalScore; }
     public String getAiFeedback() { return aiFeedback; }
     public void setAiFeedback(String aiFeedback) { this.aiFeedback = aiFeedback; }
     public String getTeacherFeedback() { return teacherFeedback; }

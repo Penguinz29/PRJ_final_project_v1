@@ -126,8 +126,9 @@
                                                                                     </span>
                                                                                 </c:when>
                                                                                 <c:otherwise>
+                                                                                    <%-- FR-OCR-03: điểm AI chỉ là điểm tạm thời cho tới khi giáo viên duyệt --%>
                                                                                     <span class="badge bg-warning-subtle text-warning fw-bold px-2 py-1">
-                                                                                        <i class="bi bi-hourglass-split me-1"></i>Đang chờ GV
+                                                                                        <i class="bi bi-hourglass-split me-1"></i>Điểm tạm thời<c:if test="${sub.aiScore != null}">: <strong>${sub.aiScore}đ</strong></c:if> · chờ GV duyệt
                                                                                     </span>
                                                                                 </c:otherwise>
                                                                             </c:choose>

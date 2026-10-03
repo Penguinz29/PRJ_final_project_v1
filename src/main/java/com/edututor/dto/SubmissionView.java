@@ -189,5 +189,19 @@ public class SubmissionView implements Serializable {
     public boolean getReviewed() {
         return reviewed;
     }
-}
 
+    // BR-09: điểm AI (đề xuất, không đổi) tách khỏi điểm chính thức (score = final_score)
+    private Double aiScore;
+    private String status;          // GRADED | AI_GRADED | REVIEWED
+    private String reviewedByName;
+    private Date reviewedAt;
+
+    public Double getAiScore() { return aiScore; }
+    public void setAiScore(Double aiScore) { this.aiScore = aiScore; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+    public String getReviewedByName() { return reviewedByName; }
+    public void setReviewedByName(String reviewedByName) { this.reviewedByName = reviewedByName; }
+    public Date getReviewedAt() { return reviewedAt; }
+    public void setReviewedAt(Date reviewedAt) { this.reviewedAt = reviewedAt; }
+}
