@@ -50,17 +50,63 @@ public interface SubmissionRepository extends JpaRepository<Submission, Integer>
     boolean existsByQuestion_Lesson_LessonId(Integer lessonId);
 
     /** Số bài học đã luyện trắc nghiệm của học sinh. */
-    @Query("select count(distinct s.lesson.lessonId) from Submission s "
-            + "where s.student.userId = :studentId and s.questionType = com.edututor.model.QuestionType.MCQ "
-            + "and s.lesson is not null")
-    long countQuizLessonsDone(@Param("studentId") Integer studentId);
 
-    /** Điểm trung bình (thang 100) của các bài trắc nghiệm: % câu đúng; null nếu chưa làm bài nào. */
-    @Query("select avg(case when s.isCorrect = true then 100.0 else 0.0 end) from Submission s "
-            + "where s.student.userId = :studentId and s.questionType = com.edututor.model.QuestionType.MCQ")
-    Double averageMcqPercent(@Param("studentId") Integer studentId);
 
     boolean existsByStudent_UserId(Integer studentId);
+
+    // ---------- UC-STU-06 / BR-10: tiến độ tính theo lần làm GẦN NHẤT của mỗi câu (CTE ROW_NUMBER()) ----------
+    // Phía học sinh không lọc IsActive: nội dung giáo viên đã xóa mềm vẫn được ôn tập (quyết định của nhóm).
+
+    /** Tiến độ trắc nghiệm theo từng chủ đề (kể cả chủ đề chưa làm câu nào). */
+    @Query(value = "WITH latest AS ( SELECT s.QuestionId, s.IsCorrect, ROW_NUMBER() OVER (PARTITION BY s.QuestionId ORDER BY s.SubmittedAt DESC, s.SubmissionId DESC) AS rn FROM Submissions s WHERE s.StudentId = :studentId AND s.QuestionType = 'MCQ'), "
+            + "done AS (SELECT l.TopicId AS id, COUNT(*) AS answered, "
+            + "                SUM(CASE WHEN lt.IsCorrect = 1 THEN 1 ELSE 0 END) AS correct "
+            + "         FROM latest lt JOIN Questions q ON q.QuestionId = lt.QuestionId "
+            + "         JOIN Lessons l ON l.LessonId = q.LessonId WHERE lt.rn = 1 GROUP BY l.TopicId), "
+            + "total AS (SELECT l.TopicId AS id, COUNT(*) AS total FROM Questions q "
+            + "          JOIN Lessons l ON l.LessonId = q.LessonId WHERE q.QuestionType = 'MCQ' GROUP BY l.TopicId) "
+            + "SELECT t.TopicId AS id, t.TopicName AS name, COALESCE(tt.total, 0) AS total, "
+            + "       COALESCE(d.answered, 0) AS answered, COALESCE(d.correct, 0) AS correct "
+            + "FROM Topics t LEFT JOIN total tt ON tt.id = t.TopicId LEFT JOIN done d ON d.id = t.TopicId "
+            + "ORDER BY t.CreatedAt DESC, t.TopicId DESC",
+            nativeQuery = true)
+    List<ProgressRow> topicProgress(@Param("studentId") Integer studentId);
+
+    /** Tiến độ trắc nghiệm theo từng bài học của một chủ đề. */
+    @Query(value = "WITH latest AS ( SELECT s.QuestionId, s.IsCorrect, ROW_NUMBER() OVER (PARTITION BY s.QuestionId ORDER BY s.SubmittedAt DESC, s.SubmissionId DESC) AS rn FROM Submissions s WHERE s.StudentId = :studentId AND s.QuestionType = 'MCQ'), "
+            + "done AS (SELECT q.LessonId AS id, COUNT(*) AS answered, "
+            + "                SUM(CASE WHEN lt.IsCorrect = 1 THEN 1 ELSE 0 END) AS correct "
+            + "         FROM latest lt JOIN Questions q ON q.QuestionId = lt.QuestionId "
+            + "         WHERE lt.rn = 1 GROUP BY q.LessonId), "
+            + "total AS (SELECT q.LessonId AS id, COUNT(*) AS total FROM Questions q "
+            + "          WHERE q.QuestionType = 'MCQ' GROUP BY q.LessonId) "
+            + "SELECT l.LessonId AS id, l.Title AS name, COALESCE(tt.total, 0) AS total, "
+            + "       COALESCE(d.answered, 0) AS answered, COALESCE(d.correct, 0) AS correct "
+            + "FROM Lessons l LEFT JOIN total tt ON tt.id = l.LessonId LEFT JOIN done d ON d.id = l.LessonId "
+            + "WHERE l.TopicId = :topicId ORDER BY l.DisplayOrder ASC, l.LessonId ASC",
+            nativeQuery = true)
+    List<ProgressRow> lessonProgress(@Param("studentId") Integer studentId, @Param("topicId") Integer topicId);
+
+    /** Điểm trung bình tự luận (thang 10): final_score của lần nộp gần nhất mỗi câu; null nếu chưa có. */
+    @Query(value = "WITH latest AS ( "
+            + "SELECT s.FinalScore, ROW_NUMBER() OVER (PARTITION BY s.QuestionId "
+            + "ORDER BY s.SubmittedAt DESC, s.SubmissionId DESC) AS rn "
+            + "FROM Submissions s WHERE s.StudentId = :studentId AND s.QuestionType = 'ESSAY' AND s.FinalScore IS NOT NULL) "
+            + "SELECT AVG(CAST(FinalScore AS FLOAT)) FROM latest WHERE rn = 1",
+            nativeQuery = true)
+    Double latestEssayAverage(@Param("studentId") Integer studentId);
+
+    // ---------- Lịch sử lọc theo bài học (UC-STU-06) ----------
+
+    @EntityGraph(attributePaths = {"student", "question", "lesson", "reviewedBy"})
+    Page<Submission> findByStudent_UserIdAndQuestion_Lesson_LessonId(Integer studentId, Integer lessonId,
+                                                                      Pageable pageable);
+
+    @EntityGraph(attributePaths = {"student", "question", "lesson", "reviewedBy"})
+    Page<Submission> findByStudent_UserIdAndQuestionTypeAndQuestion_Lesson_LessonId(Integer studentId,
+                                                                                    QuestionType type,
+                                                                                    Integer lessonId,
+                                                                                    Pageable pageable);
 
     /**
      * UC-TEA-08: thống kê trắc nghiệm theo câu hỏi của một bài học (chỉ câu đang hoạt động). Số liệu bài nộp gộp

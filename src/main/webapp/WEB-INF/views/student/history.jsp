@@ -23,21 +23,30 @@
                                 </h1>
                             </div>
 
+                            <c:set var="lessonParam" value="${not empty lessonId ? '&lessonId='.concat(lessonId) : ''}" />
+                            <%-- Đang lọc theo một bài học (UC-STU-06) --%>
+                            <c:if test="${not empty lessonFilter}">
+                                <div class="alert alert-info py-2 d-flex align-items-center gap-2">
+                                    <i class="bi bi-funnel"></i>
+                                    <span>Bài học: <strong><c:out value="${lessonFilter.title}" /></strong></span>
+                                    <a class="ms-auto small" href="${pageContext.request.contextPath}/student/history?type=${type}">Bỏ lọc</a>
+                                </div>
+                            </c:if>
                             <%-- Tabs lọc --%>
                                 <ul class="nav nav-tabs mb-4">
                                     <li class="nav-item">
                                         <a class="nav-link ${empty type or type == 'ALL' ? 'active fw-bold' : ''}"
-                                            href="${pageContext.request.contextPath}/student/history?type=ALL">Tất
+                                            href="${pageContext.request.contextPath}/student/history?type=ALL${lessonParam}">Tất
                                             cả</a>
                                     </li>
                                     <li class="nav-item">
                                         <a class="nav-link ${type == 'MCQ' ? 'active fw-bold' : ''}"
-                                            href="${pageContext.request.contextPath}/student/history?type=MCQ">Trắc
+                                            href="${pageContext.request.contextPath}/student/history?type=MCQ${lessonParam}">Trắc
                                             nghiệm</a>
                                     </li>
                                     <li class="nav-item">
                                         <a class="nav-link ${type == 'ESSAY' ? 'active fw-bold' : ''}"
-                                            href="${pageContext.request.contextPath}/student/history?type=ESSAY">Tự
+                                            href="${pageContext.request.contextPath}/student/history?type=ESSAY${lessonParam}">Tự
                                             luận</a>
                                     </li>
                                 </ul>
@@ -147,7 +156,7 @@
                                         </table>
                                     </div>
                                 </div>
-                                <ui:pagination baseUrl="${pageContext.request.contextPath}/student/history${not empty type ? '?type='.concat(type) : ''}" page="${page}" totalPages="${totalPages}" />
+                                <ui:pagination baseUrl="${pageContext.request.contextPath}/student/history?type=${empty type ? 'ALL' : type}${lessonParam}" page="${page}" totalPages="${totalPages}" />
                         </main>
                     </div>
                     <script>

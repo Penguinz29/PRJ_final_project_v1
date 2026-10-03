@@ -1,10 +1,12 @@
 package com.edututor.service;
 
 import com.edututor.dto.PageResult;
+import com.edututor.dto.ProgressView;
 import com.edututor.dto.QuestionResultView;
 import com.edututor.model.QuestionType;
 import com.edututor.model.Role;
 import com.edututor.repository.LessonRepository;
+import com.edututor.repository.ProgressRow;
 import com.edututor.repository.QuestionRepository;
 import com.edututor.repository.QuestionResultRow;
 import com.edututor.repository.SubmissionRepository;
@@ -12,6 +14,7 @@ import com.edututor.repository.TopicRepository;
 import com.edututor.repository.UserRepository;
 import com.edututor.util.Pager;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -74,12 +77,50 @@ public class StatsService {
                 r.getStudents() == null ? 0 : r.getStudents(), pct, avg);
     }
 
+    /**
+     * Dashboard học sinh (FR-STU-06): tổng hợp tính theo lần làm gần nhất của mỗi câu (BR-10), cộng dồn từ tiến độ
+     * từng chủ đề nên không chạy thêm truy vấn đếm riêng.
+     */
     public Map<String, Object> studentStats(int studentId) {
+        List<ProgressView> progress = topicProgress(studentId);
+        int total = 0;
+        int answered = 0;
+        int correct = 0;
+        for (ProgressView p : progress) {
+            total += p.total();
+            answered += p.answered();
+            correct += p.correct();
+        }
+        ProgressView overall = new ProgressView(0, "", total, answered, correct);
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("totalTopics", (int) topics.count()); // học sinh vẫn học được chuyên đề đã xóa mềm
-        m.put("doneQuiz", (int) submissions.countQuizLessonsDone(studentId));
-        Double avg = submissions.averageMcqPercent(studentId);
-        m.put("averageScore", avg == null ? 0.0 : avg);
+        m.put("totalTopics", progress.size()); // học sinh vẫn học được chuyên đề đã xóa mềm
+        m.put("topicProgress", progress);
+        m.put("overall", overall);
+        Double essayAvg = submissions.latestEssayAverage(studentId);
+        m.put("essayAverage", essayAvg == null ? null : Math.round(essayAvg * 100) / 100.0);
         return m;
+    }
+
+    /** Tiến độ theo từng chủ đề (UC-STU-06). */
+    public List<ProgressView> topicProgress(int studentId) {
+        return submissions.topicProgress(studentId).stream().map(StatsService::toProgressView).toList();
+    }
+
+    /** Tiến độ theo từng bài học của một chủ đề (UC-STU-06). */
+    public List<ProgressView> lessonProgress(int studentId, int topicId) {
+        return submissions.lessonProgress(studentId, topicId).stream().map(StatsService::toProgressView).toList();
+    }
+
+    /** Tên chủ đề cho trang tiến độ (kể cả chủ đề đã xóa mềm); null nếu không tồn tại. */
+    public String topicName(int topicId) {
+        return topics.findById(topicId).map(t -> t.getTopicName()).orElse(null);
+    }
+
+    private static ProgressView toProgressView(ProgressRow r) {
+        return new ProgressView(r.getId(), r.getName(), nz(r.getTotal()), nz(r.getAnswered()), nz(r.getCorrect()));
+    }
+
+    private static int nz(Integer v) {
+        return v == null ? 0 : v;
     }
 }

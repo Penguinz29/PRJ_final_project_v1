@@ -1,7 +1,9 @@
 package com.edututor.controller.student;
 
 import com.edututor.dto.LessonView;
+import com.edututor.dto.ProgressView;
 import com.edututor.dto.SessionUser;
+import com.edututor.exception.NotFoundException;
 import com.edututor.interceptor.AuthInterceptor;
 import com.edututor.service.LessonService;
 import com.edututor.service.MaterialService;
@@ -15,6 +17,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.SessionAttribute;
 
@@ -45,6 +48,29 @@ public class StudentController {
         model.addAllAttributes(statsService.studentStats(user.getUserId()));
         model.addAttribute("recentAttempts", submissionService.getRecentAttempts(user.getUserId(), 5));
         return "student/dashboard";
+    }
+
+    /** FR-STU-06: tiến độ bóc tách theo từng bài học của một chủ đề (lần làm gần nhất mỗi câu, BR-10). */
+    @GetMapping("/student/topics/{topicId}/progress")
+    public String topicProgress(@PathVariable int topicId,
+                                @SessionAttribute(AuthInterceptor.SESSION_USER) SessionUser user, Model model) {
+        String topicName = statsService.topicName(topicId);
+        if (topicName == null) {
+            throw new NotFoundException("Chủ đề không tồn tại.");
+        }
+        List<ProgressView> lessons = statsService.lessonProgress(user.getUserId(), topicId);
+        int total = 0;
+        int answered = 0;
+        int correct = 0;
+        for (ProgressView p : lessons) {
+            total += p.total();
+            answered += p.answered();
+            correct += p.correct();
+        }
+        model.addAttribute("topicName", topicName);
+        model.addAttribute("lessonProgress", lessons);
+        model.addAttribute("overall", new ProgressView(topicId, topicName, total, answered, correct));
+        return "student/progress";
     }
 
     @GetMapping("/student/topics")

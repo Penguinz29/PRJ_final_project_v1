@@ -1934,6 +1934,82 @@ class EduTutorIT {
         }
     }
 
+    /** FR-STU-06 / BR-10: tiến độ theo chủ đề và theo bài học, tính theo lần làm GẦN NHẤT của mỗi câu. */
+    @Test
+    @Order(58)
+    void studentProgressUsesLatestAttempt() throws Exception {
+        Client t = new Client();
+        t.login("teacher1", "123456");
+        int teacher1 = count("SELECT UserId FROM Users WHERE Username = 'teacher1'");
+        int topicId = count("SELECT TOP 1 TopicId FROM Topics WHERE TeacherId = ? AND IsActive = 1 ORDER BY TopicId", teacher1);
+        String topicName = (String) scalar("SELECT TopicName FROM Topics WHERE TopicId = ?", topicId);
+        t.form("/teacher/lessons", Map.of("action", "create", "topicId", "" + topicId, "title", "it_Bài tiến độ",
+                "summary", "s", "content", "c", "youtubeUrl", ""));
+        int lessonId = count("SELECT LessonId FROM Lessons WHERE Title = N'it_Bài tiến độ'");
+        int[] qid = new int[2];
+        for (int i = 0; i < 2; i++) {
+            Map<String, String> q = new LinkedHashMap<>();
+            q.put("action", "create");
+            q.put("lessonId", "" + lessonId);
+            q.put("type", "MCQ");
+            q.put("level", "1");
+            q.put("content", "it_Câu tiến độ " + (i + 1));
+            q.put("explanation", "g");
+            q.put("correctOption", "A");
+            for (String l : new String[]{"A", "B", "C", "D"}) {
+                q.put("opt_" + l, "pa " + l);
+            }
+            t.form("/teacher/questions", q);
+            qid[i] = count("SELECT QuestionId FROM Questions WHERE Content = ?", "it_Câu tiến độ " + (i + 1));
+        }
+        try {
+            Client st = new Client();
+            st.login("student3", "123456");
+            int right1 = count("SELECT OptionId FROM QuestionOptions WHERE QuestionId = ? AND OptionLetter = 'A'", qid[0]);
+            int wrong1 = count("SELECT OptionId FROM QuestionOptions WHERE QuestionId = ? AND OptionLetter = 'B'", qid[0]);
+            int wrong2 = count("SELECT OptionId FROM QuestionOptions WHERE QuestionId = ? AND OptionLetter = 'C'", qid[1]);
+            // Câu 1: sai rồi làm lại đúng → lần gần nhất ĐÚNG; câu 2: sai
+            st.json("/api/student/submit-quiz-answer", "{\"questionId\":" + qid[0] + ",\"selectedOptionId\":" + wrong1 + "}");
+            st.json("/api/student/submit-quiz-answer", "{\"questionId\":" + qid[0] + ",\"selectedOptionId\":" + right1 + "}");
+            st.json("/api/student/submit-quiz-answer", "{\"questionId\":" + qid[1] + ",\"selectedOptionId\":" + wrong2 + "}");
+            assertEquals(3, count("SELECT COUNT(*) FROM Submissions s JOIN Users u ON u.UserId = s.StudentId "
+                    + "WHERE u.Username = 'student3' AND s.QuestionId IN (?, ?)", qid[0], qid[1]), "3 lượt làm");
+
+            // Dashboard: tiến độ theo chủ đề, có liên kết tới trang chi tiết
+            Resp dash = st.get("/student/dashboard");
+            assertEquals(200, dash.status(), dash.body());
+            assertTrue(dash.has("Tiến độ theo chủ đề") && dash.has(topicName));
+            assertTrue(dash.has("/student/topics/" + topicId + "/progress"));
+
+            // Trang tiến độ theo bài học: 2/2 câu đã làm, đúng 1 (50%) — KHÔNG phải 1/3 lượt
+            Resp prog = st.get("/student/topics/" + topicId + "/progress");
+            assertEquals(200, prog.status(), prog.body());
+            String html = prog.body();
+            int row = html.indexOf("it_Bài tiến độ");
+            assertTrue(row > 0, "có dòng bài học");
+            String rowHtml = html.substring(row, html.indexOf("</tr>", row));
+            assertTrue(rowHtml.contains("2/2"), rowHtml);
+            assertTrue(rowHtml.contains("(50%)"), "tỉ lệ đúng theo lần làm gần nhất: " + rowHtml);
+            assertTrue(rowHtml.contains("/student/history?lessonId=" + lessonId));
+
+            // Lịch sử lọc theo bài học: chỉ các lượt của bài này
+            Resp hist = st.get("/student/history?lessonId=" + lessonId);
+            assertEquals(200, hist.status());
+            assertTrue(hist.has("Bài học: <strong>it_Bài tiến độ"), "hiện bộ lọc bài học");
+            assertTrue(hist.has("it_Câu tiến độ 1") && hist.has("it_Câu tiến độ 2"));
+            assertFalse(hist.has("x^3 - 3x"), "không lẫn câu của bài khác");
+            assertTrue(st.get("/student/history?type=MCQ&lessonId=" + lessonId).has("it_Câu tiến độ 2"));
+
+            // Chủ đề không tồn tại → 404; giáo viên không vào trang tiến độ của học sinh
+            assertEquals(404, st.get("/student/topics/999999/progress").status());
+            assertEquals(403, t.get("/student/topics/" + topicId + "/progress").status());
+        } finally {
+            exec("DELETE FROM Submissions WHERE QuestionId IN (?, ?)", qid[0], qid[1]);
+            exec("DELETE FROM Questions WHERE LessonId = ?", lessonId);
+            exec("DELETE FROM Lessons WHERE LessonId = ?", lessonId);
+        }
+    }
+
     /** BR-13 / NFR-06 / TC-AI-08: vượt hạn mức gọi AI → 429; hạn mức học sinh và giáo viên độc lập; ping không bị giới hạn. */
     @Test
     @Order(55)

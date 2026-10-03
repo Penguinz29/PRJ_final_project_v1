@@ -177,13 +177,27 @@ public class SubmissionService {
 
     // ---------- Lịch sử & thống kê học sinh ----------
 
-    /** Lịch sử làm bài của một học sinh, phân trang ở CSDL. type: MCQ | ESSAY | ALL. */
+    /**
+     * Lịch sử làm bài của một học sinh, phân trang ở CSDL (UC-STU-06).
+     *
+     * @param type     MCQ | ESSAY | ALL
+     * @param lessonId &lt;= 0: mọi bài học
+     */
     @Transactional(readOnly = true)
-    public PageResult<SubmissionView> getStudentHistory(int studentId, String type, int page, int size) {
+    public PageResult<SubmissionView> getStudentHistory(int studentId, String type, int lessonId, int page, int size) {
         PageRequest pr = Pager.pageRequest(page, size, NEWEST_FIRST);
-        Page<Submission> result = ("MCQ".equals(type) || "ESSAY".equals(type))
-                ? submissionRepository.findByStudent_UserIdAndQuestionType(studentId, QuestionType.valueOf(type), pr)
-                : submissionRepository.findByStudent_UserId(studentId, pr);
+        boolean byType = "MCQ".equals(type) || "ESSAY".equals(type);
+        Page<Submission> result;
+        if (lessonId > 0) {
+            result = byType
+                    ? submissionRepository.findByStudent_UserIdAndQuestionTypeAndQuestion_Lesson_LessonId(
+                            studentId, QuestionType.valueOf(type), lessonId, pr)
+                    : submissionRepository.findByStudent_UserIdAndQuestion_Lesson_LessonId(studentId, lessonId, pr);
+        } else {
+            result = byType
+                    ? submissionRepository.findByStudent_UserIdAndQuestionType(studentId, QuestionType.valueOf(type), pr)
+                    : submissionRepository.findByStudent_UserId(studentId, pr);
+        }
         return PageResult.of(result, ViewMapper::toView);
     }
 

@@ -39,7 +39,7 @@ public class TeacherStudentController {
                           @RequestParam(defaultValue = "ALL") String type,
                           @RequestParam(defaultValue = "1") int page, Model model) {
         String filter = ("MCQ".equals(type) || "ESSAY".equals(type)) ? type : "ALL";
-        PageResult<SubmissionView> result = submissionService.getStudentHistory(studentId, filter, page, PAGE_SIZE);
+        PageResult<SubmissionView> result = submissionService.getStudentHistory(studentId, filter, 0, page, PAGE_SIZE);
         model.addAttribute("submissions", result.getItems());
         model.addAttribute("page", result.getPage());
         model.addAttribute("totalPages", result.getTotalPages());

@@ -1,5 +1,6 @@
-<%-- File: WEB-INF/views/student/dashboard.jsp Servlet: StudentDashboardServlet Attributes: totalTopics(int),
-    doneQuiz(int), averageScore(double), recentAttempts(List<Submission>)
+<%-- File: WEB-INF/views/student/dashboard.jsp Controller: StudentController (GET /student/dashboard)
+    Attributes: totalTopics(int), topicProgress(List<ProgressView>), overall(ProgressView), essayAverage(Double),
+                recentAttempts(List<SubmissionView>)
     --%>
     <%@ page contentType="text/html;charset=UTF-8" pageEncoding="UTF-8" %>
         <%@ taglib prefix="ui" tagdir="/WEB-INF/tags" %>
@@ -30,9 +31,9 @@
                                 </span>
                             </div>
 
-                            <%-- Stat cards --%>
+                            <%-- Stat cards: tính theo lần làm gần nhất của mỗi câu (BR-10) --%>
                                 <div class="row g-3 mb-4">
-                                    <div class="col-sm-4">
+                                    <div class="col-6 col-lg-3">
                                         <div class="stat-card">
                                             <div class="stat-icon blue"><i class="bi bi-book"></i></div>
                                             <div>
@@ -41,31 +42,72 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="col-sm-4">
+                                    <div class="col-6 col-lg-3">
                                         <div class="stat-card">
                                             <div class="stat-icon green"><i class="bi bi-check2-circle"></i></div>
                                             <div>
-                                                <div class="stat-number">${doneQuiz}</div>
-                                                <div class="stat-label">Bài đã làm</div>
+                                                <div class="stat-number">${overall.answered}/${overall.total}</div>
+                                                <div class="stat-label">Câu trắc nghiệm đã làm</div>
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="col-sm-4">
+                                    <div class="col-6 col-lg-3">
                                         <div class="stat-card">
-                                            <div class="stat-icon orange"><i class="bi bi-star-fill"></i></div>
+                                            <div class="stat-icon orange"><i class="bi bi-bullseye"></i></div>
                                             <div>
                                                 <div class="stat-number">
                                                     <c:choose>
-                                                        <c:when test="${averageScore > 0}">
-                                                            <fmt:formatNumber value="${averageScore}"
-                                                                maxFractionDigits="1" />%
-                                                        </c:when>
+                                                        <c:when test="${overall.correctPct != null}"><fmt:formatNumber value="${overall.correctPct}" maxFractionDigits="1" />%</c:when>
                                                         <c:otherwise>--</c:otherwise>
                                                     </c:choose>
                                                 </div>
-                                                <div class="stat-label">Điểm trung bình</div>
+                                                <div class="stat-label">Tỉ lệ đúng trắc nghiệm</div>
                                             </div>
                                         </div>
+                                    </div>
+                                    <div class="col-6 col-lg-3">
+                                        <div class="stat-card">
+                                            <div class="stat-icon purple"><i class="bi bi-star-fill"></i></div>
+                                            <div>
+                                                <div class="stat-number">
+                                                    <c:choose>
+                                                        <c:when test="${essayAverage != null}"><fmt:formatNumber value="${essayAverage}" maxFractionDigits="2" />/10</c:when>
+                                                        <c:otherwise>--</c:otherwise>
+                                                    </c:choose>
+                                                </div>
+                                                <div class="stat-label">Điểm TB tự luận</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <%-- FR-STU-06: tiến độ theo chủ đề; bấm để xem theo từng bài học --%>
+                                <div class="card mb-4">
+                                    <div class="card-header">
+                                        <i class="bi bi-graph-up-arrow me-2 text-primary"></i>Tiến độ theo chủ đề
+                                        <span class="small text-muted ms-2">(tính theo lần làm gần nhất của mỗi câu)</span>
+                                    </div>
+                                    <div class="list-group list-group-flush">
+                                        <c:forEach var="p" items="${topicProgress}">
+                                            <a class="list-group-item list-group-item-action py-3"
+                                               href="${pageContext.request.contextPath}/student/topics/${p.id}/progress">
+                                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                                    <span class="fw-semibold"><c:out value="${p.name}" /></span>
+                                                    <span class="small text-muted">
+                                                        Đã làm ${p.answered}/${p.total} câu
+                                                        <c:if test="${p.correctPct != null}"> · đúng ${p.correct} (<fmt:formatNumber value="${p.correctPct}" maxFractionDigits="1" />%)</c:if>
+                                                        <i class="bi bi-chevron-right ms-1"></i>
+                                                    </span>
+                                                </div>
+                                                <div class="progress" style="height:8px" title="Hoàn thành ${p.completionPct}%">
+                                                    <div class="progress-bar bg-success" style="width:${p.answered == 0 ? 0 : p.correct * 100 / (p.total == 0 ? 1 : p.total)}%"></div>
+                                                    <div class="progress-bar bg-danger" style="width:${p.answered == 0 ? 0 : (p.answered - p.correct) * 100 / (p.total == 0 ? 1 : p.total)}%"></div>
+                                                </div>
+                                            </a>
+                                        </c:forEach>
+                                        <c:if test="${empty topicProgress}">
+                                            <div class="list-group-item text-muted">Chưa có chủ đề nào.</div>
+                                        </c:if>
                                     </div>
                                 </div>
 
