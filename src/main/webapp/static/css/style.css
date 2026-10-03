@@ -362,7 +362,6 @@ h6 {
   margin-left: var(--sidebar-w);
   flex: 1;
   padding: 1.75rem 2rem;
-  max-width: 1280px;
   min-width: 0;
 }
 

@@ -314,7 +314,8 @@
                                                                         class="shortcut-card">
                                                                         <div class="sc-icon"
                                                                             style="background:var(--ai-soft);color:var(--ai);">
-                                                                            <i class="bi bi-chat-dots"></i></div>
+                                                                            <i class="bi bi-chat-dots"></i>
+                                                                        </div>
                                                                         Hỏi AI từng bước
                                                                     </a>
                                                                     <a href="${pageContext.request.contextPath}/student/history"
