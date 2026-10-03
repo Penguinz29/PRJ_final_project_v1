@@ -7,7 +7,7 @@
 | Đồ án | PRJ301 — Spring MVC 6 + Spring Data JPA (Hibernate) + SQL Server + Gemini API |
 | Phiên bản | 2.1.2 (đồng bộ với mã nguồn: script SQL 07–10, BR-03 bài học, OCR `legible`/WebP, BR-09 tách điểm, hồ sơ cá nhân, kết quả theo câu, tiến độ BR-10, dashboard Admin, trắc nghiệm ngẫu nhiên + chấm từng câu; thêm mục 10 "Hiện trạng triển khai"). 2.1.1: BR-05 xóa mềm chỉ ẩn ở phía quản lý, học sinh vẫn ôn tập được; nút Xóa báo trước kết quả. 2.1.0: chuyển tầng dữ liệu sang JPA; bổ sung Bean Validation, đối chiếu rubric |
 | Liên quan | `EduTutor_SRS.md` (yêu cầu), `EduTutor_Database.sql` (CSDL) |
-| Quy ước tham chiếu | Bộ tài liệu gốc đặt trong `docs/`. Trong repo hiện tại: `document/SRS.md` ≙ `EduTutor_SRS.md`, `document/FRS.md` ≙ `EduTutor_FRS.md`, `document/sql/01_schema.sql` + `02_data.sql` ≙ `EduTutor_Database.sql` (cấu trúc + dữ liệu mẫu; nâng cấp CSDL cũ: `document/sql/upgrade/`, xem mục 1.7). Tài khoản mẫu `admin`, `teacher1`, `student1`…, mật khẩu **`EduTutor@123`** |
+| Quy ước tham chiếu | Bộ tài liệu gốc đặt trong `docs/`. Trong repo hiện tại: `document/SRS.md` ≙ `EduTutor_SRS.md`, `document/FRS.md` ≙ `EduTutor_FRS.md`, `document/sql/01_schema.sql` + `02_data.sql` ≙ `EduTutor_Database.sql` (cấu trúc + dữ liệu mẫu, xem mục 1.7). Tài khoản mẫu `admin`, `teacher1`, `student1`…, mật khẩu **`EduTutor@123`** |
 
 Mã FR trong ngoặc ở mỗi use case (UC) trỏ về SRS.
 
@@ -163,7 +163,7 @@ Thông báo lỗi đặt trong `messages.properties` (tiếng Việt, UTF-8) và
 
 Kiến trúc chuẩn gồm **10 bảng / 10 Entity**. Các thuộc tính sau là bắt buộc trong DDL và Entity (tên cột thực tế dùng PascalCase, vd. `questions.is_active` ≙ `Questions.IsActive`).
 
-**Script CSDL:** cài mới chỉ cần 2 file — `document/sql/01_schema.sql` (tạo CSDL `MathTutorDB`, 10 bảng với toàn bộ PK / FK (kèm `ON DELETE`) / UNIQUE / CHECK / DEFAULT và chỉ mục, ràng buộc đều được đặt tên; **xóa CSDL cũ cùng tên**) rồi `document/sql/02_data.sql` (dữ liệu mẫu, ID ổn định: admin = 1, câu hỏi 1–3, phương án 1–8). CSDL cũ đang có dữ liệu thì **không** chạy `01`, mà chạy các script nâng cấp `document/sql/upgrade/03`→`10` (idempotent; xem `upgrade/README.md`): 06 xóa mềm / `LessonMaterials` / `Users.Status`, 07 đủ 15 khóa AI + `IsSecret`, 08 trạng thái phiên gia sư, 09 `Score` → `FinalScore` + `AiScore`, 10 `Lessons.CreatedBy`. Hai cách cho ra cấu trúc và dữ liệu mẫu giống hệt nhau (đã đối chiếu tự động), trừ cột cũ `Lessons.YoutubeUrl` chỉ còn ở CSDL nâng cấp (không dùng). Thiếu cột nào thì trang dùng cột đó báo lỗi 500 (`Invalid column name …`).
+**Script CSDL:** cài mới chỉ cần 2 file — `document/sql/01_schema.sql` (tạo CSDL `MathTutorDB`, 10 bảng với toàn bộ PK / FK (kèm `ON DELETE`) / UNIQUE / CHECK / DEFAULT và chỉ mục, ràng buộc đều được đặt tên; **xóa CSDL cũ cùng tên**) rồi `document/sql/02_data.sql` (dữ liệu mẫu, ID ổn định: admin = 1, câu hỏi 1–3, phương án 1–8). CSDL tạo theo cấu trúc cũ (thiếu các cột ở bảng trên) phải tạo lại bằng 2 file này — nếu không, trang dùng cột còn thiếu sẽ báo lỗi 500 (`Invalid column name …`). Hai file này tương đương chính xác chuỗi script tăng dần trước đây (đã đối chiếu tự động cấu trúc và dữ liệu mẫu), trừ cột cũ `Lessons.YoutubeUrl` đã bỏ vì không còn dùng (link video nằm trong `LessonMaterials`).
 
 | Bảng | Cột bổ sung | Kiểu / mặc định | Dùng ở |
 |---|---|---|---|

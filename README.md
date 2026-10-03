@@ -66,8 +66,7 @@ PRJ_final_project_v1/
 ├── document/                              # SRS, FRS, Claude.md (quy tắc kỹ thuật)
 │   └── sql/                               # Kịch bản SQL Server
 │       ├── 01_schema.sql                  # Tạo CSDL MathTutorDB, 10 bảng + toàn bộ ràng buộc (XÓA CSDL cũ cùng tên)
-│       ├── 02_data.sql                    # Dữ liệu mẫu (mật khẩu BCrypt của EduTutor@123, 15 khóa cấu hình AI)
-│       └── upgrade/                       # 03..10: chỉ để nâng cấp CSDL cũ đang có dữ liệu (xem upgrade/README.md)
+│       └── 02_data.sql                    # Dữ liệu mẫu (mật khẩu BCrypt của EduTutor@123, 15 khóa cấu hình AI)
 └── src/
     ├── main/
     │   ├── java/com/edututor/
@@ -103,7 +102,7 @@ PRJ_final_project_v1/
 ### Bước 2: Thiết lập Cơ sở Dữ liệu
 **Cài mới:** chạy trong SSMS 2 file trong `document/sql/`: `01_schema.sql` (tạo CSDL `MathTutorDB`, 10 bảng và ràng buộc — **xóa và tạo lại** nếu CSDL đã tồn tại) rồi `02_data.sql` (dữ liệu mẫu, mật khẩu mọi tài khoản `EduTutor@123`).
 
-**Đã có CSDL cũ đang chứa dữ liệu** (ví dụ từ bản Ant): đừng chạy `01_schema.sql`; chạy các script nâng cấp `document/sql/upgrade/03` → `10` (chạy lại nhiều lần không lỗi, không mất dữ liệu) — xem `document/sql/upgrade/README.md`.
+**Đã có CSDL cũ** (ví dụ từ bản Ant): chạy lại 2 file trên để tạo CSDL mới đúng cấu trúc hiện tại (**dữ liệu cũ sẽ bị xóa**, thay bằng dữ liệu mẫu). Stop Tomcat trước khi chạy; sau đó vào **Cấu hình AI** nhập lại khóa Gemini.
 
 > Nếu chạy bằng `sqlcmd`, thêm cờ `-x` (tắt thay thế biến) vì dữ liệu mẫu chứa ký tự `$(`: `sqlcmd -S localhost -U sa -P 123 -C -x -f 65001 -i 02_data.sql`.
 
