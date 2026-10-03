@@ -1168,6 +1168,8 @@ class EduTutorIT {
         Resp lesson = st.get("/student/lesson?id=1");
         assertEquals(200, lesson.status());
         assertTrue(lesson.has("youtube-nocookie.com/embed/zSnMIO2D4oE"), "iframe YouTube");
+        assertTrue(lesson.has("id=\"tab-materials\"") && lesson.has("id=\"lessonToc\""), "tab Bài giảng và mục lục");
+        assertTrue(lesson.has("href=\"#material-"), "mục lục trỏ tới từng bài giảng");
         assertTrue(lesson.has("<video controls"));
         assertTrue(lesson.has("bai1.mp4"));
         assertTrue(lesson.has("rel=\"noopener noreferrer\""));

@@ -90,7 +90,7 @@
                                     <div class="sidebar-group-label">Học tập</div>
                                     <a href="${pageContext.request.contextPath}/student/topics"
                                         class="sidebar-link ${param.active == 'student-topics' ? 'active' : ''}">
-                                        <i class="bi bi-book"></i> Chủ đề & Bài giảng
+                                        <i class="bi bi-book"></i> Bài giảng
                                     </a>
                                     <a href="${pageContext.request.contextPath}/student/essay"
                                         class="sidebar-link ${param.active == 'student-essay' ? 'active' : ''}">
