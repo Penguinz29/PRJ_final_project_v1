@@ -1024,6 +1024,11 @@ class EduTutorIT {
 
         assertEquals(302, c.form("/teacher/topics", Map.of("action", "create", "topicName", "it_Chủ đề thử",
                 "description", "mô tả")).status());
+        // Modal dùng chung tạo/sửa gửi trường ẩn topicId="" và id="" khi tạo mới: không được gây lỗi chuyển kiểu
+        assertEquals(302, c.form("/teacher/topics", Map.of("action", "create", "topicId", "", "id", "",
+                "topicName", "it_Chủ đề id rỗng", "description", "")).status());
+        assertEquals(1, count("SELECT COUNT(*) FROM Topics WHERE TopicName = N'it_Chủ đề id rỗng'"));
+        exec("DELETE FROM Topics WHERE TopicName = N'it_Chủ đề id rỗng'");
         int topicId = count("SELECT TopicId FROM Topics WHERE TopicName = N'it_Chủ đề thử'");
         assertTrue(topicId > 0);
         c.form("/teacher/topics", Map.of("action", "update", "topicId", "" + topicId, "topicName", "it_Chủ đề sửa",

@@ -79,7 +79,7 @@
                                                     <c:otherwise>
                                                         <c:forEach var="l" items="${lessons}" varStatus="vs">
                                                             <tr>
-                                                                <td class="text-muted">${(page-1)*10 + vs.count}</td>
+                                                                <td class="text-muted">${vs.count}</td>
                                                                 <td>
                                                                     <div class="fw-semibold">
                                                                         <c:out value="${l.title}" />
