@@ -14,6 +14,7 @@ import com.edututor.model.Question;
 import com.edututor.model.QuestionOption;
 import com.edututor.model.QuestionType;
 import com.edututor.model.Submission;
+import com.edututor.model.SubmissionStatus;
 import com.edututor.repository.QuestionOptionRepository;
 import com.edututor.repository.QuestionRepository;
 import com.edututor.repository.SubmissionRepository;
@@ -169,7 +170,7 @@ public class SubmissionService {
         sub.setStudentAnswer(letter);
         sub.setIsCorrect(correct);
         sub.setScore(correct ? MCQ_CORRECT_SCORE : BigDecimal.ZERO.setScale(2));
-        sub.setReviewed(true); // trắc nghiệm tự chấm, không cần giáo viên duyệt
+        sub.setStatus(SubmissionStatus.GRADED); // trắc nghiệm tự chấm, không cần giáo viên duyệt
         return sub;
     }
 
@@ -208,7 +209,7 @@ public class SubmissionService {
         sub.setEssayImagePath(imagePath);
         sub.setScore(ScoreUtil.toDecimal(score));
         sub.setAiFeedback(aiFeedback);
-        sub.setReviewed(false);
+        sub.setStatus(SubmissionStatus.AI_GRADED);
         return submissionRepository.saveAndFlush(sub).getSubmissionId();
     }
 
@@ -262,6 +263,6 @@ public class SubmissionService {
         s.setIsCorrect(correct);
         s.setScore(score == null ? null : ScoreUtil.toDecimal(score));
         s.setTeacherFeedback(form.getTeacherFeedback() == null ? "" : form.getTeacherFeedback().trim());
-        s.setReviewed(true);
+        s.setStatus(SubmissionStatus.REVIEWED);
     }
 }

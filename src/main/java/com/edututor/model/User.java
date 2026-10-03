@@ -12,6 +12,7 @@ import java.time.LocalDateTime;
 import java.util.Objects;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.Nationalized;
+import org.hibernate.annotations.UpdateTimestamp;
 
 /** Entity bảng Users. Không bao giờ được trả ra JSP/JSON (chứa mã băm mật khẩu). */
 @Entity
@@ -57,6 +58,10 @@ public class User {
     @Column(name = "CreatedAt", updatable = false)
     private LocalDateTime createdAt;
 
+    @UpdateTimestamp
+    @Column(name = "UpdatedAt")
+    private LocalDateTime updatedAt;
+
     public Integer getUserId() { return userId; }
     public void setUserId(Integer userId) { this.userId = userId; }
     public String getUsername() { return username; }
@@ -79,6 +84,8 @@ public class User {
     public void setTeacherId(Integer teacherId) { this.teacherId = teacherId; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 
     @Override
     public boolean equals(Object o) {

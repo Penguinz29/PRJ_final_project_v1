@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
 import java.util.Objects;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.Nationalized;
+import org.hibernate.annotations.UpdateTimestamp;
 
 /** Entity bảng TutorMessages: tin nhắn của học sinh (USER) hoặc gia sư AI (AI) trong một phiên. */
 @Entity
@@ -48,6 +49,10 @@ public class TutorMessage {
     @Column(name = "CreatedAt", updatable = false)
     private LocalDateTime createdAt;
 
+    @UpdateTimestamp
+    @Column(name = "UpdatedAt")
+    private LocalDateTime updatedAt;
+
     public Integer getMessageId() { return messageId; }
     public void setMessageId(Integer messageId) { this.messageId = messageId; }
     public TutorSession getSession() { return session; }
@@ -62,6 +67,8 @@ public class TutorMessage {
     public void setStepCompleted(boolean stepCompleted) { this.stepCompleted = stepCompleted; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 
     @Override
     public boolean equals(Object o) {

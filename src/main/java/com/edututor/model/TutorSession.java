@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
 import java.util.Objects;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.Nationalized;
+import org.hibernate.annotations.UpdateTimestamp;
 
 /** Entity bảng TutorSessions: một phiên hỏi đáp gia sư AI 1-on-1 (xóa tin nhắn theo ON DELETE CASCADE). */
 @Entity
@@ -42,9 +43,22 @@ public class TutorSession {
     @Column(name = "`Status`", nullable = false, length = 20)
     private TutorStatus status = TutorStatus.ACTIVE;
 
+    /** BR-15: true khi AI đang dừng chờ học sinh nhập số liệu cho bước hiện tại. */
+    @Column(name = "AwaitingInput", nullable = false)
+    private boolean awaitingInput;
+
+    /** Gợi ý dữ liệu AI cần học sinh nhập (chỉ có khi awaitingInput = true). */
+    @Nationalized
+    @Column(name = "InputHint", length = 255)
+    private String inputHint;
+
     @CreationTimestamp
     @Column(name = "CreatedAt", updatable = false)
     private LocalDateTime createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "UpdatedAt")
+    private LocalDateTime updatedAt;
 
     public Integer getSessionId() { return sessionId; }
     public void setSessionId(Integer sessionId) { this.sessionId = sessionId; }
@@ -56,8 +70,14 @@ public class TutorSession {
     public void setTitle(String title) { this.title = title; }
     public TutorStatus getStatus() { return status; }
     public void setStatus(TutorStatus status) { this.status = status; }
+    public boolean isAwaitingInput() { return awaitingInput; }
+    public void setAwaitingInput(boolean awaitingInput) { this.awaitingInput = awaitingInput; }
+    public String getInputHint() { return inputHint; }
+    public void setInputHint(String inputHint) { this.inputHint = inputHint; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 
     @Override
     public boolean equals(Object o) {

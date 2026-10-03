@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 import java.util.Objects;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.Nationalized;
+import org.hibernate.annotations.UpdateTimestamp;
 
 /** Entity bảng Submissions: bài làm trắc nghiệm (MCQ) và tự luận (ESSAY) của học sinh. */
 @Entity
@@ -65,12 +66,35 @@ public class Submission {
     @Column(name = "TeacherFeedback", columnDefinition = "NVARCHAR(MAX)")
     private String teacherFeedback;
 
+    /** Cột cũ IsReviewed, luôn được giữ đồng bộ với {@link #status} (false khi và chỉ khi AI_GRADED). */
     @Column(name = "IsReviewed")
-    private boolean reviewed;
+    private boolean reviewed = true;
+
+    /** Trạng thái chấm (GRADED / AI_GRADED / REVIEWED). Nguồn sự thật của việc bài đã được duyệt hay chưa. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "`Status`", nullable = false, length = 20)
+    private SubmissionStatus status = SubmissionStatus.GRADED;
+
+    /** Lời giải đúng do AI đề xuất cho bài tự luận. */
+    @Nationalized
+    @Column(name = "SuggestedCorrection", columnDefinition = "NVARCHAR(MAX)")
+    private String suggestedCorrection;
+
+    /** Giáo viên đã duyệt bài tự luận. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "ReviewedBy")
+    private User reviewedBy;
+
+    @Column(name = "ReviewedAt")
+    private LocalDateTime reviewedAt;
 
     @CreationTimestamp
     @Column(name = "SubmittedAt", updatable = false)
     private LocalDateTime submittedAt;
+
+    @UpdateTimestamp
+    @Column(name = "UpdatedAt")
+    private LocalDateTime updatedAt;
 
     public Integer getSubmissionId() { return submissionId; }
     public void setSubmissionId(Integer submissionId) { this.submissionId = submissionId; }
@@ -94,10 +118,22 @@ public class Submission {
     public void setAiFeedback(String aiFeedback) { this.aiFeedback = aiFeedback; }
     public String getTeacherFeedback() { return teacherFeedback; }
     public void setTeacherFeedback(String teacherFeedback) { this.teacherFeedback = teacherFeedback; }
-    public boolean isReviewed() { return reviewed; }
-    public void setReviewed(boolean reviewed) { this.reviewed = reviewed; }
+    public boolean isReviewed() { return status != SubmissionStatus.AI_GRADED; }
+    public SubmissionStatus getStatus() { return status; }
+    public void setStatus(SubmissionStatus status) {
+        this.status = status;
+        this.reviewed = status != SubmissionStatus.AI_GRADED;
+    }
+    public String getSuggestedCorrection() { return suggestedCorrection; }
+    public void setSuggestedCorrection(String suggestedCorrection) { this.suggestedCorrection = suggestedCorrection; }
+    public User getReviewedBy() { return reviewedBy; }
+    public void setReviewedBy(User reviewedBy) { this.reviewedBy = reviewedBy; }
+    public LocalDateTime getReviewedAt() { return reviewedAt; }
+    public void setReviewedAt(LocalDateTime reviewedAt) { this.reviewedAt = reviewedAt; }
     public LocalDateTime getSubmittedAt() { return submittedAt; }
     public void setSubmittedAt(LocalDateTime submittedAt) { this.submittedAt = submittedAt; }
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 
     @Override
     public boolean equals(Object o) {

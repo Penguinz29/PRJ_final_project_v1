@@ -11,6 +11,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import java.util.Objects;
+import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.Nationalized;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -39,6 +40,10 @@ public class AiConfig {
     @JoinColumn(name = "UpdatedBy")
     private User updatedBy;
 
+    @CreationTimestamp
+    @Column(name = "CreatedAt", updatable = false)
+    private LocalDateTime createdAt;
+
     @UpdateTimestamp
     @Column(name = "UpdatedAt")
     private LocalDateTime updatedAt;
@@ -53,6 +58,8 @@ public class AiConfig {
     public void setDescription(String description) { this.description = description; }
     public User getUpdatedBy() { return updatedBy; }
     public void setUpdatedBy(User updatedBy) { this.updatedBy = updatedBy; }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 

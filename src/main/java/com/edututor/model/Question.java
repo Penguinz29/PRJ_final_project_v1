@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Objects;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.Nationalized;
+import org.hibernate.annotations.UpdateTimestamp;
 
 /**
  * Entity bảng Questions. Quan hệ cha-sở-hữu-con duy nhất của dự án: Question → options (cascade PERSIST/MERGE).
@@ -61,9 +62,17 @@ public class Question {
     @JoinColumn(name = "TeacherId", nullable = false)
     private User teacher;
 
+    /** Xóa mềm (BR-05): false = đã xóa (câu đã có bài nộp), không còn dùng để luyện tập. */
+    @Column(name = "IsActive", nullable = false)
+    private boolean active = true;
+
     @CreationTimestamp
     @Column(name = "CreatedAt", updatable = false)
     private LocalDateTime createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "UpdatedAt")
+    private LocalDateTime updatedAt;
 
     @OneToMany(mappedBy = "question", fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @OrderBy("optionLetter ASC")
@@ -91,8 +100,12 @@ public class Question {
     public void setAiGenerated(boolean aiGenerated) { this.aiGenerated = aiGenerated; }
     public User getTeacher() { return teacher; }
     public void setTeacher(User teacher) { this.teacher = teacher; }
+    public boolean isActive() { return active; }
+    public void setActive(boolean active) { this.active = active; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
     public List<QuestionOption> getOptions() { return options; }
     public void setOptions(List<QuestionOption> options) { this.options = options; }
 

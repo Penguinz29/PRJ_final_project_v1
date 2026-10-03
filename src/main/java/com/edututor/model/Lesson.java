@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 import java.util.Objects;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.Nationalized;
+import org.hibernate.annotations.UpdateTimestamp;
 
 /** Entity bảng Lessons (bài học/bài giảng). */
 @Entity
@@ -43,9 +44,17 @@ public class Lesson {
     @Column(name = "DisplayOrder")
     private int displayOrder;
 
+    /** Xóa mềm (BR-05): false = đã xóa, ẩn khỏi danh sách nhưng giữ lịch sử. */
+    @Column(name = "IsActive", nullable = false)
+    private boolean active = true;
+
     @CreationTimestamp
     @Column(name = "CreatedAt", updatable = false)
     private LocalDateTime createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "UpdatedAt")
+    private LocalDateTime updatedAt;
 
     public Integer getLessonId() { return lessonId; }
     public void setLessonId(Integer lessonId) { this.lessonId = lessonId; }
@@ -59,8 +68,12 @@ public class Lesson {
     public void setContent(String content) { this.content = content; }
     public int getDisplayOrder() { return displayOrder; }
     public void setDisplayOrder(int displayOrder) { this.displayOrder = displayOrder; }
+    public boolean isActive() { return active; }
+    public void setActive(boolean active) { this.active = active; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 
     @Override
     public boolean equals(Object o) {
