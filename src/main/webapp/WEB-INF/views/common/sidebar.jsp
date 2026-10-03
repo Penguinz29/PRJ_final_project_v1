@@ -1,10 +1,14 @@
 <%-- sidebar.jsp: menu theo role, param active --%>
     <%@ page contentType="text/html;charset=UTF-8" pageEncoding="UTF-8" %>
         <%@ taglib prefix="c" uri="jakarta.tags.core" %>
+
             <aside class="app-sidebar">
+
                 <c:choose>
-                    <%--=====ADMIN=====--%>
+
+                    <%--===== ADMIN=====--%>
                         <c:when test="${sessionScope.LOGGED_IN_USER.role == 'ADMIN'}">
+
                             <div class="sidebar-group-label">Tổng quan</div>
                             <a href="${pageContext.request.contextPath}/admin/dashboard"
                                 class="sidebar-link ${param.active == 'admin-dashboard' ? 'active' : ''}">
@@ -36,10 +40,12 @@
                                 class="sidebar-link ${param.active == 'admin-ai-config' ? 'active' : ''}">
                                 <i class="bi bi-gear-wide-connected"></i> Cấu hình AI
                             </a>
+
                         </c:when>
 
-                        <%--=====TEACHER=====--%>
+                        <%--===== TEACHER=====--%>
                             <c:when test="${sessionScope.LOGGED_IN_USER.role == 'TEACHER'}">
+
                                 <div class="sidebar-group-label">Tổng quan</div>
                                 <a href="${pageContext.request.contextPath}/teacher/dashboard"
                                     class="sidebar-link ${param.active == 'teacher-dashboard' ? 'active' : ''}">
@@ -77,10 +83,12 @@
                                     class="sidebar-link ${param.active == 'teacher-submissions' ? 'active' : ''}">
                                     <i class="bi bi-pencil-square"></i> Bài tự luận
                                 </a>
+
                             </c:when>
 
-                            <%--=====STUDENT=====--%>
+                            <%--===== STUDENT=====--%>
                                 <c:otherwise>
+
                                     <div class="sidebar-group-label">Tổng quan</div>
                                     <a href="${pageContext.request.contextPath}/student/dashboard"
                                         class="sidebar-link ${param.active == 'student-dashboard' ? 'active' : ''}">
@@ -104,6 +112,9 @@
                                         class="sidebar-link ${param.active == 'student-history' ? 'active' : ''}">
                                         <i class="bi bi-clock-history"></i> Lịch sử làm bài
                                     </a>
+
                                 </c:otherwise>
+
                 </c:choose>
+
             </aside>
