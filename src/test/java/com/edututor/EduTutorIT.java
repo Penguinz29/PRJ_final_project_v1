@@ -545,7 +545,7 @@ class EduTutorIT {
             Resp r = c.get(path);
             assertEquals(200, r.status(), path + " -> " + r.body());
         }
-        assertTrue(c.get("/student/quiz?lessonId=1").has("name=\"question_1\""));
+        assertTrue(c.get("/student/quiz?lessonId=1").has("data-qid=\"1\""));
         assertTrue(c.get("/student/essay?lessonId=2").has("essayForm"));
         // trang không tồn tại / id sai chuyển về danh sách
         assertEquals(302, c.get("/student/lesson?id=9999").status());
@@ -556,21 +556,43 @@ class EduTutorIT {
         assertEquals(403, c.json("/api/teacher/generate-questions", "{}").status());
     }
 
+    /** UC-STU-03: đề ngẫu nhiên (ORDER BY NEWID()), lọc mức độ, số câu 5–30; không còn nộp cả bài. */
     @Test
     @Order(11)
-    void quizFormSubmissionGradesAndSaves() throws Exception {
+    void quizPageFiltersAndShufflesQuestions() throws Exception {
         Client c = new Client();
         c.login("student2", "123456");
-        int before = count("SELECT COUNT(*) FROM Submissions WHERE StudentId = 5");
-        Resp r = c.form("/student/quizSubmit", Map.of("lessonId", "1", "question_1", "A", "question_2", "C"));
-        assertEquals(200, r.status(), r.body());
-        assertTrue(r.has("1/2"), "đúng 1/2 câu");
-        assertEquals(before + 2, count("SELECT COUNT(*) FROM Submissions WHERE StudentId = 5"));
-        assertEquals(1, count("SELECT COUNT(*) FROM Submissions WHERE StudentId = 5 AND QuestionId = 1 AND IsCorrect = 1"));
-        // lịch sử hiển thị
-        Resp h = c.get("/student/history?type=MCQ");
-        assertEquals(200, h.status());
-        assertTrue(h.has("Đúng"));
+        // Lọc mức độ: bài 1 có câu 1 (mức 2, x^3 - 3x) và câu 2 (mức 1, e^x)
+        Resp easy = c.get("/student/quiz?lessonId=1&difficulty=1");
+        assertTrue(easy.has("e^x") && !easy.has("x^3 - 3x"), "chỉ còn câu mức Dễ");
+        Resp medium = c.get("/student/quiz?lessonId=1&difficulty=MEDIUM");
+        assertTrue(medium.has("x^3 - 3x") && !medium.has("e^x"));
+        assertTrue(c.get("/student/quiz?lessonId=1&difficulty=3").has("chưa có câu hỏi trắc nghiệm ở mức độ đã chọn"));
+
+        // Xáo trộn: thứ tự câu thay đổi giữa các lần tải (xác suất trùng 20 lần liên tiếp ~ 1/2^19)
+        java.util.Set<String> orders = new java.util.HashSet<>();
+        java.util.regex.Pattern qid = java.util.regex.Pattern.compile("data-qid=\"(\\d+)\"");
+        for (int i = 0; i < 20 && orders.size() < 2; i++) {
+            java.util.regex.Matcher m = qid.matcher(c.get("/student/quiz?lessonId=1").body());
+            StringBuilder order = new StringBuilder();
+            while (m.find()) {
+                order.append(m.group(1)).append(',');
+            }
+            orders.add(order.toString());
+        }
+        assertEquals(2, orders.size(), "thứ tự câu được xáo trộn: " + orders);
+
+        // Số câu ép vào 5–30
+        assertTrue(c.get("/student/quiz?lessonId=1&limit=1").has("<option value=\"5\" selected"));
+        assertTrue(c.get("/student/quiz?lessonId=1&limit=99").has("<option value=\"30\" selected"));
+
+        // Luồng nộp cả bài cũ đã gỡ (chấm từng câu qua API)
+        int old = c.form("/student/quizSubmit", Map.of("lessonId", "1", "question_1", "A")).status();
+        assertTrue(old == 404 || old == 405, "không còn /student/quizSubmit: " + old);
+
+        // Lịch sử vẫn ghi từng câu đã nộp qua API
+        assertEquals(200, c.json("/api/student/submit-quiz-answer", "{\"questionId\":2,\"selectedOptionId\":5}").status());
+        assertTrue(c.get("/student/history?type=MCQ").has("e^x"));
     }
 
     @Test
@@ -581,7 +603,8 @@ class EduTutorIT {
         c.login("student3", "123456");
         // TC-SEC-08: trang làm bài không chứa lời giải / cờ đúng-sai (BR-11)
         Resp quizPage = c.get("/student/quiz?lessonId=1");
-        assertFalse(quizPage.has("Lời giải"), "chưa nộp thì không có lời giải");
+        assertFalse(quizPage.has("3x^2-3"), "chưa nộp thì không có nội dung lời giải (BR-11)");
+        assertFalse(quizPage.has("correctOptionId\":"), "không có đáp án đúng nhúng sẵn trong trang");
         assertFalse(quizPage.has("IsCorrect"));
         Resp wrong = c.json("/api/student/submit-quiz-answer", "{\"questionId\":1,\"selectedOptionId\":2}");
         assertEquals(200, wrong.status(), wrong.body());
@@ -590,11 +613,14 @@ class EduTutorIT {
         j = j.get("data");
         assertFalse(j.get("isCorrect").asBoolean());
         assertEquals("A", j.get("correctOptionLabel").asText());
+        assertEquals(1, j.get("correctOptionId").asInt(), "id phương án đúng để tô xanh");
         assertTrue(j.get("explanationLatex").asText().contains("Lời giải"));
         assertEquals(0.0, j.get("score").asDouble());
+        assertTrue(j.get("canAskTutor").asBoolean(), "sai → hiện nút Hỏi gia sư AI");
 
         Resp right = c.json("/api/student/submit-quiz-answer", "{\"questionId\":1,\"selectedOptionId\":1}");
         assertTrue(JSON.readTree(right.body()).get("data").get("isCorrect").asBoolean());
+        assertFalse(JSON.readTree(right.body()).get("data").get("canAskTutor").asBoolean());
         assertEquals(10.0, JSON.readTree(right.body()).get("data").get("score").asDouble(), "đúng = 10 điểm (BR-07)");
         assertEquals(2, count("SELECT COUNT(*) FROM Submissions WHERE StudentId = 6 AND QuestionId = 1"));
 

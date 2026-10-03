@@ -92,7 +92,7 @@ class QueryCountIT {
     void quizUsesOneQueryForQuestionsAndOneForAllOptions() {
         SubmissionService service = ctx.getBean(SubmissionService.class);
         AtomicReference<List<QuizQuestionView>> result = new AtomicReference<>();
-        assertEquals(2, statements(() -> result.set(service.getQuizQuestions(1))));
+        assertEquals(2, statements(() -> result.set(service.getQuizQuestions(1, 0, 10))));
         assertFalse(result.get().isEmpty());
         assertTrue(result.get().stream().allMatch(q -> q.getOptions().size() == 4));
     }

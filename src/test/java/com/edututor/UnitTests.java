@@ -156,11 +156,15 @@ class UnitTests {
     @Test
     void quizAnswerResponseJsonMatchesFrs() throws Exception {
         JsonNode n = mapper.readTree(mapper.writeValueAsString(
-                new QuizAnswerResponse(true, "B", "Lời giải $x$", 10.0)));
-        assertTrue(n.get("isCorrect").asBoolean());
+                new QuizAnswerResponse(false, 407, "B", "Lời giải $x$", 0.0, true)));
+        // UC-STU-04 bước 5: đúng các khóa FRS
+        assertFalse(n.get("isCorrect").asBoolean());
+        assertEquals(407, n.get("correctOptionId").asInt());
         assertEquals("B", n.get("correctOptionLabel").asText());
+        assertEquals("Lời giải $x$", n.get("explanationLatex").asText());
+        assertEquals(0.0, n.get("score").asDouble());
+        assertTrue(n.get("canAskTutor").asBoolean());
         assertFalse(n.has("correct"));
-        assertEquals(10.0, n.get("score").asDouble());
     }
 
     @Test

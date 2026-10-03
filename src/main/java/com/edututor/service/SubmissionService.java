@@ -1,7 +1,5 @@
 package com.edututor.service;
 
-import com.edututor.dto.AttemptResult;
-import com.edututor.dto.OptionView;
 import com.edututor.dto.PageResult;
 import com.edututor.dto.QuestionView;
 import com.edututor.dto.QuizAnswerResponse;
@@ -17,14 +15,15 @@ import com.edututor.model.Submission;
 import com.edututor.model.SubmissionStatus;
 import com.edututor.repository.QuestionOptionRepository;
 import com.edututor.repository.QuestionRepository;
+import com.edututor.repository.QuizQuestionRow;
 import com.edututor.repository.SubmissionRepository;
 import com.edututor.repository.UserRepository;
+import com.edututor.util.HtmlSanitizer;
 import com.edututor.util.Pager;
 import com.edututor.util.ScoreUtil;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -87,14 +86,33 @@ public class SubmissionService {
         }
         boolean isCorrect = selected.isCorrect();
         submissionRepository.save(newMcqSubmission(studentId, q, selected.getOptionLetter(), isCorrect));
-        return new QuizAnswerResponse(isCorrect, correct != null ? correct.getOptionLetter() : null,
-                q.getExplanationLatex(), isCorrect ? MCQ_CORRECT_SCORE.doubleValue() : 0.0);
+        String explanation = q.getExplanationLatex() == null ? null : HtmlSanitizer.clean(q.getExplanationLatex());
+        return new QuizAnswerResponse(isCorrect, correct != null ? correct.getOptionId() : null,
+                correct != null ? correct.getOptionLetter() : null, explanation,
+                isCorrect ? MCQ_CORRECT_SCORE.doubleValue() : 0.0, !isCorrect);
     }
 
-    /** Câu hỏi làm bài của một bài học: KHÔNG kèm đáp án đúng/lời giải; phương án nạp bằng MỘT truy vấn IN. */
+    /** Số câu mỗi đề (UC-STU-03): 5–30, mặc định 10. */
+    public static final int QUIZ_MIN = 5;
+    public static final int QUIZ_MAX = 30;
+    public static final int QUIZ_DEFAULT = 10;
+
+    /**
+     * UC-STU-03: đề trắc nghiệm ngẫu nhiên của một bài học — KHÔNG kèm đáp án đúng / lời giải (BR-11); phương án
+     * nạp bằng MỘT truy vấn IN (không N+1).
+     *
+     * @param level 0 = mọi mức độ; 1..3 = lọc theo mức độ
+     * @param limit số câu, ép vào khoảng 5–30
+     */
     @Transactional(readOnly = true)
-    public List<QuizQuestionView> getQuizQuestions(int lessonId) {
-        List<QuizQuestionView> questions = questionRepository.findQuizQuestions(lessonId);
+    public List<QuizQuestionView> getQuizQuestions(int lessonId, int level, int limit) {
+        int lv = (level >= 1 && level <= 3) ? level : 0;
+        int n = Math.min(QUIZ_MAX, Math.max(QUIZ_MIN, limit));
+        List<QuizQuestionView> questions = new ArrayList<>();
+        for (QuizQuestionRow r : questionRepository.pickRandomQuizQuestions(lessonId, lv, n)) {
+            questions.add(new QuizQuestionView(r.getQuestionId(), r.getContent(), r.getLevel(),
+                    Boolean.TRUE.equals(r.getAiGenerated())));
+        }
         if (questions.isEmpty()) {
             return questions;
         }
@@ -106,60 +124,6 @@ public class SubmissionService {
             byId.get(o.getQuestionId()).getOptions().add(o);
         }
         return questions;
-    }
-
-    /**
-     * UC-STU-04: chấm cả bài trắc nghiệm của một bài học (form nộp bài), lưu từng câu kể cả câu bỏ trống.
-     *
-     * @param answers map questionId -> chữ cái đáp án đã chọn (có thể thiếu nếu bỏ trống)
-     */
-    @Transactional
-    public AttemptResult gradeQuiz(int studentId, int lessonId, Map<Integer, String> answers) {
-        List<Question> questions = questionRepository
-                .findByLesson_LessonIdAndQuestionTypeOrderByCreatedAtAscQuestionIdAsc(lessonId, QuestionType.MCQ);
-        Map<Integer, List<QuestionOption>> optionsByQuestion = new HashMap<>();
-        if (!questions.isEmpty()) {
-            List<Integer> ids = questions.stream().map(Question::getQuestionId).toList();
-            for (QuestionOption o : optionRepository
-                    .findByQuestion_QuestionIdInOrderByQuestion_QuestionIdAscOptionLetterAsc(ids)) {
-                optionsByQuestion.computeIfAbsent(o.getQuestion().getQuestionId(), k -> new ArrayList<>()).add(o);
-            }
-        }
-        List<AttemptResult.AttemptResultItem> items = new ArrayList<>();
-        List<Submission> toSave = new ArrayList<>();
-        int correctCount = 0;
-        for (Question q : questions) {
-            String studentAnswer = answers.get(q.getQuestionId());
-            List<QuestionOption> options = optionsByQuestion.getOrDefault(q.getQuestionId(), List.of());
-            String correctLetter = "";
-            List<OptionView> optionViews = new ArrayList<>();
-            for (QuestionOption o : options) {
-                optionViews.add(ViewMapper.toView(o));
-                if (o.isCorrect()) {
-                    correctLetter = o.getOptionLetter();
-                }
-            }
-            boolean isCorrect = studentAnswer != null && studentAnswer.equals(correctLetter);
-            if (isCorrect) {
-                correctCount++;
-            }
-            QuestionView qv = ViewMapper.toView(q);
-            AttemptResult.AttemptResultItem item = new AttemptResult.AttemptResultItem();
-            item.setQuestion(qv);
-            item.setOptions(optionViews);
-            item.setStudentAnswer(studentAnswer);
-            item.setCorrectAnswer(correctLetter);
-            item.setCorrect(isCorrect);
-            items.add(item);
-            toSave.add(newMcqSubmission(studentId, q, studentAnswer == null ? "" : studentAnswer, isCorrect));
-        }
-        submissionRepository.saveAll(toSave);
-        AttemptResult result = new AttemptResult();
-        result.setItems(items);
-        result.setCorrectCount(correctCount);
-        result.setTotalQuestions(questions.size());
-        result.setScore(questions.isEmpty() ? 0 : (double) correctCount / questions.size() * 100.0);
-        return result;
     }
 
     private Submission newMcqSubmission(int studentId, Question q, String letter, boolean correct) {

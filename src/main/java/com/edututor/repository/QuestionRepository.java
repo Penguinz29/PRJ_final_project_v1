@@ -1,6 +1,5 @@
 package com.edututor.repository;
 
-import com.edututor.dto.QuizQuestionView;
 import com.edututor.model.Question;
 import com.edututor.model.QuestionType;
 import java.util.Collection;
@@ -49,11 +48,17 @@ public interface QuestionRepository extends JpaRepository<Question, Integer>, Jp
     /** UC-ADM-08: câu hỏi đang hoạt động do AI sinh. */
     long countByActiveTrueAndAiGeneratedTrue();
 
-    /** Câu trắc nghiệm hiển thị khi làm bài: chỉ chọn cột được phép (không lời giải), tránh nạp Entity đầy đủ. */
-    @Query("select new com.edututor.dto.QuizQuestionView(q.questionId, q.content, q.level, q.aiGenerated) "
-            + "from Question q where q.lesson.lessonId = :lessonId "
-            + "and q.questionType = com.edututor.model.QuestionType.MCQ order by q.createdAt asc, q.questionId asc")
-    List<QuizQuestionView> findQuizQuestions(@Param("lessonId") Integer lessonId);
+    /**
+     * UC-STU-03: chọn NGẪU NHIÊN tối đa {@code limit} câu trắc nghiệm của bài (ORDER BY NEWID()), lọc mức độ nếu
+     * {@code level} &gt; 0. Chỉ chọn cột được phép (không is_correct, không lời giải — BR-11, TC-SEC-08). Phía học sinh
+     * không lọc IsActive (nội dung xóa mềm vẫn ôn tập được). Tham số có tên, không nối chuỗi.
+     */
+    @Query(value = "SELECT TOP (:limit) q.QuestionId AS questionId, q.Content AS content, q.[Level] AS level, "
+            + "q.IsAiGenerated AS aiGenerated FROM Questions q "
+            + "WHERE q.LessonId = :lessonId AND q.QuestionType = 'MCQ' AND (:level = 0 OR q.[Level] = :level) "
+            + "ORDER BY NEWID()", nativeQuery = true)
+    List<QuizQuestionRow> pickRandomQuizQuestions(@Param("lessonId") Integer lessonId, @Param("level") Integer level,
+                                                  @Param("limit") Integer limit);
 
     @Query("select q.lesson.lessonId as id, count(q) as total from Question q "
             + "where q.lesson.lessonId in :lessonIds and q.active = true group by q.lesson.lessonId")
