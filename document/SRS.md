@@ -149,7 +149,7 @@ Mô hình **MVC2**: Controller nhận request → Service xử lý nghiệp vụ
 | FR-ADM-01 | Danh sách người dùng có tìm kiếm (tên, username, email), lọc theo vai trò/trạng thái, **phân trang** | M |
 | FR-ADM-02 | **Tạo** tài khoản với vai trò bất kỳ (TEACHER, STUDENT, ADMIN) | M |
 | FR-ADM-03 | Sửa thông tin và đổi vai trò người dùng | M |
-| FR-ADM-04 | Khóa tài khoản (`ACTIVE → SUSPENDED`) và mở khóa (`SUSPENDED → ACTIVE`); xóa tài khoản: xóa cứng nếu chưa có dữ liệu liên quan, ngược lại xóa mềm sang `INACTIVE`. Tài khoản `INACTIVE` **không** mở khóa được từ giao diện | M |
+| FR-ADM-04 | Khóa tài khoản (`ACTIVE → SUSPENDED`) và mở khóa (`SUSPENDED → ACTIVE`); xóa tài khoản: xóa cứng nếu chưa có dữ liệu liên quan, ngược lại xóa mềm sang `INACTIVE`. Tài khoản `INACTIVE` không dùng thao tác "mở khóa" mà được Admin **khôi phục** bằng chức năng riêng (`INACTIVE → ACTIVE`) | M |
 | FR-ADM-05 | Đặt lại mật khẩu cho người dùng | S |
 | FR-ADM-06 | Xem/sửa cấu hình AI: khóa API, model, temperature, token, timeout, giới hạn gọi (học sinh / giáo viên), số bước tutor và **3 prompt** (Tutor, Sinh đề, Chấm bài); có validate | M |
 | FR-ADM-07 | Kiểm tra kết nối Gemini (ping) và hiển thị kết quả | M |
@@ -493,7 +493,7 @@ erDiagram
 |---|---|---|---|
 | `ACTIVE` | Đang hoạt động | Được | Khóa → `SUSPENDED`; xóa |
 | `SUSPENDED` | Khóa tạm thời | Không | **Mở khóa** → `ACTIVE`; xóa |
-| `INACTIVE` | Xóa mềm (đã có dữ liệu liên quan, BR-06) | Không | Không có thao tác "Mở khóa"; chỉ khôi phục được bằng can thiệp CSDL |
+| `INACTIVE` | Xóa mềm (đã có dữ liệu liên quan, BR-06) | Không | **Khôi phục** → `ACTIVE` (dữ liệu liên quan còn nguyên); không áp dụng khóa / mở khóa / sửa / đặt lại mật khẩu cho tới khi khôi phục |
 
 **Trạng thái bài làm (`submissions.status`):**
 
@@ -538,7 +538,7 @@ Ghi chú thiết kế:
 
 | Mã | Quy tắc |
 |---|---|
-| BR-01 | Chỉ tài khoản `ACTIVE` mới đăng nhập được (`SUSPENDED`, `INACTIVE` bị từ chối); tài khoản bị khóa đang đăng nhập sẽ bị chặn ở request kế tiếp. Chỉ `SUSPENDED` được mở khóa; `INACTIVE` (xóa mềm) thì không |
+| BR-01 | Chỉ tài khoản `ACTIVE` mới đăng nhập được (`SUSPENDED`, `INACTIVE` bị từ chối); tài khoản bị khóa đang đăng nhập sẽ bị chặn ở request kế tiếp. `SUSPENDED` được mở khóa; `INACTIVE` (xóa mềm) được Admin khôi phục về `ACTIVE` |
 | BR-02 | Hệ thống phải luôn còn ít nhất 1 Admin `ACTIVE`; không cho khóa/xóa/hạ quyền Admin cuối cùng; Admin không tự khóa chính mình |
 | BR-03 | Áp dụng cho **toàn bộ tài nguyên giáo viên**: chủ đề (`topics`), bài học (`lessons`), bài giảng (`lesson_materials`) và câu hỏi (`questions`). Giáo viên chỉ sửa/xóa mục có `created_by` là mình; Admin có toàn quyền trên toàn hệ thống. Mọi giáo viên vẫn được *xem* nội dung dùng chung |
 | BR-04 | Câu trắc nghiệm có đúng 4 phương án A–D và đúng 1 phương án đúng; câu tự luận không có phương án |
@@ -626,7 +626,7 @@ Tài khoản demo (dữ liệu mẫu): `admin`, `teacher1`, `teacher2`, `student
 | TC-OCR-02 | Tải ảnh 8 MB | Từ chối, báo dung lượng |
 | TC-OCR-03 | Tải ảnh không phải bài toán | `legible=false`, báo học sinh chụp lại, không lưu điểm |
 | TC-ADM-01 | Khóa Admin cuối cùng | Bị chặn (BR-02) |
-| TC-ADM-02 | Mở khóa tài khoản `SUSPENDED` / tài khoản `INACTIVE` | `SUSPENDED` → `ACTIVE`; `INACTIVE` bị từ chối (409), không có nút "Mở khóa" |
+| TC-ADM-02 | Mở khóa tài khoản `SUSPENDED` / thao tác trên tài khoản `INACTIVE` | `SUSPENDED` → `ACTIVE`; tài khoản `INACTIVE` không mở khóa / sửa được (409) mà chỉ có nút **Khôi phục** (`INACTIVE → ACTIVE`), sau đó đăng nhập lại được và lịch sử còn nguyên |
 | TC-TEA-01 | Xóa chủ đề còn bài học | Bị chặn, thông báo rõ |
 | TC-TEA-02 | Tạo câu trắc nghiệm có 2 đáp án đúng | Báo lỗi validation |
 | TC-TEA-03 | Xóa bài học còn câu hỏi `is_active = 1` / bài học chỉ còn câu hỏi `is_active = 0` | Trường hợp đầu bị chặn (409); trường hợp sau được phép xóa (BR-05) |

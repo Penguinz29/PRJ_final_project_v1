@@ -45,6 +45,7 @@ final class ViewMapper {
         v.setEmail(u.getEmail());
         v.setRole(u.getRole().name());
         v.setActive(u.isActive());
+        v.setStatus(u.getStatus().name());
         v.setTeacherId(u.getTeacherId());
         v.setCreatedAt(toDate(u.getCreatedAt()));
         v.setTeacherName(teacherName);

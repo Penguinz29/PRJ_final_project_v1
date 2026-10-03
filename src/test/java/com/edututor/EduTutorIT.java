@@ -329,7 +329,7 @@ class EduTutorIT {
         exec("UPDATE Questions SET ExplanationLatex = NULL");
         // mật khẩu seed '123456' dạng SHA-256 và tài khoản đang hoạt động
         exec("UPDATE Users SET PasswordHash = '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92', "
-                + "IsActive = 1");
+                + "IsActive = 1, [Status] = 'ACTIVE'");
         exec("UPDATE AiConfigs SET ConfigValue = 'test-key-123', UpdatedBy = NULL WHERE ConfigKey = 'GEMINI_API_KEY'");
         exec("UPDATE AiConfigs SET ConfigValue = 'gemini-1.5-flash' WHERE ConfigKey = 'DEFAULT_MODEL'");
         exec("UPDATE AiConfigs SET ConfigValue = 'gemini-1.5-pro' WHERE ConfigKey = 'VISION_MODEL'");
@@ -752,7 +752,7 @@ class EduTutorIT {
     void adminPagesAndAiConfig() throws Exception {
         Client c = new Client();
         assertEquals(302, c.login("admin", "123456").status());
-        for (String p : new String[]{"/admin/dashboard", "/admin/teachers", "/admin/students", "/admin/topics",
+        for (String p : new String[]{"/admin/dashboard", "/admin/users", "/admin/users/new", "/admin/users/4/edit", "/admin/topics",
                 "/admin/lessons", "/admin/questions", "/admin/ai-config"}) {
             Resp r = c.get(p);
             assertEquals(200, r.status(), p + " -> " + r.body());
@@ -809,40 +809,202 @@ class EduTutorIT {
 
     @Test
     @Order(41)
-    void adminTogglesAccountStatus() throws Exception {
+    void adminLocksAndUnlocksAccounts() throws Exception {
         Client c = new Client();
         c.login("admin", "123456");
+        // đường dẫn cũ chuyển sang danh sách chung đã lọc
+        Resp oldUrl = c.get("/admin/students");
+        assertEquals(302, oldUrl.status());
+        assertTrue(oldUrl.location().contains("/admin/users?role=STUDENT"), oldUrl.location());
+
         assertEquals(1, count("SELECT CAST(IsActive AS INT) FROM Users WHERE Username = 'student5'"));
         Client victim = new Client();
         victim.login("student5", "123456");
         assertEquals(200, victim.get("/student/dashboard").status());
-        Resp t = c.form("/admin/users/toggle-status", Map.of("userId", "8", "returnUrl", "/edututor/admin/students"));
+
+        Resp t = c.form("/admin/users/8/status", Map.of("status", "SUSPENDED", "returnUrl", "/edututor/admin/users?role=STUDENT&page=1"));
         assertEquals(302, t.status());
-        assertTrue(t.location().endsWith("/admin/students"), t.location());
+        assertTrue(t.location().contains("/admin/users?role=STUDENT"), t.location());
         assertEquals(0, count("SELECT CAST(IsActive AS INT) FROM Users WHERE Username = 'student5'"));
-        assertTrue(c.get("/admin/students").has("Đã khóa tài khoản student5"));
+        assertEquals("SUSPENDED", scalar("SELECT [Status] FROM Users WHERE Username = 'student5'"));
+        assertTrue(c.get("/admin/users?role=STUDENT&page=1").has("Đã khóa tài khoản student5"));
         // BR-01: tài khoản đang đăng nhập bị chặn ngay ở request kế tiếp
         Resp locked = victim.get("/student/dashboard");
         assertEquals(302, locked.status());
         assertTrue(locked.location().contains("locked=1"), locked.location());
-        // tài khoản bị khóa không đăng nhập được
         assertTrue(new Client().login("student5", "123456").has("khóa"));
-        c.form("/admin/users/toggle-status", Map.of("userId", "8"));
+
+        c.form("/admin/users/8/status", Map.of("status", "ACTIVE"));
+        assertEquals("ACTIVE", scalar("SELECT [Status] FROM Users WHERE Username = 'student5'"));
         assertEquals(1, count("SELECT CAST(IsActive AS INT) FROM Users WHERE Username = 'student5'"));
-        c.get("/admin/dashboard"); // tiêu thụ flash message "đã kích hoạt lại"
-        // không tự khóa chính mình
-        Resp self = c.form("/admin/users/toggle-status", Map.of("userId", "1"));
+        c.get("/admin/users"); // tiêu thụ flash
+
+        // không tự khóa chính mình (BR-02)
+        Resp self = c.form("/admin/users/1/status", Map.of("status", "SUSPENDED"));
         assertEquals(302, self.status());
-        assertEquals(1, count("SELECT CAST(IsActive AS INT) FROM Users WHERE Username = 'admin'"));
-        assertTrue(c.get("/admin/dashboard").has("không thể tự khóa"));
+        assertEquals("ACTIVE", scalar("SELECT [Status] FROM Users WHERE Username = 'admin'"));
+        assertTrue(c.get("/admin/users").has("không thể tự khóa"));
         // returnUrl bên ngoài bị bỏ qua (chống open redirect)
-        Resp evil = c.form("/admin/users/toggle-status", Map.of("userId", "8", "returnUrl", "https://evil.com/"));
-        assertTrue(evil.location().endsWith("/admin/dashboard"), evil.location());
-        c.form("/admin/users/toggle-status", Map.of("userId", "8"));
-        // giáo viên không được toggle
+        Resp evil = c.form("/admin/users/8/status", Map.of("status", "ACTIVE", "returnUrl", "https://evil.com/"));
+        assertTrue(evil.location().endsWith("/admin/users"), evil.location());
+        c.get("/admin/users");
+        // trạng thái lạ bị từ chối
+        c.form("/admin/users/8/status", Map.of("status", "INACTIVE"));
+        assertEquals("ACTIVE", scalar("SELECT [Status] FROM Users WHERE Username = 'student5'"));
+        c.get("/admin/users");
+        // giáo viên không được khóa (TC-SEC)
         Client t1 = new Client();
         t1.login("teacher1", "123456");
-        assertEquals(403, t1.form("/admin/users/toggle-status", Map.of("userId", "8")).status());
+        assertEquals(403, t1.form("/admin/users/8/status", Map.of("status", "SUSPENDED")).status());
+        assertEquals(403, t1.get("/admin/users").status());
+    }
+
+    @Test
+    @Order(42)
+    void adminManagesUsersSearchCreateEditDeleteResetPassword() throws Exception {
+        Client c = new Client();
+        c.login("admin", "123456");
+
+        // UC-ADM-01: tìm kiếm / lọc / phân trang
+        Resp all = c.get("/admin/users");
+        assertEquals(200, all.status());
+        assertTrue(all.has("student1") && all.has("teacher1"));
+        Resp byKeyword = c.get("/admin/users?keyword=ho%C3%A0ng");
+        assertTrue(byKeyword.has("student5") && !byKeyword.has("teacher1"), "tìm theo họ tên không phân biệt hoa thường");
+        assertTrue(c.get("/admin/users?keyword=st3%40example").has("student3"), "tìm theo email");
+        Resp teachers = c.get("/admin/users?role=TEACHER");
+        assertTrue(teachers.has("teacher1") && teachers.has("teacher2") && !teachers.has("student1"));
+        assertFalse(c.get("/admin/users?status=SUSPENDED").has("student1"));
+        // ký tự đặc biệt của LIKE được thoát, không làm lỗi và không khớp mọi dòng
+        Resp wildcard = c.get("/admin/users?keyword=%25_%5B");
+        assertEquals(200, wildcard.status());
+        assertFalse(wildcard.has("student1"));
+        Resp paged = c.get("/admin/users?size=10&page=1");
+        assertEquals(200, paged.status());
+        assertEquals(200, c.get("/admin/users?size=7&page=-3").status(), "tham số phân trang sai dùng mặc định");
+
+        // UC-ADM-02: tạo tài khoản — validation tại từng trường
+        int before = count("SELECT COUNT(*) FROM Users");
+        Resp bad = c.form("/admin/users", Map.of("username", "ab", "password", "123", "fullName", "x",
+                "email", "sai", "role", "TEACHER"));
+        assertEquals(200, bad.status());
+        assertTrue(bad.has("Tên đăng nhập phải từ 4-30 ký tự") && bad.has("Mật khẩu phải từ 8 đến 64 ký tự"), bad.body());
+        assertEquals(before, count("SELECT COUNT(*) FROM Users"));
+        assertTrue(c.form("/admin/users", Map.of("username", "student1", "password", "Abcdef12",
+                "fullName", "Trùng tên", "email", "it_dup@example.com", "role", "TEACHER")).has("đã được sử dụng"));
+        assertTrue(c.form("/admin/users", Map.of("username", "it_gv1", "password", "Abcdef12",
+                "fullName", "Trùng email", "email", "st1@example.com", "role", "TEACHER")).has("Email đã được đăng ký"));
+        assertEquals(200, c.form("/admin/users", Map.of("username", "it_gv1", "password", "Abcdef12",
+                "fullName", "Vai trò lạ", "email", "it_gv1@example.com", "role", "SUPERMAN")).status());
+        assertEquals(before, count("SELECT COUNT(*) FROM Users"));
+
+        assertEquals(302, c.form("/admin/users", Map.of("username", "it_gv1", "password", "Abcdef12",
+                "fullName", "Giáo viên thử", "email", "it_gv1@example.com", "role", "TEACHER")).status());
+        assertEquals("TEACHER", scalar("SELECT [Role] FROM Users WHERE Username = 'it_gv1'"));
+        assertEquals("ACTIVE", scalar("SELECT [Status] FROM Users WHERE Username = 'it_gv1'"));
+        assertTrue(((String) scalar("SELECT PasswordHash FROM Users WHERE Username = 'it_gv1'")).startsWith("$2"));
+        assertTrue(c.get("/admin/users").has("Đã tạo tài khoản it_gv1"));
+        Client newTeacher = new Client();
+        assertEquals(302, newTeacher.login("it_gv1", "Abcdef12").status());
+        assertTrue(newTeacher.get("/teacher/dashboard").status() == 200);
+        int gv1 = count("SELECT UserId FROM Users WHERE Username = 'it_gv1'");
+
+        // UC-ADM-03: sửa
+        assertEquals(200, c.get("/admin/users/" + gv1 + "/edit").status());
+        assertEquals(404, c.get("/admin/users/99999/edit").status());
+        assertEquals(302, c.form("/admin/users/" + gv1, Map.of("fullName", "Giáo viên đã sửa",
+                "email", "it_gv1_new@example.com", "role", "STUDENT", "status", "ACTIVE")).status());
+        assertEquals("STUDENT", scalar("SELECT [Role] FROM Users WHERE UserId = ?", gv1));
+        assertEquals("it_gv1_new@example.com", scalar("SELECT Email FROM Users WHERE UserId = ?", gv1));
+        assertEquals("it_gv1", scalar("SELECT Username FROM Users WHERE UserId = ?", gv1), "username bất biến");
+        c.get("/admin/users");
+        Resp dupEmail = c.form("/admin/users/" + gv1, Map.of("fullName", "A B", "email", "st2@example.com",
+                "role", "STUDENT", "status", "ACTIVE"));
+        assertEquals(200, dupEmail.status());
+        assertTrue(dupEmail.has("Email đã được đăng ký"));
+        assertEquals(200, c.form("/admin/users/" + gv1, Map.of("fullName", "A B", "email", "ok@example.com",
+                "role", "STUDENT", "status", "INACTIVE")).status(), "không chọn được INACTIVE khi sửa");
+        // BR-02: không tự đổi vai trò / tự khóa mình
+        c.form("/admin/users/1", Map.of("fullName", "System Admin", "email", "admin@mathtutor.com",
+                "role", "STUDENT", "status", "ACTIVE"));
+        assertEquals("ADMIN", scalar("SELECT [Role] FROM Users WHERE UserId = 1"));
+        c.get("/admin/users");
+
+        // UC-ADM-05: đặt lại mật khẩu — hiển thị một lần
+        Resp reset = c.form("/admin/users/" + gv1 + "/reset-password", Map.of());
+        assertEquals(200, reset.status());
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("id=\"newPassword\"\\s+value=\"([A-Za-z0-9]{10})\"").matcher(reset.body());
+        assertTrue(m.find(), "mật khẩu mới 10 ký tự hiển thị trên trang kết quả");
+        String newPassword = m.group(1);
+        assertTrue(newPassword.matches(".*[A-Za-z].*") && newPassword.matches(".*\\d.*"), "có cả chữ và số (VAL-02)");
+        assertFalse(c.get("/admin/users/" + gv1 + "/edit").has(newPassword), "không hiển thị lại");
+        assertTrue(new Client().login("it_gv1", "Abcdef12").has("sai"), "mật khẩu cũ không còn dùng được");
+        assertEquals(302, new Client().login("it_gv1", newPassword).status());
+        assertEquals(404, c.form("/admin/users/99999/reset-password", Map.of()).status());
+
+        // UC-ADM-04: xóa — cứng khi chưa có dữ liệu, mềm khi đã có
+        assertEquals(302, c.form("/admin/users/" + gv1 + "/delete", Map.of()).status());
+        assertEquals(0, count("SELECT COUNT(*) FROM Users WHERE UserId = ?", gv1), "xóa cứng");
+        assertTrue(c.get("/admin/users").has("Đã xóa tài khoản"));
+
+        int s4 = count("SELECT UserId FROM Users WHERE Username = 'student4'");
+        exec("INSERT INTO Submissions (StudentId, LessonId, QuestionId, QuestionType, StudentAnswer, IsCorrect, Score, IsReviewed) "
+                + "VALUES (?, 1, 1, 'MCQ', 'A', 1, 10, 1)", s4);
+        assertEquals(302, c.form("/admin/users/" + s4 + "/delete", Map.of()).status());
+        assertEquals("INACTIVE", scalar("SELECT [Status] FROM Users WHERE UserId = ?", s4), "xóa mềm vì đã có bài làm");
+        assertEquals(0, count("SELECT CAST(IsActive AS INT) FROM Users WHERE UserId = ?", s4));
+        assertTrue(c.get("/admin/users?status=INACTIVE").has("student4"));
+        assertTrue(new Client().login("student4", "123456").has("khóa"), "INACTIVE không đăng nhập được");
+        // INACTIVE: không mở khóa / sửa / đặt lại mật khẩu / xóa lại được (TC-ADM-02)
+        c.form("/admin/users/" + s4 + "/status", Map.of("status", "ACTIVE"));
+        assertEquals("INACTIVE", scalar("SELECT [Status] FROM Users WHERE UserId = ?", s4));
+        assertTrue(c.get("/admin/users").has("không thể thực hiện thao tác này"));
+        c.form("/admin/users/" + s4 + "/reset-password", Map.of());
+        assertEquals("INACTIVE", scalar("SELECT [Status] FROM Users WHERE UserId = ?", s4));
+        c.get("/admin/users");
+        c.form("/admin/users/" + s4, Map.of("fullName", "Sửa", "email", "x@example.com", "role", "STUDENT", "status", "ACTIVE"));
+        assertEquals("INACTIVE", scalar("SELECT [Status] FROM Users WHERE UserId = ?", s4));
+        c.get("/admin/users");
+        // Khôi phục tài khoản đã xóa mềm: INACTIVE -> ACTIVE, dữ liệu cũ còn nguyên, đăng nhập lại được
+        assertTrue(c.get("/admin/users?status=INACTIVE").has("/restore"), "có nút Khôi phục");
+        assertEquals(302, c.form("/admin/users/" + s4 + "/restore", Map.of()).status());
+        assertEquals("ACTIVE", scalar("SELECT [Status] FROM Users WHERE UserId = ?", s4));
+        assertEquals(1, count("SELECT CAST(IsActive AS INT) FROM Users WHERE UserId = ?", s4));
+        assertEquals(1, count("SELECT COUNT(*) FROM Submissions WHERE StudentId = ?", s4), "lịch sử làm bài còn nguyên");
+        assertTrue(c.get("/admin/users").has("Đã khôi phục tài khoản student4"));
+        assertEquals(302, new Client().login("student4", "123456").status(), "đăng nhập lại được sau khi khôi phục");
+        // khôi phục tài khoản chưa bị xóa -> báo lỗi; giáo viên không được khôi phục
+        c.form("/admin/users/" + s4 + "/restore", Map.of());
+        assertTrue(c.get("/admin/users").has("chưa bị xóa"));
+        Client tchr = new Client();
+        tchr.login("teacher1", "123456");
+        assertEquals(403, tchr.form("/admin/users/" + s4 + "/restore", Map.of()).status());
+        // không tự xóa mình
+        c.form("/admin/users/1/delete", Map.of());
+        assertEquals(1, count("SELECT COUNT(*) FROM Users WHERE UserId = 1"));
+        assertTrue(c.get("/admin/users").has("không thể tự xóa"));
+
+        // TC-ADM-01 / BR-02: thêm một Admin rồi chỉ còn Admin duy nhất đang hoạt động thì không bị hạ quyền / khóa
+        assertEquals(302, c.form("/admin/users", Map.of("username", "it_admin2", "password", "Abcdef12",
+                "fullName", "Admin hai", "email", "it_admin2@example.com", "role", "ADMIN")).status());
+        int admin2 = count("SELECT UserId FROM Users WHERE Username = 'it_admin2'");
+        Client a2 = new Client();
+        a2.login("it_admin2", "Abcdef12");
+        assertEquals(200, a2.get("/admin/users").status());
+        assertEquals(302, a2.form("/admin/users/1/status", Map.of("status", "SUSPENDED")).status());
+        assertEquals("SUSPENDED", scalar("SELECT [Status] FROM Users WHERE UserId = 1"), "còn admin2 nên khóa được admin");
+        // admin (đã bị khóa) không còn thao tác được; admin2 là Admin hoạt động cuối cùng và không tự khóa/xóa/hạ quyền được
+        a2.form("/admin/users/" + admin2 + "/status", Map.of("status", "SUSPENDED"));
+        a2.form("/admin/users/" + admin2 + "/delete", Map.of());
+        assertEquals("ACTIVE", scalar("SELECT [Status] FROM Users WHERE UserId = ?", admin2));
+        assertEquals(1, count("SELECT COUNT(*) FROM Users WHERE UserId = ?", admin2));
+        a2.form("/admin/users/1/status", Map.of("status", "ACTIVE"));
+        assertEquals("ACTIVE", scalar("SELECT [Status] FROM Users WHERE UserId = 1"));
+
+        // khôi phục dữ liệu mẫu
+        exec("DELETE FROM Submissions WHERE StudentId = ?", s4);
+        exec("UPDATE Users SET IsActive = 1, [Status] = 'ACTIVE' WHERE UserId = ?", s4);
+        exec("DELETE FROM Users WHERE Username LIKE 'it[_]%'");
     }
 
     // ---------------------------------------------------------------- TEACHER

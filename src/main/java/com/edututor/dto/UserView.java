@@ -15,6 +15,7 @@ public class UserView implements Serializable {
     private String email;
     private String role;
     private boolean active;
+    private String status;
     private Integer teacherId;
     private Date createdAt;
 
@@ -38,6 +39,9 @@ public class UserView implements Serializable {
 
     public String getRole() { return role; }
     public void setRole(String role) { this.role = role; }
+
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
 
     public boolean isActive() { return active; }
     public void setActive(boolean active) { this.active = active; }

@@ -5,9 +5,9 @@ import com.edututor.dto.RegisterForm;
 import com.edututor.dto.SessionUser;
 import com.edututor.dto.UserView;
 import com.edututor.exception.ConflictException;
-import com.edututor.exception.NotFoundException;
 import com.edututor.model.Role;
 import com.edututor.model.User;
+import com.edututor.model.UserStatus;
 import com.edututor.repository.UserRepository;
 import com.edututor.util.Pager;
 import java.nio.charset.StandardCharsets;
@@ -103,7 +103,7 @@ public class UserService {
         u.setFullName(form.getFullName());
         u.setEmail(form.getEmail());
         u.setRole(Role.STUDENT);
-        u.setActive(true);
+        u.setStatus(UserStatus.ACTIVE);
         try {
             userRepository.saveAndFlush(u);
         } catch (DataIntegrityViolationException e) {
@@ -149,27 +149,5 @@ public class UserService {
     @Transactional(readOnly = true)
     public long countUsersByRole(String role) {
         return userRepository.countByRole(Role.valueOf(role));
-    }
-
-    /**
-     * FR-ADM-03: khóa / mở khóa tài khoản.
-     *
-     * @return tài khoản (trạng thái TRƯỚC khi đổi) để controller tạo thông báo
-     * @throws IllegalArgumentException khi ID sai hoặc admin tự khóa chính mình
-     * @throws NotFoundException        khi người dùng không tồn tại
-     */
-    @Transactional
-    public UserView toggleUserStatus(int targetUserId, int actingUserId) {
-        if (targetUserId <= 0) {
-            throw new IllegalArgumentException("ID người dùng không hợp lệ.");
-        }
-        if (targetUserId == actingUserId) {
-            throw new IllegalArgumentException("Bạn không thể tự khóa tài khoản quản trị viên của chính mình!");
-        }
-        User target = userRepository.findById(targetUserId)
-                .orElseThrow(() -> new NotFoundException("Người dùng không tồn tại trong hệ thống."));
-        UserView before = ViewMapper.toView(target, null);
-        target.setActive(!target.isActive()); // dirty checking → UPDATE
-        return before;
     }
 }

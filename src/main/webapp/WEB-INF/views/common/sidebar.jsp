@@ -12,13 +12,9 @@
                             </a>
 
                             <div class="sidebar-group-label">Người dùng</div>
-                            <a href="${pageContext.request.contextPath}/admin/teachers"
-                                class="sidebar-link ${param.active == 'admin-teachers' ? 'active' : ''}">
-                                <i class="bi bi-person-workspace"></i> Giáo viên
-                            </a>
-                            <a href="${pageContext.request.contextPath}/admin/students"
-                                class="sidebar-link ${param.active == 'admin-students' ? 'active' : ''}">
-                                <i class="bi bi-mortarboard"></i> Học sinh
+                            <a href="${pageContext.request.contextPath}/admin/users"
+                                class="sidebar-link ${param.active == 'admin-users' ? 'active' : ''}">
+                                <i class="bi bi-people"></i> Quản lý người dùng
                             </a>
 
                             <div class="sidebar-group-label">Nội dung</div>

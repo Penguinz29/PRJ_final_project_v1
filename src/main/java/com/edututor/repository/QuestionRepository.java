@@ -44,4 +44,6 @@ public interface QuestionRepository extends JpaRepository<Question, Integer>, Jp
     @Query("select q.lesson.lessonId as id, count(q) as total from Question q "
             + "where q.lesson.lessonId in :lessonIds group by q.lesson.lessonId")
     List<IdCount> countByLessonIds(@Param("lessonIds") Collection<Integer> lessonIds);
+
+    boolean existsByTeacher_UserId(Integer teacherId);
 }

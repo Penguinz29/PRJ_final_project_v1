@@ -76,7 +76,7 @@
                                         <div class="card-header">
                                             <i class="bi bi-clock-history me-2 text-primary"></i>Người dùng mới tạo gần
                                             đây
-                                            <a href="${pageContext.request.contextPath}/admin/students"
+                                            <a href="${pageContext.request.contextPath}/admin/users?role=STUDENT"
                                                 class="btn btn-sm btn-outline-primary ms-auto">Xem tất cả</a>
                                         </div>
                                         <div class="table-responsive">

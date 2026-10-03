@@ -2,15 +2,17 @@ package com.edututor.repository;
 
 import com.edututor.model.Role;
 import com.edututor.model.User;
+import com.edututor.model.UserStatus;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 /** Truy cập bảng Users. Mọi giá trị đi qua tham số (PreparedStatement) do Hibernate sinh ra. */
-public interface UserRepository extends JpaRepository<User, Integer> {
+public interface UserRepository extends JpaRepository<User, Integer>, JpaSpecificationExecutor<User> {
 
     Optional<User> findByUsername(String username);
 
@@ -18,11 +20,19 @@ public interface UserRepository extends JpaRepository<User, Integer> {
 
     boolean existsByEmailIgnoreCase(String email);
 
+    boolean existsByEmailIgnoreCaseAndUserIdNot(String email, Integer userId);
+
     Page<User> findByRole(Role role, Pageable pageable);
 
     long countByRole(Role role);
 
+    long countByRoleAndStatus(Role role, UserStatus status);
+
+    /** Có học sinh nào đang được gán cho giáo viên này không (dữ liệu liên quan khi xóa tài khoản). */
+    boolean existsByTeacherId(Integer teacherId);
+
     /** Truy vấn nhẹ theo khóa chính cho AuthInterceptor (BR-01): null nếu tài khoản không còn tồn tại. */
-    @Query("select u.active from User u where u.userId = :id")
+    @Query("select case when u.status = com.edututor.model.UserStatus.ACTIVE then true else false end "
+            + "from User u where u.userId = :id")
     Boolean findActiveById(@Param("id") Integer id);
 }

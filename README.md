@@ -37,7 +37,7 @@
 
 ### 🛡️ Quản trị viên (Admin)
 - **Tổng quan hệ thống:** Thống kê số lượng học sinh, giáo viên, chủ đề và câu hỏi.
-- **Quản lý người dùng:** Danh sách, tìm kiếm, phân trang và **khóa/mở khóa trạng thái tài khoản** (`IsActive`).
+- **Quản lý người dùng:** Tìm kiếm, lọc theo vai trò/trạng thái, phân trang; tạo, sửa, đổi vai trò, khóa/mở khóa, xóa (cứng hoặc mềm) và đặt lại mật khẩu.
 - **Cấu hình AI (FR-ADM-01/02):** Tùy chỉnh Gemini API Key, Provider, Model (`gemini-1.5-flash`) và nút **Ping Test** kiểm tra kết nối Google AI trực tiếp.
 - **Quản lý dữ liệu gốc:** Toàn quyền quản trị Chủ đề, Bài giảng và Ngân hàng câu hỏi.
 
@@ -104,7 +104,7 @@ PRJ_final_project_v1/
 - Maven đi kèm NetBeans (hoặc Maven 3.9+ độc lập).
 
 ### Bước 2: Thiết lập Cơ sở Dữ liệu
-Chạy lần lượt trong SSMS các file trong `document/sql/`: `01_schema.sql` -> `02_seed.sql` -> `03_ai_configs.sql` -> `04_update_submissions.sql` -> `05_tutor_and_explanation.sql` -> `06_target_schema_additions.sql` (tạo bảng `LessonMaterials`, chuyển "video hướng dẫn" cũ `Lessons.YoutubeUrl` thành bài giảng, và các cột bổ sung theo thiết kế chuẩn 10 bảng; **cần chạy** để dùng chức năng Bài giảng, nếu bỏ qua ứng dụng vẫn chạy nhưng trang bài học không hiện bài giảng). (`01_schema.sql` **xóa và tạo lại** CSDL `MathTutorDB`.)
+Chạy lần lượt trong SSMS các file trong `document/sql/`: `01_schema.sql` -> `02_seed.sql` -> `03_ai_configs.sql` -> `04_update_submissions.sql` -> `05_tutor_and_explanation.sql` -> `06_target_schema_additions.sql` (tạo bảng `LessonMaterials`, chuyển "video hướng dẫn" cũ `Lessons.YoutubeUrl` thành bài giảng, và các cột bổ sung theo thiết kế chuẩn 10 bảng; **bắt buộc chạy**: thêm cột `Users.Status` (trạng thái tài khoản ACTIVE/SUSPENDED/INACTIVE) mà ứng dụng dùng khi đăng nhập; thiếu script này ứng dụng sẽ lỗi). (`01_schema.sql` **xóa và tạo lại** CSDL `MathTutorDB`.)
 
 > Nếu chạy bằng `sqlcmd`, thêm cờ `-x` (tắt thay thế biến) vì dữ liệu mẫu chứa ký tự `$(`: `sqlcmd -S localhost -U sa -P 123 -C -x -f 65001 -i 02_seed.sql`.
 

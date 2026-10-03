@@ -40,6 +40,12 @@ public class User {
     @Column(name = "`Role`", nullable = false, length = 20)
     private Role role;
 
+    /** Trạng thái tài khoản (ACTIVE / SUSPENDED / INACTIVE). Nguồn sự thật của việc cho phép đăng nhập. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "`Status`", nullable = false, length = 20)
+    private UserStatus status = UserStatus.ACTIVE;
+
+    /** Cột cũ IsActive, luôn được giữ đồng bộ với {@link #status} (true khi và chỉ khi ACTIVE). */
     @Column(name = "IsActive")
     private boolean active = true;
 
@@ -63,8 +69,12 @@ public class User {
     public void setEmail(String email) { this.email = email; }
     public Role getRole() { return role; }
     public void setRole(Role role) { this.role = role; }
-    public boolean isActive() { return active; }
-    public void setActive(boolean active) { this.active = active; }
+    public UserStatus getStatus() { return status; }
+    public void setStatus(UserStatus status) {
+        this.status = status;
+        this.active = status == UserStatus.ACTIVE;
+    }
+    public boolean isActive() { return status == UserStatus.ACTIVE; }
     public Integer getTeacherId() { return teacherId; }
     public void setTeacherId(Integer teacherId) { this.teacherId = teacherId; }
     public LocalDateTime getCreatedAt() { return createdAt; }

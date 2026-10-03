@@ -13,4 +13,6 @@ public interface AiConfigRepository extends JpaRepository<AiConfig, Integer> {
     List<AiConfig> findAllByOrderByConfigIdAsc();
 
     Optional<AiConfig> findByConfigKey(String configKey);
+
+    boolean existsByUpdatedBy_UserId(Integer userId);
 }

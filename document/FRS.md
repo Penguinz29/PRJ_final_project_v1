@@ -175,7 +175,7 @@ Kiến trúc chuẩn gồm **10 bảng / 10 Entity**. Các thuộc tính sau là
 
 **Trạng thái bài làm (`submissions.status`):** `GRADED` — trắc nghiệm, chấm tức thì (`final_score` = 10 hoặc 0), không cần duyệt • `AI_GRADED` — tự luận AI đã chấm, `ai_score` là đề xuất, chờ giáo viên • `REVIEWED` — giáo viên đã duyệt / chỉnh `final_score` (giữ nguyên `ai_score`).
 
-**Trạng thái tài khoản (`users.status`):** `ACTIVE`, `SUSPENDED` (khóa tạm, mở khóa được), `INACTIVE` (xóa mềm, không mở khóa được) — chi tiết ở UC-ADM-04.
+**Trạng thái tài khoản (`users.status`):** `ACTIVE`, `SUSPENDED` (khóa tạm, mở khóa được), `INACTIVE` (xóa mềm, Admin **khôi phục** được về `ACTIVE`) — chi tiết ở UC-ADM-04.
 
 ---
 
@@ -312,6 +312,7 @@ Nếu kết quả = 0 và thay đổi làm mất Admin → 409 "Phải còn ít 
 |---|---|
 | `POST /admin/users/{id}/status` (`status=ACTIVE\|SUSPENDED`) | Khóa (`ACTIVE → SUSPENDED`) hoặc mở khóa (`SUSPENDED → ACTIVE`) |
 | `POST /admin/users/{id}/delete` | Xóa (xóa cứng hoặc xóa mềm, xem bên dưới) |
+| `POST /admin/users/{id}/restore` | Khôi phục tài khoản đã xóa mềm (`INACTIVE → ACTIVE`) |
 
 **Quy ước trạng thái tài khoản (BR-01, BR-06):**
 
@@ -319,7 +320,7 @@ Nếu kết quả = 0 và thay đổi làm mất Admin → 409 "Phải còn ít 
 |---|---|---|---|
 | `ACTIVE` | Đang hoạt động | Được | Khóa → `SUSPENDED`; Xóa |
 | `SUSPENDED` | Khóa tạm thời | Không | **Mở khóa** → `ACTIVE`; Xóa |
-| `INACTIVE` | Đã xóa mềm (do có dữ liệu liên kết) | Không | **Không áp dụng "Mở khóa"**: giao diện ẩn nút, `POST …/status` với tài khoản `INACTIVE` trả 409 "Tài khoản đã bị xóa, không thể mở khóa". Chỉ khôi phục được bằng can thiệp trực tiếp vào CSDL |
+| `INACTIVE` | Đã xóa mềm (do có dữ liệu liên kết) | Không | **Khôi phục** (`POST …/restore`) → `ACTIVE`; dữ liệu liên quan còn nguyên nên dùng lại được ngay. Khóa / mở khóa / sửa / đặt lại mật khẩu bị chặn (409 "Tài khoản đã bị xóa…") cho tới khi khôi phục; khôi phục tài khoản chưa bị xóa trả 409 |
 
 **Xóa:** kiểm tra có dữ liệu liên quan (`topics/lessons/questions/lesson_materials.created_by`, `submissions.student_id`, `tutor_sessions.student_id`, `ai_configs.updated_by`) bằng các hàm `existsByCreatedBy(userId)`, `existsByStudentId(userId)`… trên từng Repository.
 - Không có → `DELETE FROM users WHERE user_id = ?`.

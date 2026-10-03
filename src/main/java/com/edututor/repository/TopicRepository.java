@@ -23,4 +23,6 @@ public interface TopicRepository extends JpaRepository<Topic, Integer> {
     boolean existsByTopicNameIgnoreCase(String topicName);
 
     boolean existsByTopicNameIgnoreCaseAndTopicIdNot(String topicName, Integer topicId);
+
+    boolean existsByTeacher_UserId(Integer teacherId);
 }

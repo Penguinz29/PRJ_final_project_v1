@@ -14,4 +14,6 @@ public interface TutorSessionRepository extends JpaRepository<TutorSession, Inte
 
     @EntityGraph(attributePaths = {"lesson", "student"})
     Optional<TutorSession> findWithLessonBySessionId(Integer sessionId);
+
+    boolean existsByStudent_UserId(Integer studentId);
 }

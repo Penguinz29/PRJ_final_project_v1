@@ -105,3 +105,15 @@ FROM Lessons l
 WHERE l.YoutubeUrl IS NOT NULL
   AND EXISTS (SELECT 1 FROM LessonMaterials m WHERE m.LessonId = l.LessonId AND m.Url = LTRIM(RTRIM(l.YoutubeUrl)));
 GO
+
+-- 9) Trạng thái tài khoản: Users.Status ∈ {ACTIVE, SUSPENDED, INACTIVE} (FR-ADM-04, BR-01, BR-06)
+--    ACTIVE = hoạt động • SUSPENDED = khóa tạm (mở khóa được) • INACTIVE = xóa mềm (không mở khóa được).
+--    Cột IsActive cũ được ứng dụng giữ đồng bộ (IsActive = 1 khi và chỉ khi Status = 'ACTIVE').
+IF COL_LENGTH('Users', 'Status') IS NULL
+    ALTER TABLE Users ADD [Status] VARCHAR(20) NOT NULL CONSTRAINT DF_Users_Status DEFAULT 'ACTIVE';
+GO
+UPDATE Users SET [Status] = 'SUSPENDED' WHERE IsActive = 0 AND [Status] = 'ACTIVE';
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_Users_Status')
+    ALTER TABLE Users ADD CONSTRAINT CK_Users_Status CHECK ([Status] IN ('ACTIVE', 'SUSPENDED', 'INACTIVE'));
+GO

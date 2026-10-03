@@ -46,4 +46,6 @@ public interface SubmissionRepository extends JpaRepository<Submission, Integer>
     @Query("select avg(case when s.isCorrect = true then 100.0 else 0.0 end) from Submission s "
             + "where s.student.userId = :studentId and s.questionType = com.edututor.model.QuestionType.MCQ")
     Double averageMcqPercent(@Param("studentId") Integer studentId);
+
+    boolean existsByStudent_UserId(Integer studentId);
 }
