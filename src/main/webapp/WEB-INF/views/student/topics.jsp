@@ -4,102 +4,107 @@
         --%>
         <%@ page contentType="text/html;charset=UTF-8" pageEncoding="UTF-8" %>
             <%@ taglib prefix="ui" tagdir="/WEB-INF/tags" %>
-<%@ taglib prefix="c" uri="jakarta.tags.core" %>
-                <jsp:include page="../common/head.jsp">
-                    <jsp:param name="title" value="Chủ đề học tập" />
-                </jsp:include>
+                <%@ taglib prefix="c" uri="jakarta.tags.core" %>
+                    <jsp:include page="../common/head.jsp">
+                        <jsp:param name="title" value="Chủ đề học tập" />
+                    </jsp:include>
 
-                <body data-ctx="${pageContext.request.contextPath}">
-                    <jsp:include page="../common/navbar.jsp" />
-                    <div class="app-shell">
-                        <jsp:include page="../common/sidebar.jsp">
-                            <jsp:param name="active" value="student-topics" />
-                        </jsp:include>
-                        <main class="app-main">
-                            <ui:flash />
+                    <body data-ctx="${pageContext.request.contextPath}">
+                        <jsp:include page="../common/navbar.jsp" />
+                        <div class="app-shell">
+                            <jsp:include page="../common/sidebar.jsp">
+                                <jsp:param name="active" value="student-topics" />
+                            </jsp:include>
+                            <main class="app-main">
+                                <ui:flash />
 
-                            <div class="page-header mb-4 border-bottom-0 pb-0">
-                                <div>
-                                    <h1><i class="bi bi-book me-2 text-primary"></i>Danh sách Chủ đề</h1>
-                                    <p class="st-subtitle text-muted mb-0">Chọn bài giảng để bắt đầu học và làm bài tập</p>
-                                </div>
-                            </div>
-
-                            <c:choose>
-                                <c:when test="${empty topics}">
-                                    <div class="card border-0 shadow-sm text-center py-5">
-                                        <i class="bi bi-inbox d-block display-1 text-muted opacity-25 mb-3"></i>
-                                        <h5 class="text-muted">Chưa có chủ đề nào được công bố.</h5>
+                                <div class="page-header mb-4 border-bottom-0 pb-0">
+                                    <div>
+                                        <h1><i class="bi bi-book me-2 text-primary"></i>Danh sách Chủ đề</h1>
+                                        <p class="st-subtitle text-muted mb-0">Chọn bài giảng để bắt đầu học và làm bài
+                                            tập</p>
                                     </div>
-                                </c:when>
-                                <c:otherwise>
-                                    <div class="accordion st-accordion" id="topicsAccordion">
-                                        <c:forEach var="t" items="${topics}" varStatus="tVs">
-                                            <div class="accordion-item border-0 st-topic-card mb-3">
-                                                <h2 class="accordion-header">
-                                                    <button
-                                                        class="accordion-button st-topic-btn shadow-none ${tVs.first ? '' : 'collapsed'}"
-                                                        type="button" data-bs-toggle="collapse"
-                                                        data-bs-target="#collapse${t.topicId}">
-                                                        <div class="d-flex align-items-center gap-3 w-100">
-                                                            <div class="st-topic-num">
-                                                                <c:out value="${tVs.count}" />
-                                                            </div>
-                                                            <div class="flex-grow-1 min-w-0">
-                                                                <div class="st-topic-title">
-                                                                    <c:out value="${t.topicName}" />
+                                </div>
+
+                                <c:choose>
+                                    <c:when test="${empty topics}">
+                                        <div class="card border-0 shadow-sm text-center py-5">
+                                            <i class="bi bi-inbox d-block display-1 text-muted opacity-25 mb-3"></i>
+                                            <h5 class="text-muted">Chưa có chủ đề nào được công bố.</h5>
+                                        </div>
+                                    </c:when>
+                                    <c:otherwise>
+                                        <div class="accordion st-accordion" id="topicsAccordion">
+                                            <c:forEach var="t" items="${topics}" varStatus="tVs">
+                                                <div class="accordion-item border-0 st-topic-card mb-3">
+                                                    <h2 class="accordion-header">
+                                                        <button
+                                                            class="accordion-button st-topic-btn shadow-none ${tVs.first ? '' : 'collapsed'}"
+                                                            type="button" data-bs-toggle="collapse"
+                                                            data-bs-target="#collapse${t.topicId}">
+                                                            <div class="d-flex align-items-center gap-3 w-100">
+                                                                <div class="st-topic-num">
+                                                                    <c:out value="${tVs.count}" />
                                                                 </div>
-                                                                <span class="st-lesson-count">
-                                                                    ${empty t.lessons ? 0 : t.lessons.size()} bài giảng
-                                                                </span>
+                                                                <div class="flex-grow-1 min-w-0">
+                                                                    <div class="st-topic-title">
+                                                                        <c:out value="${t.topicName}" />
+                                                                    </div>
+                                                                    <span class="st-lesson-count">
+                                                                        ${empty t.lessons ? 0 : t.lessons.size()} bài
+                                                                        giảng
+                                                                    </span>
+                                                                </div>
+                                                                <i class="bi bi-chevron-down st-chevron"></i>
                                                             </div>
-                                                            <i class="bi bi-chevron-down st-chevron"></i>
+                                                        </button>
+                                                    </h2>
+                                                    <div id="collapse${t.topicId}"
+                                                        class="accordion-collapse collapse ${tVs.first ? 'show' : ''}"
+                                                        data-bs-parent="#topicsAccordion">
+                                                        <div class="accordion-body p-0 border-top">
+                                                            <c:choose>
+                                                                <c:when test="${empty t.lessons}">
+                                                                    <div class="p-4 text-center text-muted">Chủ đề này
+                                                                        chưa
+                                                                        có bài giảng.</div>
+                                                                </c:when>
+                                                                <c:otherwise>
+                                                                    <div class="list-group list-group-flush">
+                                                                        <c:forEach var="l" items="${t.lessons}"
+                                                                            varStatus="lVs">
+                                                                            <a href="${pageContext.request.contextPath}/student/lesson?id=${l.lessonId}"
+                                                                                class="list-group-item list-group-item-action st-lesson-row d-flex align-items-center gap-3 py-3 px-4"
+                                                                                style="padding-left: 5rem !important;">
+                                                                                <div class="st-lesson-icon">
+                                                                                    <i
+                                                                                        class="bi bi-file-earmark-text"></i>
+                                                                                </div>
+                                                                                <div class="flex-grow-1 min-w-0">
+                                                                                    <div class="st-lesson-title">
+                                                                                        <c:out value="${l.title}" />
+                                                                                    </div>
+                                                                                    <div class="st-lesson-summary">
+                                                                                        <c:out value="${l.summary}" />
+                                                                                    </div>
+                                                                                </div>
+                                                                                <i
+                                                                                    class="bi bi-chevron-right st-lesson-arrow"></i>
+                                                                            </a>
+                                                                        </c:forEach>
+                                                                    </div>
+                                                                </c:otherwise>
+                                                            </c:choose>
                                                         </div>
-                                                    </button>
-                                                </h2>
-                                                <div id="collapse${t.topicId}"
-                                                    class="accordion-collapse collapse ${tVs.first ? 'show' : ''}"
-                                                    data-bs-parent="#topicsAccordion">
-                                                    <div class="accordion-body p-0 border-top">
-                                                        <c:choose>
-                                                            <c:when test="${empty t.lessons}">
-                                                                <div class="p-4 text-center text-muted">Chủ đề này chưa
-                                                                    có bài giảng.</div>
-                                                            </c:when>
-                                                            <c:otherwise>
-                                                                <div class="list-group list-group-flush">
-                                                                    <c:forEach var="l" items="${t.lessons}"
-                                                                        varStatus="lVs">
-                                                                        <a href="${pageContext.request.contextPath}/student/lesson?id=${l.lessonId}"
-                                                                            class="list-group-item list-group-item-action st-lesson-row d-flex align-items-center gap-3 p-3">
-                                                                            <div class="st-lesson-icon">
-                                                                                <i class="bi bi-file-earmark-text"></i>
-                                                                            </div>
-                                                                            <div class="flex-grow-1 min-w-0">
-                                                                                <div class="st-lesson-title">
-                                                                                    Bài ${lVs.count}:
-                                                                                    <c:out value="${l.title}" />
-                                                                                </div>
-                                                                                <div class="st-lesson-summary">
-                                                                                    <c:out value="${l.summary}" />
-                                                                                </div>
-                                                                            </div>
-                                                                            <i class="bi bi-chevron-right st-lesson-arrow"></i>
-                                                                        </a>
-                                                                    </c:forEach>
-                                                                </div>
-                                                            </c:otherwise>
-                                                        </c:choose>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        </c:forEach>
-                                    </div>
-                                </c:otherwise>
-                            </c:choose>
-                        </main>
-                    </div>
-                    <jsp:include page="../common/footer.jsp" />
-                </body>
+                                            </c:forEach>
+                                        </div>
+                                    </c:otherwise>
+                                </c:choose>
+                            </main>
+                        </div>
+                        <jsp:include page="../common/footer.jsp" />
+                    </body>
 
-                </html>
+                    </html>
