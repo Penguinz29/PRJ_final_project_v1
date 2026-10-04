@@ -3,6 +3,7 @@ package com.edututor.service;
 import com.edututor.dto.PageResult;
 import com.edututor.dto.ProgressView;
 import com.edututor.dto.QuestionResultView;
+import com.edututor.dto.StreakView;
 import com.edututor.model.QuestionType;
 import com.edututor.model.Role;
 import com.edututor.model.SubmissionStatus;
@@ -23,9 +24,11 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,8 +46,8 @@ public class StatsService {
     private final TutorSessionRepository tutorSessions;
 
     public StatsService(UserRepository users, TopicRepository topics, LessonRepository lessons,
-                        QuestionRepository questions, SubmissionRepository submissions,
-                        TutorSessionRepository tutorSessions) {
+            QuestionRepository questions, SubmissionRepository submissions,
+            TutorSessionRepository tutorSessions) {
         this.users = users;
         this.topics = topics;
         this.lessons = lessons;
@@ -54,8 +57,10 @@ public class StatsService {
     }
 
     /**
-     * UC-ADM-08 (FR-ADM-08): số liệu lấy từ dữ liệu lưu bền vững trong CSDL (không dùng bộ đếm trong RAM như
-     * RateLimiter nên không mất khi khởi động lại). Mỗi nhóm số liệu là một truy vấn gộp.
+     * UC-ADM-08 (FR-ADM-08): số liệu lấy từ dữ liệu lưu bền vững trong CSDL (không
+     * dùng bộ đếm trong RAM như
+     * RateLimiter nên không mất khi khởi động lại). Mỗi nhóm số liệu là một truy
+     * vấn gộp.
      */
     public Map<String, Object> adminStats() {
         Map<String, Object> m = new LinkedHashMap<>();
@@ -100,7 +105,8 @@ public class StatsService {
         // AI và bài làm
         m.put("tutorSessions", tutorSessions.count());
         m.put("aiGradedEssays", submissions.countByQuestionType(QuestionType.ESSAY));
-        m.put("pendingEssays", submissions.countByQuestionTypeAndStatus(QuestionType.ESSAY, SubmissionStatus.AI_GRADED));
+        m.put("pendingEssays",
+                submissions.countByQuestionTypeAndStatus(QuestionType.ESSAY, SubmissionStatus.AI_GRADED));
 
         // Lượt làm bài 7 ngày gần nhất: điền đủ 7 ngày (ngày không có lượt nào = 0)
         Map<String, Integer> perDay = new HashMap<>();
@@ -139,7 +145,10 @@ public class StatsService {
         return m;
     }
 
-    /** UC-TEA-08: kết quả trắc nghiệm theo câu hỏi của bài học, phân trang ở CSDL (VAL-22). */
+    /**
+     * UC-TEA-08: kết quả trắc nghiệm theo câu hỏi của bài học, phân trang ở CSDL
+     * (VAL-22).
+     */
     public PageResult<QuestionResultView> questionResults(int lessonId, int page, int size) {
         return PageResult.of(submissions.findQuestionResults(lessonId, Pager.pageRequest(page, size, Sort.unsorted())),
                 StatsService::toResultView);
@@ -159,7 +168,8 @@ public class StatsService {
     }
 
     /**
-     * Dashboard học sinh (FR-STU-06): tổng hợp tính theo lần làm gần nhất của mỗi câu (BR-10), cộng dồn từ tiến độ
+     * Dashboard học sinh (FR-STU-06): tổng hợp tính theo lần làm gần nhất của mỗi
+     * câu (BR-10), cộng dồn từ tiến độ
      * từng chủ đề nên không chạy thêm truy vấn đếm riêng.
      */
     public Map<String, Object> studentStats(int studentId) {
@@ -179,7 +189,49 @@ public class StatsService {
         m.put("overall", overall);
         Double essayAvg = submissions.latestEssayAverage(studentId);
         m.put("essayAverage", essayAvg == null ? null : Math.round(essayAvg * 100) / 100.0);
+        
+        m.put("streakData", studentStreak(studentId));
         return m;
+    }
+
+    public StreakView studentStreak(int studentId) {
+        List<java.sql.Date> activeDates = submissions.findAllActiveDatesDesc(studentId);
+        
+        LocalDate today = LocalDate.now();
+        int currentYear = today.getYear();
+        int currentMonth = today.getMonthValue();
+        
+        Set<Integer> activeDaysInMonth = new HashSet<>();
+        int currentStreak = 0;
+        
+        if (!activeDates.isEmpty()) {
+            LocalDate lastActive = activeDates.get(0).toLocalDate();
+            if (lastActive.equals(today) || lastActive.equals(today.minusDays(1))) {
+                LocalDate expected = lastActive;
+                for (java.sql.Date sqlDate : activeDates) {
+                    LocalDate d = sqlDate.toLocalDate();
+                    if (d.equals(expected)) {
+                        currentStreak++;
+                        expected = expected.minusDays(1);
+                    } else {
+                        break;
+                    }
+                }
+            }
+            
+            for (java.sql.Date sqlDate : activeDates) {
+                LocalDate d = sqlDate.toLocalDate();
+                if (d.getYear() == currentYear && d.getMonthValue() == currentMonth) {
+                    activeDaysInMonth.add(d.getDayOfMonth());
+                }
+            }
+        }
+        
+        int emptyOffsetCells = LocalDate.of(currentYear, currentMonth, 1).getDayOfWeek().getValue() - 1;
+        int daysInMonth = today.lengthOfMonth();
+        int todayDayOfMonth = today.getDayOfMonth();
+        
+        return new StreakView(currentStreak, activeDaysInMonth.size(), currentYear, currentMonth, activeDaysInMonth, emptyOffsetCells, daysInMonth, todayDayOfMonth);
     }
 
     /** Tiến độ theo từng chủ đề (UC-STU-06). */
@@ -192,7 +244,10 @@ public class StatsService {
         return submissions.lessonProgress(studentId, topicId).stream().map(StatsService::toProgressView).toList();
     }
 
-    /** Tên chủ đề cho trang tiến độ (kể cả chủ đề đã xóa mềm); null nếu không tồn tại. */
+    /**
+     * Tên chủ đề cho trang tiến độ (kể cả chủ đề đã xóa mềm); null nếu không tồn
+     * tại.
+     */
     public String topicName(int topicId) {
         return topics.findById(topicId).map(t -> t.getTopicName()).orElse(null);
     }

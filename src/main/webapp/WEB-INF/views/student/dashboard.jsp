@@ -293,40 +293,123 @@
 
                                                     <%-- ════ RIGHT COL (col-lg-4) ════ --%>
                                                         <div class="col-lg-4">
-                                                            <div class="card p-3">
-                                                                <div class="section-title mb-3"><i
-                                                                        class="bi bi-lightning-fill me-1 text-warning"></i>Truy
-                                                                    cập nhanh</div>
-                                                                <div class="d-flex flex-column gap-2">
-                                                                    <a href="${pageContext.request.contextPath}/student/topics"
-                                                                        class="shortcut-card">
-                                                                        <div class="sc-icon"><i class="bi bi-book"></i>
+
+                                                            <%-- ── WIDGET: Mini Calendar Streak (Light Purple Theme) ──
+                                                                --%>
+                                                                <div class="streak-cal-card">
+                                                                    <%-- Header --%>
+                                                                        <div class="streak-cal-header">
+                                                                            <div class="streak-cal-top-row">
+                                                                                <span class="streak-cal-label">
+                                                                                    <span
+                                                                                        class="streak-cal-flame">🔥</span>
+                                                                                    CHUỖI HỌC TẬP
+                                                                                </span>
+                                                                                <span
+                                                                                    class="streak-cal-count">${streakData.currentStreak}
+                                                                                    NGÀY</span>
+                                                                            </div>
+                                                                            <div class="streak-cal-month-row">
+                                                                                <span class="streak-cal-month">Tháng
+                                                                                    ${streakData.month},
+                                                                                    ${streakData.year}</span>
+                                                                            </div>
                                                                         </div>
-                                                                        Bài giảng
-                                                                    </a>
-                                                                    <a href="${pageContext.request.contextPath}/student/essay"
-                                                                        class="shortcut-card">
-                                                                        <div class="sc-icon"><i
-                                                                                class="bi bi-camera"></i></div>
-                                                                        Làm tự luận
-                                                                    </a>
-                                                                    <a href="${pageContext.request.contextPath}/student/ai-tutor"
-                                                                        class="shortcut-card">
-                                                                        <div class="sc-icon"
-                                                                            style="background:var(--ai-soft);color:var(--ai);">
-                                                                            <i class="bi bi-chat-dots"></i>
-                                                                        </div>
-                                                                        Hỏi AI từng bước
-                                                                    </a>
-                                                                    <a href="${pageContext.request.contextPath}/student/history"
-                                                                        class="shortcut-card">
-                                                                        <div class="sc-icon"><i
-                                                                                class="bi bi-clock-history"></i></div>
-                                                                        Lịch sử làm bài
-                                                                    </a>
-                                                                </div>
-                                                            </div>
+
+                                                                        <%-- Weekday Headers --%>
+                                                                            <div class="streak-cal-grid">
+                                                                                <div class="streak-cal-weekday">T2</div>
+                                                                                <div class="streak-cal-weekday">T3</div>
+                                                                                <div class="streak-cal-weekday">T4</div>
+                                                                                <div class="streak-cal-weekday">T5</div>
+                                                                                <div class="streak-cal-weekday">T6</div>
+                                                                                <div class="streak-cal-weekday">T7</div>
+                                                                                <div
+                                                                                    class="streak-cal-weekday streak-cal-weekday--sun">
+                                                                                    CN</div>
+
+                                                                                <%-- Offset empty cells for the first
+                                                                                    day of the month --%>
+                                                                                    <c:forEach begin="1"
+                                                                                        end="${streakData.emptyOffsetCells}">
+                                                                                        <div class="streak-cal-empty">
+                                                                                        </div>
+                                                                                    </c:forEach>
+
+                                                                                    <%-- Loop through the days of the
+                                                                                        month --%>
+                                                                                        <c:forEach var="day" begin="1"
+                                                                                            end="${streakData.daysInMonth}">
+                                                                                            <c:choose>
+                                                                                                <c:when
+                                                                                                    test="${streakData.activeDaysInMonth.contains(day)}">
+                                                                                                    <c:set
+                                                                                                        var="dayClass"
+                                                                                                        value="active" />
+                                                                                                    <c:set
+                                                                                                        var="dayTitle"
+                                                                                                        value="Đã học" />
+                                                                                                </c:when>
+                                                                                                <c:when
+                                                                                                    test="${day > streakData.todayDayOfMonth}">
+                                                                                                    <c:set
+                                                                                                        var="dayClass"
+                                                                                                        value="future" />
+                                                                                                    <c:set
+                                                                                                        var="dayTitle"
+                                                                                                        value="Sắp tới" />
+                                                                                                </c:when>
+                                                                                                <c:otherwise>
+                                                                                                    <c:set
+                                                                                                        var="dayClass"
+                                                                                                        value="" />
+                                                                                                    <c:set
+                                                                                                        var="dayTitle"
+                                                                                                        value="Chưa học" />
+                                                                                                </c:otherwise>
+                                                                                            </c:choose>
+
+                                                                                            <c:if
+                                                                                                test="${day == streakData.todayDayOfMonth}">
+                                                                                                <c:set var="dayClass"
+                                                                                                    value="${dayClass} today" />
+                                                                                                <c:set var="dayTitle"
+                                                                                                    value="${streakData.activeDaysInMonth.contains(day) ? 'Hôm nay - Đã học' : 'Hôm nay - Chưa học'}" />
+                                                                                            </c:if>
+
+                                                                                            <div class="streak-cal-day ${dayClass}"
+                                                                                                title="${day}/${streakData.month} - ${dayTitle}">
+                                                                                                ${day}</div>
+                                                                                        </c:forEach>
+                                                                            </div>
+
+                                                                            <%-- Legend --%>
+                                                                                <div class="streak-cal-legend">
+                                                                                    <div class="streak-cal-legend-item">
+                                                                                        <span
+                                                                                            class="streak-cal-dot streak-cal-dot--active"></span>
+                                                                                        <span>Có học</span>
+                                                                                    </div>
+                                                                                    <div class="streak-cal-legend-item">
+                                                                                        <span
+                                                                                            class="streak-cal-dot streak-cal-dot--miss"></span>
+                                                                                        <span>Nghỉ</span>
+                                                                                    </div>
+                                                                                    <div class="streak-cal-legend-item">
+                                                                                        <span
+                                                                                            class="streak-cal-dot streak-cal-dot--today"></span>
+                                                                                        <span>Hôm nay</span>
+                                                                                    </div>
+                                                                                    <div class="streak-cal-legend-item">
+                                                                                        <span
+                                                                                            class="streak-cal-dot streak-cal-dot--future"></span>
+                                                                                        <span>Sắp tới</span>
+                                                                                    </div>
+                                                                                </div>
+                                                                </div><%-- /streak-cal-card --%>
+
                                                         </div><%-- /col-lg-4 --%>
+
 
                                         </div><%-- /row --%>
                                 </main>

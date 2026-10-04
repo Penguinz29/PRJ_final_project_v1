@@ -1593,3 +1593,546 @@ h6 {
 }
 
 /* === End: Student Topic accordion === */
+
+/* ============================================================
+   Student Dashboard – Right Column:
+   Streamlined Learning Streak Widget (Light Purple Theme)
+   ============================================================ */
+
+.streak-widget-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 1.25rem 1.2rem;
+  box-shadow: var(--shadow-sm);
+  transition: transform .2s ease, box-shadow .2s ease;
+  position: relative;
+}
+
+.streak-widget-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px -4px rgba(99, 102, 241, 0.12);
+}
+
+/* ── Header ── */
+.streak-widget-header {
+  margin-bottom: 0.9rem;
+}
+
+.streak-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
+}
+
+.streak-title-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.streak-flame-icon {
+  font-size: 1.15rem;
+  line-height: 1;
+  filter: drop-shadow(0 2px 4px rgba(249, 115, 22, 0.35));
+  animation: flame-bounce 2.2s ease-in-out infinite;
+}
+
+@keyframes flame-bounce {
+  0%, 100% { transform: scale(1) translateY(0); }
+  50% { transform: scale(1.1) translateY(-2px); }
+}
+
+.streak-status-badge {
+  background: rgba(99, 102, 241, 0.08);
+  color: var(--primary);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 99px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.streak-count-val {
+  font-size: 1.95rem;
+  font-weight: 800;
+  color: var(--primary);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin-bottom: 0.25rem;
+}
+
+.streak-motivate-text {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+/* ── Divider ── */
+.streak-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 0.9rem 0 0.85rem;
+}
+
+/* ── 30-Day Grid ── */
+.streak-matrix-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.streak-matrix-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #94a3b8;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.streak-matrix-summary {
+  font-size: 0.73rem;
+  font-weight: 700;
+  color: var(--primary);
+  background: var(--primary-soft);
+  padding: 0.15rem 0.5rem;
+  border-radius: 6px;
+}
+
+.streak-matrix-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  margin-bottom: 0.9rem;
+}
+
+.streak-cell {
+  aspect-ratio: 1;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #94a3b8;
+  transition: all .15s ease;
+  user-select: none;
+  position: relative;
+}
+
+.streak-cell.active {
+  background: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
+  border-color: #6366f1;
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.32);
+}
+
+.streak-cell.today {
+  border: 2px dashed #6366f1 !important;
+  animation: today-pulse 2s ease-in-out infinite;
+}
+
+@keyframes today-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4), 0 2px 6px rgba(99, 102, 241, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.18), 0 4px 10px rgba(99, 102, 241, 0.45);
+  }
+}
+
+.streak-cell:hover {
+  transform: scale(1.08);
+  z-index: 2;
+}
+
+/* ── Grid Legend ── */
+.streak-legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  font-size: 0.72rem;
+  color: #64748b;
+  padding-top: 0.7rem;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.streak-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.streak-legend-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+}
+
+.streak-legend-dot.active {
+  background: #6366f1;
+  color: #fff;
+}
+
+.streak-legend-dot.inactive {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+}
+
+.streak-legend-dot.today {
+  background: #f1f5f9;
+  border: 1.5px dashed #6366f1;
+}
+
+/* ============================================================
+   Teacher Dashboard – Full-Width Layout Components
+   ============================================================ */
+
+/* ── Quick-action cards (full-width variant) ── */
+.qa-card-fw {
+  min-height: 90px;
+}
+
+/* ── Submissions Table (tc = Teacher Corrections) ── */
+.tc-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.tc-table thead th {
+  background: var(--bg-app);
+  font-size: .75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--muted);
+  padding: .65rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.tc-table tbody tr {
+  transition: background .15s ease;
+}
+
+.tc-table tbody tr:hover {
+  background: var(--bg-app);
+}
+
+.tc-table tbody td {
+  padding: .85rem 1rem;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border);
+  font-size: .875rem;
+}
+
+.tc-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Student cell: avatar + name */
+.tc-student-cell {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+}
+
+.tc-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), #818cf8);
+  color: #fff;
+  font-weight: 700;
+  font-size: .8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  /* Show only the first character via CSS */
+  text-indent: 0;
+  letter-spacing: -34px; /* pushes subsequent chars out of view */
+  padding-left: 9px;     /* re-centers the first char */
+  user-select: none;
+}
+
+/* Question column: truncate long titles */
+.tc-question-col {
+  max-width: 340px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+}
+
+/* ── badge-pending (orange / waiting) ── */
+.badge-pending {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  padding: .28rem .65rem;
+  border-radius: 6px;
+  font-size: .73rem;
+  font-weight: 600;
+  background: var(--warning-soft);
+  color: var(--warning);
+  white-space: nowrap;
+}
+
+/* ── btn-grade: prominent "Grade" action button ── */
+.btn-grade {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  padding: .38rem .9rem;
+  border-radius: 8px;
+  font-size: .8rem;
+  font-weight: 600;
+  text-decoration: none;
+  background: var(--primary-soft);
+  color: var(--primary);
+  border: 1px solid rgba(79, 70, 229, .25);
+  transition: background .2s ease, color .2s ease, box-shadow .2s ease, transform .15s ease;
+  white-space: nowrap;
+}
+
+.btn-grade:hover {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, .35);
+  transform: translateY(-1px);
+}
+
+/* ── row wrapper for the teacher full-width layout ── */
+.row.g-4 > .col-12 {
+  /* ensure hero banner inside col-12 gets full-width treatment */
+  width: 100%;
+}
+
+/* ═══════════════════════════════════════════
+   MINI CALENDAR STREAK WIDGET
+═══════════════════════════════════════════ */
+.streak-cal-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 1.1rem 1rem 0.9rem;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+
+.streak-cal-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px -4px rgba(99, 102, 241, .12);
+}
+
+/* ── Header ── */
+.streak-cal-header {
+  margin-bottom: 0.75rem;
+}
+
+.streak-cal-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.15rem;
+}
+
+.streak-cal-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.streak-cal-flame {
+  font-size: 1.1rem;
+  line-height: 1;
+  filter: drop-shadow(0 2px 4px rgba(249, 115, 22, .35));
+  animation: streak-flame-bounce 2.2s ease-in-out infinite;
+}
+
+@keyframes streak-flame-bounce {
+  0%, 100% { transform: scale(1) translateY(0); }
+  50%      { transform: scale(1.12) translateY(-2px); }
+}
+
+.streak-cal-count {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #6366f1;
+  letter-spacing: -0.02em;
+}
+
+.streak-cal-month-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.3rem;
+}
+
+.streak-cal-month {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted-light);
+}
+
+.streak-cal-summary {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #6366f1;
+  background: rgba(99, 102, 241, .08);
+  padding: 0.12rem 0.45rem;
+  border-radius: 6px;
+}
+
+/* ── Calendar Grid (7-column) ── */
+.streak-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 0.65rem;
+}
+
+/* Weekday header cells */
+.streak-cal-weekday {
+  text-align: center;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--muted-light);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding-bottom: 0.3rem;
+  user-select: none;
+}
+
+.streak-cal-weekday--sun {
+  color: #ef4444;
+}
+
+/* Empty offset cells */
+.streak-cal-empty {
+  aspect-ratio: 1;
+}
+
+/* Day cells */
+.streak-cal-day {
+  aspect-ratio: 1;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #94a3b8;
+  background: #f8fafc;
+  border: 1px solid transparent;
+  cursor: default;
+  transition: all .15s ease;
+  user-select: none;
+  position: relative;
+}
+
+.streak-cal-day:hover {
+  transform: scale(1.1);
+  z-index: 2;
+}
+
+/* Active (studied) */
+.streak-cal-day.active {
+  background: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
+  color: #fff;
+  font-weight: 700;
+  border-color: transparent;
+  box-shadow: 0 2px 6px rgba(99, 102, 241, .28);
+}
+
+/* Today */
+.streak-cal-day.today {
+  border: 2px solid #6366f1;
+  color: #6366f1;
+  font-weight: 800;
+  background: rgba(99, 102, 241, .08);
+  animation: streak-today-pulse 2s ease-in-out infinite;
+}
+
+.streak-cal-day.today.active {
+  color: #fff;
+  background: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
+  border: 2px solid #4f46e5;
+}
+
+@keyframes streak-today-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, .35); }
+  50%      { box-shadow: 0 0 0 4px rgba(99, 102, 241, .15); }
+}
+
+/* ── Legend ── */
+.streak-cal-legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.85rem;
+  font-size: 0.65rem;
+  color: var(--muted);
+  padding-top: 0.55rem;
+  border-top: 1px dashed var(--border);
+}
+
+.streak-cal-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.streak-cal-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.streak-cal-dot--active {
+  background: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
+}
+
+.streak-cal-dot--miss {
+  background: #f8fafc;
+  border: 1px solid var(--border);
+}
+
+.streak-cal-dot--today {
+  background: rgba(99, 102, 241, .08);
+  border: 2px solid #6366f1;
+}
+
+.streak-cal-dot--future {
+  background: #f8fafc;
+  border: 1px dashed var(--border);
+}
