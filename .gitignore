@@ -12,3 +12,7 @@ Thumbs.db
 .DS_Store
 # Maven
 target/
+
+# VS Code settings
+.vscode/
+
