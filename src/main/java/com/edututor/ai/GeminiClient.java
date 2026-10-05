@@ -140,7 +140,8 @@ public class GeminiClient {
         if (json) {
             gen.put("response_mime_type", "application/json");
         }
-        if (thinkingBudget != null) {
+        // thinkingConfig gửi sai loại model sẽ bị Gemini trả 400
+        if (thinkingBudget != null && supportsThinking(s.model())) {
             gen.putObject("thinkingConfig").put("thinkingBudget", thinkingBudget);
         }
         try {
@@ -148,6 +149,12 @@ public class GeminiClient {
         } catch (IOException e) {
             throw new AiServiceException("Không tạo được yêu cầu gửi Gemini: " + e.getMessage(), e);
         }
+    }
+
+    private static boolean supportsThinking(String model) {
+        String m = model == null ? "" : model.trim();
+        // Chỉ 2.5 Flash/Flash-Lite cho phép thinkingBudget=0; 2.5 Pro không tắt được, dòng 3.x dùng thinkingLevel
+        return m.startsWith("gemini-2.5") && !m.contains("pro");
     }
 
     private JsonNode post(String apiKey, String model, String body, Duration timeout) {

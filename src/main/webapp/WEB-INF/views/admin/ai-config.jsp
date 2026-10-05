@@ -123,9 +123,10 @@
                 <option value="gemini-2.5-flash"></option>
                 <option value="gemini-2.5-pro"></option>
                 <option value="gemini-3.5-flash"></option>
+                <option value="gemini-3.5-flash-lite"></option>
             </datalist>
 
-            <div class="d-flex justify-content-end my-3">
+            <div class="d-flex justify-content-end my-3 position-sticky bottom-0 bg-white py-2 border-top">
                 <button type="submit" class="btn btn-primary">
                     <i class="bi bi-check-lg me-1"></i> Lưu cấu hình
                 </button>
@@ -138,6 +139,17 @@
 <jsp:include page="../common/footer.jsp" />
 
 <script>
+    // Cảnh báo khi rời trang mà còn thay đổi chưa lưu (ví dụ bấm đăng xuất)
+    (function () {
+        const form = document.querySelector('form[action$="/admin/ai-config/update"]');
+        let dirty = false;
+        form.addEventListener('input', function () { dirty = true; });
+        form.addEventListener('submit', function () { dirty = false; });
+        window.addEventListener('beforeunload', function (e) {
+            if (dirty) { e.preventDefault(); e.returnValue = ''; }
+        });
+    })();
+
     // Hiện / ẩn API Key
     document.querySelectorAll('[data-toggle-secret]').forEach(function (btn) {
         btn.addEventListener('click', function () {
@@ -176,6 +188,10 @@
                 ? '<i class="bi bi-check-circle-fill me-2"></i>'
                 : '<i class="bi bi-x-circle-fill me-2"></i>';
             resultDiv.appendChild(document.createTextNode(data.message));
+            if (data.success) {
+                resultDiv.appendChild(document.createTextNode(
+                    ' Lưu ý: Test Connection CHƯA lưu cấu hình, hãy bấm "Lưu cấu hình" ở cuối trang.'));
+            }
         })
         .catch(err => {
             resultDiv.className = 'alert alert-danger mb-3';

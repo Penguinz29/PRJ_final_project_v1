@@ -35,9 +35,12 @@ public class GeminiService {
     private final AiConfigService config;
     private final ObjectMapper mapper;
     private final int maxAttempts;
+    private final String fallbackModel;
 
     public GeminiService(GeminiClient client, AiConfigService config, ObjectMapper mapper,
-                         @Value("${gemini.maxParseRetries:3}") int maxAttempts) {
+                         @Value("${gemini.maxParseRetries:3}") int maxAttempts,
+                         @Value("${gemini.fallbackModel:}") String fallbackModel) {
+        this.fallbackModel = fallbackModel == null ? "" : fallbackModel.trim();
         this.client = client;
         this.config = config;
         this.mapper = mapper;
@@ -66,6 +69,7 @@ public class GeminiService {
         // để luồng AI không còn chạy và ghi CSDL sau khi client đã nhận lỗi.
         long deadline = System.nanoTime() + TOTAL_BUDGET.toNanos();
         Exception last = null;
+        boolean fallbackBroken = false;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             long remainingSeconds = (deadline - System.nanoTime()) / 1_000_000_000L;
             if (attempt > 1 && remainingSeconds < MIN_ATTEMPT_SECONDS) {
@@ -73,16 +77,33 @@ public class GeminiService {
                         attempt - 1, maxAttempts);
                 break;
             }
-            Settings attemptSettings = new Settings(settings.apiKey(), settings.model(), settings.temperature(),
+            // Model chính quá tải/timeout ở lần trước (503, 504...): lần sau chuyển sang model dự phòng nhẹ hơn
+            String model = (attempt > 1 && last instanceof AiServiceException && !fallbackModel.isBlank()
+                    && !fallbackBroken)
+                    ? fallbackModel : settings.model();
+            // Mỗi lần thử tối đa 35 giây để còn thời gian cho lần thử lại (thay vì 1 lần treo hết ngân sách 90 giây)
+            Settings attemptSettings = new Settings(settings.apiKey(), model, settings.temperature(),
                     settings.maxOutputTokens(),
-                    (int) Math.max(1, Math.min(settings.timeoutSeconds(), remainingSeconds)));
+                    (int) Math.max(1, Math.min(Math.min(settings.timeoutSeconds(), 35), remainingSeconds)));
             try {
                 String raw = client.generate(attemptSettings, systemInstruction, turns, true);
                 return parser.apply(mapper.readTree(AiJsonParser.extractJson(raw)));
             } catch (AiServiceException e) {
                 // Chưa cấu hình / HTTP 4xx (trừ 429): thử lại cũng vô ích
                 if (!e.isTransient()) {
+                    // Model dự phòng sai/không khả dụng không được che lỗi thật của model chính: bỏ dự phòng, thử lại model chính
+                    if (!model.equals(settings.model())) {
+                        log.warn("Model dự phòng '{}' không dùng được ({}), bỏ qua dự phòng", model, e.getMessage());
+                        fallbackBroken = true;
+                        continue;
+                    }
                     throw e;
+                }
+                // 429 (hết hạn mức/phút của free tier): thử lại sau vài trăm ms vô ích, chỉ làm người dùng chờ lâu
+                if (e.getHttpStatus() == 429) {
+                    log.warn("Gemini trả 429 (vượt hạn mức): {}", e.getMessage());
+                    throw AiServiceException.userFacing(
+                            "AI đang vượt hạn mức miễn phí của Gemini, vui lòng thử lại sau khoảng 1 phút.", 429);
                 }
                 last = e;
                 log.warn("Gọi Gemini lần {}/{} thất bại: {}", attempt, maxAttempts, e.getMessage());

@@ -41,6 +41,15 @@ public class AdminApiController {
 
     /** Ánh xạ mã lỗi của Gemini sang thông báo thân thiện. */
     private String friendly(AiServiceException e) {
+        // Trang này chỉ Admin dùng: kèm nguyên văn lý do của Google (không chứa khóa API) để biết sửa model nào
+        String base = friendlyBase(e);
+        if (e instanceof com.edututor.exception.AiConfigException cfg && cfg.getDetail() != null) {
+            return base + " Chi tiết: " + cfg.getDetail();
+        }
+        return base;
+    }
+
+    private String friendlyBase(AiServiceException e) {
         return switch (e.getHttpStatus()) {
             case 400, 401, 403 -> "Khóa API hoặc model không hợp lệ.";
             case 404 -> "Model không tồn tại hoặc đã ngừng hỗ trợ.";
