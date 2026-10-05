@@ -13,6 +13,3 @@ Thumbs.db
 # Maven
 target/
 
-# VS Code settings
-.vscode/
-

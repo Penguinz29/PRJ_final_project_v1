@@ -32,7 +32,7 @@
                                         <div class="row g-4">
 
                                             <%-- ════ LEFT COL (col-lg-8) ════ --%>
-                                                <div class="col-lg-8">
+                                                <div class="col-lg-9">
 
                                                     <%-- Hero banner --%>
                                                         <div class="hero-banner mb-4">
@@ -292,7 +292,7 @@
                                                 </div><%-- /col-lg-8 --%>
 
                                                     <%-- ════ RIGHT COL (col-lg-4) ════ --%>
-                                                        <div class="col-lg-4">
+                                                        <div class="col-lg-3">
 
                                                             <%-- ── WIDGET: Mini Calendar Streak (Light Purple Theme) ──
                                                                 --%>
