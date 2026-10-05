@@ -56,12 +56,16 @@ public class GeminiClient {
     private final HttpClient http;
     private final String baseUrl;
     private final Duration requestTimeout;
+    /** Số token "suy nghĩ" của model (rỗng = để mặc định). 0 = tắt thinking cho nhanh (chỉ model 2.5 trở lên hỗ trợ). */
+    private final Integer thinkingBudget;
 
     public GeminiClient(ObjectMapper mapper,
                         @Value("${gemini.baseUrl}") String baseUrl,
                         @Value("${gemini.connectTimeoutSeconds:15}") int connectTimeoutSeconds,
-                        @Value("${gemini.requestTimeoutSeconds:60}") int requestTimeoutSeconds) {
+                        @Value("${gemini.requestTimeoutSeconds:60}") int requestTimeoutSeconds,
+                        @Value("${gemini.thinkingBudget:}") String thinkingBudget) {
         this.mapper = mapper;
+        this.thinkingBudget = (thinkingBudget == null || thinkingBudget.isBlank()) ? null : Integer.valueOf(thinkingBudget.trim());
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         this.requestTimeout = Duration.ofSeconds(requestTimeoutSeconds);
         // FRS 8.2: connection timeout tối đa 15 giây
@@ -135,6 +139,9 @@ public class GeminiClient {
         gen.put("maxOutputTokens", s.maxOutputTokens());
         if (json) {
             gen.put("response_mime_type", "application/json");
+        }
+        if (thinkingBudget != null) {
+            gen.putObject("thinkingConfig").put("thinkingBudget", thinkingBudget);
         }
         try {
             return mapper.writeValueAsString(root);

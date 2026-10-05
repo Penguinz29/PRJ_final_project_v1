@@ -173,59 +173,6 @@
     }
   }
 
-  /* ── 7.7 Dropzone ảnh ── */
-  function initDropzone() {
-    var zone = qs('.dropzone');
-    var fileInput = zone ? zone.querySelector('input[type="file"]') : null;
-    if (!zone || !fileInput) return;
-
-    var preview = qs('#imagePreview');
-    var removeBtn = qs('#removeImageBtn');
-
-    var ALLOWED = ['image/jpeg', 'image/png', 'image/webp'];
-    var MAX_SIZE = 5 * 1024 * 1024;
-
-    function showError(msg) {
-      var err = qs('#imageError');
-      if (err) { err.textContent = msg; err.style.display = msg ? '' : 'none'; }
-      fileInput.value = '';
-      if (preview) preview.style.display = 'none';
-    }
-
-    function handleFile(file) {
-      if (!ALLOWED.includes(file.type)) { showError('Chỉ chấp nhận JPG, PNG, WEBP.'); return; }
-      if (file.size > MAX_SIZE) { showError('Ảnh phải nhỏ hơn 5MB.'); return; }
-      showError('');
-      if (preview) {
-        preview.src = URL.createObjectURL(file);
-        preview.style.display = '';
-      }
-      if (removeBtn) removeBtn.style.display = '';
-    }
-
-    zone.addEventListener('click', function () { fileInput.click(); });
-    fileInput.addEventListener('change', function () {
-      if (fileInput.files[0]) handleFile(fileInput.files[0]);
-    });
-
-    zone.addEventListener('dragover', function (e) { e.preventDefault(); zone.classList.add('dragover'); });
-    zone.addEventListener('dragleave', function () { zone.classList.remove('dragover'); });
-    zone.addEventListener('drop', function (e) {
-      e.preventDefault();
-      zone.classList.remove('dragover');
-      var file = e.dataTransfer.files[0];
-      if (file) { fileInput.files = e.dataTransfer.files; handleFile(file); }
-    });
-
-    if (removeBtn) {
-      removeBtn.addEventListener('click', function () {
-        fileInput.value = '';
-        if (preview) { URL.revokeObjectURL(preview.src); preview.style.display = 'none'; }
-        removeBtn.style.display = 'none';
-      });
-    }
-  }
-
   /* ── 7.10 MCQ/ESSAY switch ── */
   function initQuestionTypeSwitch() {
     var radios = qsa('[name="type"]');
@@ -388,7 +335,6 @@
     initPasswordToggle();
     initConfirmModal();
     initAutoOpenModal();
-    initDropzone();
     initKaTeX();
     initQuestionTypeSwitch();
     initAiPreviewCounter();

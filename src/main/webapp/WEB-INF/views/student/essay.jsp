@@ -233,6 +233,28 @@
                                 }
                             }
 
+                            // Thu nhỏ ảnh (cạnh dài <= 1600px, JPEG) trước khi gửi để upload + AI xử lý nhanh hơn
+                            async function shrinkImage(file) {
+                                const MAX = 1600;
+                                try {
+                                    const bmp = await createImageBitmap(file);
+                                    const ratio = Math.min(1, MAX / Math.max(bmp.width, bmp.height));
+                                    if (ratio === 1 && file.size < 800 * 1024) return file;
+                                    const canvas = document.createElement('canvas');
+                                    canvas.width = Math.round(bmp.width * ratio);
+                                    canvas.height = Math.round(bmp.height * ratio);
+                                    const ctx = canvas.getContext('2d');
+                                    ctx.fillStyle = '#fff';
+                                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                                    ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+                                    const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.85));
+                                    if (!blob || blob.size >= file.size) return file;
+                                    return new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' });
+                                } catch (err) {
+                                    return file;
+                                }
+                            }
+
                             form.addEventListener('submit', async (e) => {
                                 e.preventDefault();
                                 const text = form.querySelector('textarea').value.trim();
@@ -253,7 +275,10 @@
                                 const fd = new FormData();
                                 fd.append('questionId', form.querySelector('[name=questionId]').value);
                                 if (text) fd.append('studentAnswer', text);
-                                if (hasFile) fd.append('essayImage', fileInput.files[0]);
+                                if (hasFile) {
+                                    const small = await shrinkImage(fileInput.files[0]);
+                                    fd.append('essayImage', small, small.name || fileInput.files[0].name);
+                                }
 
                                 try {
                                     const res = await csrfFetch(document.body.dataset.ctx + '/api/student/submit-essay-ocr', {
