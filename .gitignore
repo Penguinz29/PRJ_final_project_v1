@@ -14,3 +14,4 @@ Thumbs.db
 target/
 
 .vscode/
+nb-configuration.xml

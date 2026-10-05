@@ -141,6 +141,9 @@ public class QuestionService {
         Question q = questionRepository.findWithOptionsByQuestionIdAndActiveTrue(form.getId())
                 .orElseThrow(() -> new NotFoundException("Câu hỏi không tồn tại."));
         requireOwner(q, actingUserId, admin);
+        if (submissionRepository.countByQuestion_QuestionId(q.getQuestionId()) > 0) {
+            requireGradingUnchanged(q, form);
+        }
         applyQuestion(q, form);
         if (q.getQuestionType() == QuestionType.MCQ) {
             List<QuestionOption> wanted = buildOptions(form.getCorrectOption(), form.getOptionTexts());
@@ -157,6 +160,23 @@ public class QuestionService {
             removeOptions(q, o -> wanted.stream().noneMatch(w -> w.getOptionLetter().equals(o.getOptionLetter())));
         } else {
             removeOptions(q, o -> true);
+        }
+    }
+
+    /**
+     * Câu đã có bài làm: không đổi loại, bài học hay đáp án đúng, vì IsCorrect / LessonId đã lưu trong Submissions
+     * sẽ lệch với câu hỏi. Nội dung, lời giải, mức độ và chữ của phương án vẫn sửa được.
+     */
+    private void requireGradingUnchanged(Question q, QuestionForm form) {
+        String currentCorrect = q.getOptions().stream().filter(QuestionOption::isCorrect)
+                .map(QuestionOption::getOptionLetter).findFirst().orElse(null);
+        boolean typeChanged = !q.getQuestionType().name().equals(form.getType());
+        boolean lessonChanged = !q.getLesson().getLessonId().equals(form.getLessonId());
+        boolean correctChanged = q.getQuestionType() == QuestionType.MCQ && currentCorrect != null
+                && !currentCorrect.equalsIgnoreCase(form.getCorrectOption());
+        if (typeChanged || lessonChanged || correctChanged) {
+            throw new ConflictException("Câu hỏi đã có bài làm của học sinh nên không thể đổi loại, bài học "
+                    + "hoặc đáp án đúng. Hãy tạo câu hỏi mới.");
         }
     }
 
