@@ -11,7 +11,7 @@ erDiagram
         varchar Username UK
         varchar PasswordHash
         nvarchar FullName
-        varchar Email UK
+        varchar Email UK "nullable"
         varchar Role "ADMIN | TEACHER | STUDENT"
         varchar Status "ACTIVE | SUSPENDED | INACTIVE"
         bit IsActive
@@ -84,7 +84,7 @@ erDiagram
     Submissions {
         int SubmissionId PK
         int StudentId FK
-        int LessonId "không có FK"
+        int LessonId FK "nullable, thống kê tiến độ"
         int QuestionId FK
         varchar QuestionType
         nvarchar StudentAnswer
@@ -107,7 +107,7 @@ erDiagram
         int SessionId PK
         int StudentId FK
         int LessonId FK "ON DELETE SET NULL"
-        int QuestionId FK
+        int QuestionId FK "nullable"
         nvarchar Title
         nvarchar ProblemText
         int CurrentStep
@@ -141,7 +141,7 @@ erDiagram
         datetime UpdatedAt
     }
 
-    Users ||--o{ Users : "phụ trách (TeacherId)"
+    Users |o--o{ Users : "phụ trách (TeacherId)"
     Users ||--o{ Topics : "tạo (TeacherId)"
     Users ||--o{ Lessons : "tạo (CreatedBy)"
     Users ||--o{ LessonMaterials : "tạo (CreatedBy)"
@@ -157,6 +157,7 @@ erDiagram
     Lessons |o--o{ TutorSessions : "ngữ cảnh (SET NULL)"
 
     Questions ||--o{ QuestionOptions : "có phương án (CASCADE)"
+    Lessons |o--o{ Submissions : "thuộc bài (thống kê)"
     Questions ||--o{ Submissions : "được nộp"
     Questions |o--o{ TutorSessions : "mở từ câu hỏi"
 
@@ -177,6 +178,7 @@ erDiagram
 | Questions | TeacherId | Users | NO ACTION |
 | QuestionOptions | QuestionId | Questions | CASCADE |
 | Submissions | StudentId | Users | NO ACTION |
+| Submissions | LessonId | Lessons | NO ACTION |
 | Submissions | QuestionId | Questions | NO ACTION |
 | Submissions | ReviewedBy | Users | NO ACTION |
 | AiConfigs | UpdatedBy | Users | NO ACTION |
@@ -189,7 +191,7 @@ erDiagram
 
 - **6 bảng lõi:** Users, Topics, Lessons, Questions, Submissions, TutorSessions.
 - **4 bảng phụ (chuẩn hóa):** LessonMaterials, QuestionOptions, TutorMessages (thuộc tính đa trị 1–N), AiConfigs (cấu hình).
-- `Submissions.LessonId` là cột thường, **không có FK** (chỉ lưu để thống kê tiến độ).
 - Ràng buộc UNIQUE: `Users(Username)`, `Users(Email)`, `QuestionOptions(QuestionId, OptionLetter)`, `AiConfigs(ConfigKey)`.
 - Index: `LessonMaterials(LessonId, OrderIndex)`, `Questions(LessonId, IsActive)`, `Submissions(StudentId, SubmittedAt DESC)`, `TutorSessions(StudentId, CreatedAt DESC)`, `TutorMessages(SessionId, MessageId)`.
+- Giải thích chi tiết từng bảng/cột: `document/DATABASE.md`.
 - Xóa mềm bằng `IsActive` (Topics, Lessons, Questions) và `Status = 'INACTIVE'` (Users).

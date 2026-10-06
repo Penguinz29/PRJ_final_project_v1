@@ -189,6 +189,7 @@ CREATE TABLE Submissions (
     CONSTRAINT CK_Submissions_AiScore CHECK (AiScore IS NULL OR (AiScore >= 0 AND AiScore <= 10)),
     CONSTRAINT CK_Submissions_FinalScore CHECK (FinalScore IS NULL OR (FinalScore >= 0 AND FinalScore <= 10)),
     CONSTRAINT FK_Submission_Student FOREIGN KEY (StudentId) REFERENCES Users(UserId),
+    CONSTRAINT FK_Submission_Lesson FOREIGN KEY (LessonId) REFERENCES Lessons(LessonId),
     CONSTRAINT FK_Submission_Question FOREIGN KEY (QuestionId) REFERENCES Questions(QuestionId),
     CONSTRAINT FK_Submission_Reviewer FOREIGN KEY (ReviewedBy) REFERENCES Users(UserId)
 );
