@@ -84,13 +84,13 @@
                                             </div>
                                         </div>
                                         <div class="card-body p-md-4">
-                                            <div class="question-text mb-4 latex-content fs-5"><c:out value="${q.content}" /></div>
+                                            <div class="question-text mb-4 latex-content fs-5"><ui:rich-text value="${q.content}" /></div>
                                             <div class="options-grid">
                                                 <c:forEach var="opt" items="${q.options}">
                                                     <button type="button" class="option-box w-100 d-flex align-items-center p-3 border rounded mb-3 text-start"
                                                             data-option-id="${opt.optionId}">
                                                         <span class="option-label">${opt.optionLetter}</span>
-                                                        <span class="ms-3 latex-content" style="flex:1"><c:out value="${opt.content}" /></span>
+                                                        <span class="ms-3 latex-content" style="flex:1"><ui:rich-text value="${opt.content}" /></span>
                                                         <i class="bi option-mark ms-2 fs-5"></i>
                                                     </button>
                                                 </c:forEach>

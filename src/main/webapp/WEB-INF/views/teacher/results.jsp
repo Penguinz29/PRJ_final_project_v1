@@ -97,7 +97,7 @@
                             <tbody>
                             <c:forEach var="r" items="${rows}">
                                 <tr>
-                                    <td class="latex-content small"><c:out value="${r.content}" /></td>
+                                    <td class="latex-content small"><ui:rich-text value="${r.content}" /></td>
                                     <td class="text-center">${r.level}</td>
                                     <td class="text-center">${r.attempts}</td>
                                     <td class="text-center">${r.students}</td>

@@ -66,7 +66,7 @@
                                                         class="bi bi-question-circle me-2 text-primary"></i>Đề bài</h5>
                                             </div>
                                             <div class="card-body p-4 latex-content fs-5" style="line-height:1.7;">
-                                                <c:out value="${question.content}" />
+                                                <ui:rich-text value="${question.content}" />
                                             </div>
                                         </div>
 
@@ -86,8 +86,23 @@
                                                         <div class="mb-4">
                                                             <label class="form-label fw-semibold">Cách 1: Nhập lời giải
                                                                 trực tiếp</label>
-                                                            <textarea class="form-control" name="studentAnswer" rows="8"
-                                                                placeholder="Trình bày lời giải của bạn tại đây..."></textarea>
+                                                            <div class="essay-math-bar" role="toolbar" aria-label="Ký hiệu toán">
+                                                                <button type="button" class="essay-math-btn" data-tex="x^{2}" data-back="0" title="Bình phương">x²</button>
+                                                                <button type="button" class="essay-math-btn" data-tex="x_{1}" data-back="0" title="Chỉ số dưới">xₙ</button>
+                                                                <button type="button" class="essay-math-btn" data-tex="\sqrt{}" data-back="2" title="Căn bậc hai">√</button>
+                                                                <button type="button" class="essay-math-btn" data-tex="\frac{}{}" data-back="4" title="Phân số">a⁄b</button>
+                                                                <button type="button" class="essay-math-btn" data-tex="\int_{}^{}" data-back="5" title="Tích phân">∫</button>
+                                                                <button type="button" class="essay-math-btn" data-tex="\lim_{x \to }" data-back="2" title="Giới hạn">lim</button>
+                                                                <button type="button" class="essay-math-btn" data-tex="\pi" data-back="0" title="Pi">π</button>
+                                                                <button type="button" class="essay-math-btn" data-tex="\leq" data-back="0" title="Nhỏ hơn hoặc bằng">≤</button>
+                                                                <button type="button" class="essay-math-btn" data-tex="\geq" data-back="0" title="Lớn hơn hoặc bằng">≥</button>
+                                                                <button type="button" class="essay-math-btn" data-tex="\neq" data-back="0" title="Khác">≠</button>
+                                                                <button type="button" class="essay-math-btn" data-tex="\infty" data-back="0" title="Vô cực">∞</button>
+                                                            </div>
+                                                            <textarea class="form-control" name="studentAnswer" id="essayAnswer" rows="8"
+                                                                placeholder="Trình bày lời giải của bạn tại đây. Có thể dùng LaTeX, ví dụ $x^2$..."></textarea>
+                                                            <div class="form-text">Công thức đặt giữa hai dấu <code>$</code>, ví dụ <code>$x^2$</code> (dùng <code>$$</code> để căn giữa dòng).</div>
+                                                            <div id="essayMathPreview" class="essay-math-preview latex-content" style="white-space:pre-wrap;" hidden></div>
                                                         </div>
 
                                                         <div class="mb-4">
@@ -173,6 +188,51 @@
                     </c:choose>
                 </div>
                 <jsp:include page="../common/footer.jsp" />
+                <style>
+                    .essay-math-bar { display:flex; gap:.4rem; flex-wrap:wrap; margin-bottom:.5rem; }
+                    .essay-math-btn { padding:.2rem .65rem; border:0; border-radius:8px; cursor:pointer; background:#f1f5f9; color:#334155; font-size:.9rem; line-height:1.5; transition:background .15s,color .15s; }
+                    .essay-math-btn:hover { background:#e0e7ff; color:#4338ca; }
+                    .essay-math-preview { margin-top:.5rem; padding:.5rem .8rem; border-radius:10px; background:#f8fafc; border:1px dashed #cbd5e1; overflow-x:auto; }
+                    .essay-math-preview[hidden] { display:none; }
+                </style>
+                <script>
+                    // Thanh ký hiệu toán + xem trước LaTeX cho ô nhập lời giải
+                    document.addEventListener('DOMContentLoaded', () => {
+                        const ta = document.getElementById('essayAnswer');
+                        const preview = document.getElementById('essayMathPreview');
+                        if (!ta || !preview) return;
+                        const MATH = {
+                            delimiters: [
+                                { left: '$$', right: '$$', display: true },
+                                { left: '$', right: '$', display: false },
+                                { left: '\\[', right: '\\]', display: true },
+                                { left: '\\(', right: '\\)', display: false }
+                            ],
+                            throwOnError: false
+                        };
+                        let timer = null;
+                        function update() {
+                            clearTimeout(timer);
+                            if (!ta.value.trim()) { preview.hidden = true; preview.textContent = ''; return; }
+                            timer = setTimeout(() => {
+                                preview.textContent = ta.value;
+                                preview.hidden = false;
+                                if (window.renderMathInElement) renderMathInElement(preview, MATH);
+                            }, 300);
+                        }
+                        ta.addEventListener('input', update);
+                        document.querySelectorAll('.essay-math-btn').forEach(btn => btn.addEventListener('click', () => {
+                            const snippet = '$' + btn.dataset.tex + '$';
+                            const back = parseInt(btn.dataset.back || '0', 10);
+                            const s = ta.selectionStart, e = ta.selectionEnd;
+                            ta.value = ta.value.slice(0, s) + snippet + ta.value.slice(e);
+                            const pos = s + snippet.length - back;
+                            ta.focus();
+                            ta.setSelectionRange(pos, pos);
+                            update();
+                        }));
+                    });
+                </script>
                 <script>
                     // Xử lý Custom Dropzone cho dạng tải ảnh
                     document.addEventListener('DOMContentLoaded', () => {

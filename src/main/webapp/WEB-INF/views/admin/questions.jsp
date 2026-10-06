@@ -38,7 +38,7 @@
                                                 </td>
                                                 <td class="fw-semibold"
                                                     style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                                                    <c:out value="${q.content}" />
+                                                    <ui:rich-text value="${q.content}" />
                                                 </td>
                                                 <td>
                                                     <span class="badge ${q.questionType=='MCQ'?'bg-primary':'bg-info'}">

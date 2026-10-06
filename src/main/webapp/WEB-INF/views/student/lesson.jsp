@@ -85,7 +85,7 @@
                                                 <i class="bi bi-book-half me-2 text-primary"></i>Nội dung lý thuyết
                                             </div>
                                             <div class="card-body p-4 latex-content" style="font-size:1rem;line-height:1.7;">
-                                                <c:out value="${lesson.content}" />
+                                                <ui:rich-text value="${lesson.content}" />
                                             </div>
                                         </div>
                                     </div>
@@ -125,7 +125,7 @@
                                                                 <div class="small text-muted mt-1 text-break"><c:out value="${m.url}" /></div>
                                                             </c:when>
                                                             <c:when test="${m.materialType == 'TEXT'}">
-                                                                <div class="latex-content" style="white-space:pre-wrap;line-height:1.7;"><c:out value="${m.contentText}" /></div>
+                                                                <div class="latex-content" style="white-space:pre-wrap;line-height:1.7;"><ui:rich-text value="${m.contentText}" /></div>
                                                             </c:when>
                                                         </c:choose>
                                                     </div>

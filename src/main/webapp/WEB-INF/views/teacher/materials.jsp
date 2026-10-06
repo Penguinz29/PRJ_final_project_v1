@@ -91,7 +91,7 @@
                                             <td class="text-muted"
                                                 style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                                                 <c:choose>
-                                                    <c:when test="${m.materialType == 'TEXT'}"><c:out value="${m.contentText}" /></c:when>
+                                                    <c:when test="${m.materialType == 'TEXT'}"><ui:rich-text value="${m.contentText}" /></c:when>
                                                     <c:otherwise><c:out value="${m.url}" /></c:otherwise>
                                                 </c:choose>
                                             </td>

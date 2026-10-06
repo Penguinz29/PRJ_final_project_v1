@@ -123,7 +123,7 @@
                                                                     </td>
                                                                     <td style="max-width:280px;">
                                                                         <div class="text-truncate">
-                                                                            <c:out value="${q.content}" />
+                                                                            <ui:rich-text value="${q.content}" />
                                                                         </div>
                                                                     </td>
                                                                     <td>

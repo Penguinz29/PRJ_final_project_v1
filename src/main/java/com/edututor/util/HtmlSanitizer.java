@@ -32,4 +32,25 @@ public final class HtmlSanitizer {
         Document.OutputSettings out = new Document.OutputSettings().prettyPrint(false);
         return Jsoup.clean(text, "", Safelist.none(), out);
     }
+
+    private static final Safelist RICH = Safelist.none()
+            .addTags("p", "br", "b", "i", "u", "strong", "em", "sub", "sup", "ul", "ol", "li", "div", "span",
+                    "h1", "h2", "h3", "h4", "h5", "h6", "table", "thead", "tbody", "tr", "th", "td");
+
+    /** Thẻ được giữ lại; mọi dấu '<' khác (vd. $a<b$) được escape trước khi parse. */
+    private static final Pattern STRAY_LT = Pattern.compile(
+            "<(?!/?(p|br|b|i|u|strong|em|sub|sup|ul|ol|li|div|span|h[1-6]|table|thead|tbody|tr|th|td)\\b)");
+
+    /**
+     * Dùng khi hiển thị nội dung có thể chứa HTML đơn giản (p, ul, b...) lẫn công thức LaTeX:
+     * giữ thẻ định dạng an toàn, bỏ mọi thẻ/thuộc tính khác (script, onerror...).
+     */
+    public static String toSafeHtml(String text) {
+        if (text == null || text.isEmpty()) {
+            return "";
+        }
+        String protectedText = STRAY_LT.matcher(text).replaceAll("&lt;");
+        Document.OutputSettings out = new Document.OutputSettings().prettyPrint(false);
+        return Jsoup.clean(protectedText, "", RICH, out);
+    }
 }
