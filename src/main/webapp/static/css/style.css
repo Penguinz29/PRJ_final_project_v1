@@ -1645,8 +1645,15 @@ h6 {
 }
 
 @keyframes flame-bounce {
-  0%, 100% { transform: scale(1) translateY(0); }
-  50% { transform: scale(1.1) translateY(-2px); }
+
+  0%,
+  100% {
+    transform: scale(1) translateY(0);
+  }
+
+  50% {
+    transform: scale(1.1) translateY(-2px);
+  }
 }
 
 .streak-status-badge {
@@ -1749,9 +1756,12 @@ h6 {
 }
 
 @keyframes today-pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4), 0 2px 6px rgba(99, 102, 241, 0.3);
   }
+
   50% {
     box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.18), 0 4px 10px rgba(99, 102, 241, 0.45);
   }
@@ -1872,8 +1882,10 @@ h6 {
   overflow: hidden;
   /* Show only the first character via CSS */
   text-indent: 0;
-  letter-spacing: -34px; /* pushes subsequent chars out of view */
-  padding-left: 9px;     /* re-centers the first char */
+  letter-spacing: -34px;
+  /* pushes subsequent chars out of view */
+  padding-left: 9px;
+  /* re-centers the first char */
   user-select: none;
 }
 
@@ -1925,7 +1937,7 @@ h6 {
 }
 
 /* ── row wrapper for the teacher full-width layout ── */
-.row.g-4 > .col-12 {
+.row.g-4>.col-12 {
   /* ensure hero banner inside col-12 gets full-width treatment */
   width: 100%;
 }
@@ -1978,8 +1990,15 @@ h6 {
 }
 
 @keyframes streak-flame-bounce {
-  0%, 100% { transform: scale(1) translateY(0); }
-  50%      { transform: scale(1.12) translateY(-2px); }
+
+  0%,
+  100% {
+    transform: scale(1) translateY(0);
+  }
+
+  50% {
+    transform: scale(1.12) translateY(-2px);
+  }
 }
 
 .streak-cal-count {
@@ -2088,8 +2107,15 @@ h6 {
 }
 
 @keyframes streak-today-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, .35); }
-  50%      { box-shadow: 0 0 0 4px rgba(99, 102, 241, .15); }
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, .35);
+  }
+
+  50% {
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, .15);
+  }
 }
 
 /* ── Legend ── */
@@ -2135,4 +2161,4 @@ h6 {
 .streak-cal-dot--future {
   background: #f8fafc;
   border: 1px dashed var(--border);
-}
+}

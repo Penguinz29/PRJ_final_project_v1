@@ -1,0 +1,256 @@
+/* ==========================================================
+   ai-tutor.css - chỉ dùng cho trang Hỏi AI từng bước
+   Mọi quy tắc nằm dưới .tutor-page
+   ========================================================== */
+
+.tutor-page {
+  --tt-primary: #4f46e5;
+  --tt-primary-dark: #4338ca;
+  --tt-primary-soft: #eef2ff;
+  --tt-ai: #7c3aed;
+  --tt-ai-soft: #f5f3ff;
+  --tt-text: #0f172a;
+  --tt-muted: #64748b;
+  --tt-border: #e2e8f0;
+  --tt-surface: #ffffff;
+  --tt-soft: #f8fafc;
+  --tt-thread-w: 760px;
+  --tt-radius: 16px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  height: calc(100dvh - var(--app-navbar-h, 60px) - 3rem);
+  min-height: 520px;
+  color: var(--tt-text);
+}
+
+/* ---------- Header trang ---------- */
+.tutor-page .tt-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem; flex-wrap: wrap;
+}
+.tutor-page .tt-title { display: flex; align-items: center; gap: .75rem; }
+.tutor-page .tt-title-icon {
+  width: 44px; height: 44px; border-radius: 12px; flex: none;
+  display: grid; place-items: center; font-size: 1.4rem;
+  background: var(--tt-ai-soft); color: var(--tt-ai);
+}
+.tutor-page .tt-title h1 { font-size: 1.4rem; font-weight: 700; margin: 0; line-height: 1.2; }
+.tutor-page .tt-title p { margin: .1rem 0 0; font-size: .9rem; color: var(--tt-muted); }
+
+/* ---------- Lưới 2 cột ---------- */
+.tutor-page .tt-grid {
+  flex: 1; min-height: 0;
+  display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 1.25rem;
+}
+
+/* ---------- Khung chat ---------- */
+.tutor-page .tt-chat {
+  display: flex; flex-direction: column; min-width: 0; min-height: 0;
+  background: var(--tt-surface); border: 1px solid var(--tt-border);
+  border-radius: var(--tt-radius); box-shadow: 0 1px 3px rgba(15, 23, 42, .06);
+  overflow: hidden;
+}
+.tutor-page .tt-chat-head {
+  display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+  padding: .75rem 1.25rem; border-bottom: 1px solid var(--tt-border);
+  background: var(--tt-surface);
+}
+.tutor-page .tt-progress {
+  flex: 1; min-width: 80px; height: 6px; border-radius: 99px;
+  background: var(--tt-border); overflow: hidden;
+}
+.tutor-page .tt-progress > * { height: 100%; background: var(--tt-primary); border-radius: 99px; }
+
+/* ---------- Vùng tin nhắn (cuộn) ---------- */
+.tutor-page .chat-box {
+  flex: 1; min-height: 0; height: auto; max-height: none;
+  overflow-y: auto; scroll-behavior: smooth;
+  display: flex; flex-direction: column; gap: 1rem;
+  padding: 1.25rem max(1.25rem, calc((100% - var(--tt-thread-w)) / 2));
+  background: var(--tt-surface);
+}
+.tutor-page .chat-message {
+  display: flex; align-items: flex-start; gap: .6rem; max-width: 100%;
+}
+.tutor-page .chat-message.user { justify-content: flex-end; }
+
+.tutor-page .chat-message .avatar {
+  width: 32px; height: 32px; flex: none; border-radius: 50%;
+  display: grid; place-items: center; font-size: 1rem;
+  background: #ede9fe; color: #6d28d9;
+}
+.tutor-page .chat-message.user .avatar { display: none; }
+
+.tutor-page .chat-message .bubble {
+  position: relative; min-width: 0;
+  padding: .7rem 1rem; border-radius: 14px;
+  line-height: 1.65; font-size: .97rem;
+}
+.tutor-page .chat-message.bot .bubble {
+  max-width: min(720px, calc(100% - 44px));
+  padding-right: 2.5rem;
+  background: var(--tt-soft); border: 1px solid var(--tt-border);
+  border-top-left-radius: 4px; color: var(--tt-text);
+}
+.tutor-page .chat-message.user .bubble {
+  max-width: 75%;
+  background: var(--tt-primary); color: #fff;
+  border: 1px solid var(--tt-primary); border-bottom-right-radius: 4px;
+}
+.tutor-page .chat-message .bubble--warn {
+  background: #fffbeb; border-color: #fde68a; color: #92400e;
+}
+.tutor-page .chat-message.bot .bubble--error {
+  background: #fef2f2; border-color: #fecaca; color: #991b1b;
+}
+
+.tutor-page .chat-message .bubble-text {
+  white-space: pre-wrap; overflow-wrap: break-word; word-break: normal;
+}
+.tutor-page .chat-message .bubble-ask {
+  margin-top: .6rem; padding: .55rem .8rem; font-weight: 600;
+  background: var(--tt-ai-soft); color: #4c1d95;
+  border-left: 3px solid var(--tt-ai); border-radius: 8px;
+  white-space: pre-wrap; overflow-wrap: break-word;
+}
+
+/* ---------- KaTeX trong bong bóng ---------- */
+.tutor-page .bubble .katex { font-size: 1.05em; }
+.tutor-page .bubble .katex-display {
+  margin: .6em 0; padding: .2em 0; overflow-x: auto; overflow-y: hidden;
+}
+
+/* ---------- Nút sao chép ---------- */
+.tutor-page .bubble-copy {
+  position: absolute; top: 6px; right: 6px; width: 28px; height: 28px;
+  display: grid; place-items: center; padding: 0;
+  border: 0; border-radius: 8px; background: transparent;
+  color: #94a3b8; font-size: .9rem; cursor: pointer;
+  opacity: 0; transition: opacity .15s, background .15s, color .15s;
+}
+.tutor-page .bubble:hover .bubble-copy,
+.tutor-page .bubble-copy:focus-visible { opacity: 1; }
+.tutor-page .bubble-copy:hover { background: var(--tt-primary-soft); color: var(--tt-primary); }
+@media (hover: none) { .tutor-page .bubble-copy { opacity: .7; } }
+
+/* ---------- "AI đang suy nghĩ" ---------- */
+.tutor-page .typing-indicator { display: inline-flex; gap: 4px; padding: .45rem 0; }
+.tutor-page .typing-indicator span {
+  width: 7px; height: 7px; border-radius: 50%; background: #a5b4fc;
+  animation: tt-bounce 1.2s infinite ease-in-out;
+}
+.tutor-page .typing-indicator span:nth-child(2) { animation-delay: .15s; }
+.tutor-page .typing-indicator span:nth-child(3) { animation-delay: .30s; }
+@keyframes tt-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: .5; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tutor-page .typing-indicator span { animation: none; }
+  .tutor-page .chat-box { scroll-behavior: auto; }
+}
+
+/* ---------- Khu nhập liệu ---------- */
+.tutor-page .tt-composer-wrap {
+  padding: .75rem max(1.25rem, calc((100% - var(--tt-thread-w)) / 2)) 1rem;
+  background: var(--tt-surface); border-top: 1px solid var(--tt-border);
+}
+.tutor-page .tt-math-bar {
+  display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: .5rem;
+}
+.tutor-page .tt-math-btn {
+  padding: .2rem .65rem; border: 0; border-radius: 8px; cursor: pointer;
+  background: #f1f5f9; color: #334155; font-size: .9rem; line-height: 1.5;
+  transition: background .15s, color .15s;
+}
+.tutor-page .tt-math-btn:hover { background: #e0e7ff; color: #4338ca; }
+.tutor-page .tt-preview {
+  margin-bottom: .5rem; padding: .45rem .8rem; border-radius: 10px;
+  background: var(--tt-soft); border: 1px dashed #cbd5e1; font-size: .95rem;
+  overflow-x: auto;
+}
+.tutor-page .tt-preview[hidden], .tutor-page .tt-preview:empty { display: none; }
+
+.tutor-page .tt-composer {
+  position: relative; background: #fff;
+  border: 1px solid #cbd5e1; border-radius: 18px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .06);
+  transition: border-color .15s, box-shadow .15s;
+}
+.tutor-page .tt-composer:focus-within {
+  border-color: #6366f1; box-shadow: 0 0 0 4px rgba(99, 102, 241, .15);
+}
+.tutor-page .tt-composer textarea {
+  display: block; width: 100%; max-height: 9rem; resize: none;
+  border: 0; outline: 0; background: transparent; box-shadow: none;
+  padding: .85rem 3.6rem .85rem 1rem;
+  font: inherit; line-height: 1.5; color: var(--tt-text);
+}
+.tutor-page .tt-composer textarea:disabled { color: var(--tt-muted); cursor: not-allowed; }
+.tutor-page .tt-composer:has(textarea:disabled) { background: #f1f5f9; }
+
+.tutor-page .tt-send {
+  position: absolute; right: .55rem; bottom: .55rem;
+  width: 38px; height: 38px; padding: 0; border: 0; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--tt-primary); color: #fff; cursor: pointer;
+  transition: background .15s;
+}
+.tutor-page .tt-send:hover { background: var(--tt-primary-dark); }
+.tutor-page .tt-send:disabled { background: #c7d2fe; cursor: not-allowed; }
+.tutor-page .tt-hint {
+  margin-top: .4rem; text-align: center; font-size: .78rem; color: var(--tt-muted);
+}
+
+/* ---------- Cột "Phiên gần đây" ---------- */
+.tutor-page .tt-side { min-height: 0; overflow-y: auto; }
+.tutor-page .tt-side-card {
+  background: var(--tt-surface); border: 1px solid var(--tt-border);
+  border-radius: var(--tt-radius); padding: .9rem;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .06);
+}
+.tutor-page .tt-side-title {
+  display: flex; align-items: center; gap: .5rem;
+  margin: 0 0 .6rem; font-size: 1rem; font-weight: 700;
+}
+.tutor-page .tt-session {
+  display: block; padding: .7rem .8rem; border-radius: 12px;
+  border: 1px solid transparent; color: inherit; text-decoration: none;
+  transition: background .15s, border-color .15s;
+}
+.tutor-page .tt-session:hover { background: var(--tt-soft); border-color: var(--tt-border); }
+.tutor-page .tt-session + .tt-session { margin-top: .25rem; }
+.tutor-page .tt-session-title {
+  font-weight: 600; font-size: .92rem; line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.tutor-page .tt-session-meta {
+  display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+  margin-top: .4rem; font-size: .78rem; color: var(--tt-muted);
+}
+
+/* ---------- Badge trạng thái ---------- */
+.tutor-page .tt-badge {
+  display: inline-flex; align-items: center; gap: .25rem;
+  padding: .15rem .6rem; border-radius: 99px;
+  font-size: .72rem; font-weight: 600; white-space: nowrap;
+}
+.tutor-page .tt-badge--active    { background: #ffedd5; color: #9a3412; }
+.tutor-page .tt-badge--done      { background: #dcfce7; color: #166534; }
+.tutor-page .tt-badge--abandoned { background: #f1f5f9; color: #475569; }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 991.98px) {
+  .tutor-page { height: auto; min-height: 0; }
+  .tutor-page .tt-grid { grid-template-columns: 1fr; }
+  .tutor-page .tt-chat { height: calc(100dvh - var(--app-navbar-h, 60px) - 8rem); min-height: 460px; }
+  .tutor-page .tt-side { overflow: visible; }
+}
+@media (max-width: 575.98px) {
+  .tutor-page .chat-box { padding: 1rem .75rem; }
+  .tutor-page .tt-composer-wrap { padding: .6rem .75rem .8rem; }
+  .tutor-page .chat-message.user .bubble { max-width: 90%; }
+  .tutor-page .tt-math-bar { flex-wrap: nowrap; overflow-x: auto; padding-bottom: .25rem; }
+}
