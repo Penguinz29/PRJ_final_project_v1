@@ -11,6 +11,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -26,9 +27,9 @@ public interface QuestionRepository extends JpaRepository<Question, Integer>, Jp
     List<Question> findByLesson_LessonIdAndQuestionTypeOrderByCreatedAtAscQuestionIdAsc(Integer lessonId,
                                                                                          QuestionType type);
 
-    /** Học sinh: làm bài, nộp bài, gia sư (kể cả câu đã xóa mềm). */
+    /** Học sinh: làm bài, nộp bài, gia sư — chỉ khi bài học chứa câu hỏi còn hoạt động. */
     @EntityGraph(attributePaths = "lesson")
-    Optional<Question> findWithLessonByQuestionId(Integer questionId);
+    Optional<Question> findWithLessonByQuestionIdAndLessonActiveTrue(Integer questionId);
 
     /** Giáo viên: chỉ câu đang hoạt động (sửa / xóa). */
     @EntityGraph(attributePaths = "lesson")
@@ -43,6 +44,11 @@ public interface QuestionRepository extends JpaRepository<Question, Integer>, Jp
 
     long countByLesson_LessonId(Integer lessonId);
 
+    /** Xóa mềm bài học thì xóa mềm luôn mọi câu hỏi (bài tập) của bài đó. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update Question q set q.active = false where q.lesson.lessonId = :lessonId")
+    int deactivateByLessonId(@Param("lessonId") Integer lessonId);
+
     long countByActiveTrue();
 
     /** UC-ADM-08: câu hỏi đang hoạt động do AI sinh. */
@@ -50,8 +56,8 @@ public interface QuestionRepository extends JpaRepository<Question, Integer>, Jp
 
     /**
      * UC-STU-03: chọn NGẪU NHIÊN tối đa {@code limit} câu trắc nghiệm của bài (ORDER BY NEWID()), lọc mức độ nếu
-     * {@code level} &gt; 0. Chỉ chọn cột được phép (không is_correct, không lời giải — BR-11, TC-SEC-08). Phía học sinh
-     * không lọc IsActive (nội dung xóa mềm vẫn ôn tập được). Tham số có tên, không nối chuỗi.
+     * {@code level} &gt; 0. Chỉ chọn cột được phép (không is_correct, không lời giải — BR-11, TC-SEC-08). Bài học đã xóa
+     * bị chặn ở tầng service. Tham số có tên, không nối chuỗi.
      */
     @Query(value = "SELECT TOP (:limit) q.QuestionId AS questionId, q.Content AS content, q.[Level] AS level, "
             + "q.IsAiGenerated AS aiGenerated FROM Questions q "

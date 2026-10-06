@@ -5,7 +5,7 @@
 | Thông tin | Nội dung |
 |---|---|
 | Đồ án | PRJ301 — Spring MVC 6 + Spring Data JPA (Hibernate) + SQL Server + Gemini API |
-| Phiên bản | 2.1.4 (khớp FRS với mã nguồn sau đợt rà soát backend: upload (không kiểm MIME), quy tắc `/uploads/**`, mã lỗi AI 6.1, UC-STU-04, UC-ADM-08, tên lớp / DTO, 1.7 ánh xạ tên cột và kiểu dữ liệu, bổ sung mục 10; dữ liệu mẫu phong phú nằm trong `02_data.sql`). 2.1.3 (rà soát tài liệu so với mã nguồn: cập nhật 1.1, UC-ADM-04/08, UC-TEA-05, UC-STU-07, 4.3, 6.1 và viết lại mục 10 theo hiện trạng). 2.1.2 (đồng bộ với mã nguồn: script SQL `01_schema.sql` + `02_data.sql`, BR-03 bài học, OCR `legible`/WebP, BR-09 tách điểm, hồ sơ cá nhân, kết quả theo câu, tiến độ BR-10, dashboard Admin, trắc nghiệm ngẫu nhiên + chấm từng câu; thêm mục 10 "Hiện trạng triển khai"). 2.1.1: BR-05 xóa mềm chỉ ẩn ở phía quản lý, học sinh vẫn ôn tập được; nút Xóa báo trước kết quả. 2.1.0: chuyển tầng dữ liệu sang JPA; bổ sung Bean Validation, đối chiếu rubric |
+| Phiên bản | 2.1.4 (khớp FRS với mã nguồn sau đợt rà soát backend: upload (không kiểm MIME), quy tắc `/uploads/**`, mã lỗi AI 6.1, UC-STU-04, UC-ADM-08, tên lớp / DTO, 1.7 ánh xạ tên cột và kiểu dữ liệu, bổ sung mục 10; dữ liệu mẫu phong phú nằm trong `02_data.sql`). 2.1.3 (rà soát tài liệu so với mã nguồn: cập nhật 1.1, UC-ADM-04/08, UC-TEA-05, UC-STU-07, 4.3, 6.1 và viết lại mục 10 theo hiện trạng). 2.1.2 (đồng bộ với mã nguồn: script SQL `01_schema.sql` + `02_data.sql`, BR-03 bài học, OCR `legible`/WebP, BR-09 tách điểm, hồ sơ cá nhân, kết quả theo câu, tiến độ BR-10, dashboard Admin, trắc nghiệm ngẫu nhiên + chấm từng câu; thêm mục 10 "Hiện trạng triển khai"). 2.1.1: nút Xóa báo trước kết quả. (Sau 2.1.4: chủ đề / bài học đã xóa mềm ẩn cả với học sinh; chỉ người tạo hoặc Admin được xóa.) 2.1.0: chuyển tầng dữ liệu sang JPA; bổ sung Bean Validation, đối chiếu rubric |
 | Liên quan | `EduTutor_SRS.md` (yêu cầu), `EduTutor_Database.sql` (CSDL) |
 | Quy ước tham chiếu | Bộ tài liệu gốc đặt trong `docs/`. Trong repo hiện tại: `document/SRS.md` ≙ `EduTutor_SRS.md`, `document/FRS.md` ≙ `EduTutor_FRS.md`, `document/sql/01_schema.sql` + `02_data.sql` ≙ `EduTutor_Database.sql` (cấu trúc + dữ liệu mẫu, xem mục 1.7). Tài khoản mẫu `admin`, `teacher1`, `student1`…, mật khẩu **`EduTutor@123`** |
 
@@ -174,7 +174,7 @@ Kiến trúc chuẩn gồm **10 bảng / 10 Entity**. Các thuộc tính sau là
 |---|---|---|---|
 | `questions` | `is_active` | `BIT NOT NULL DEFAULT 1` | BR-05, UC-TEA-04: lọc ở mọi truy vấn **phía quản lý**; phía học sinh (quiz, tự luận, gia sư) không lọc |
 | `lessons` | `order_index` (cột `DisplayOrder`) | `INT NULL DEFAULT 0` (service dùng 0 khi không nhập) | UC-TEA-02, sắp xếp bài học |
-| `lessons`, `topics` | `is_active` | `BIT NOT NULL DEFAULT 1` | BR-05 (xóa mềm khi còn lịch sử; chỉ ẩn ở phía quản lý) |
+| `lessons`, `topics` | `is_active` | `BIT NOT NULL DEFAULT 1` | BR-05 (xóa mềm khi còn lịch sử; ẩn với cả giáo viên và học sinh) |
 | `topics` | `order_index` | `INT NOT NULL DEFAULT 1` | UC-TEA-01 |
 | `lesson_materials` | `order_index`, `created_by` | `INT NOT NULL DEFAULT 1`, `INT NOT NULL` FK → `users` | UC-TEA-03, BR-03 |
 | `lessons` | `created_by` | `INT NOT NULL` FK → `users` (khi tạo = người tạo bài học) | UC-TEA-02, BR-03 |
@@ -442,8 +442,8 @@ Quyền: `TEACHER` và `ADMIN`. Quy tắc sở hữu BR-03 áp dụng cho **toà
 
 **Xóa và xóa mềm (BR-05, áp dụng cho UC-TEA-01, 02, 04):**
 - Việc xóa luôn do giáo viên / Admin **chủ động** bấm Xóa và xác nhận; hệ thống chỉ quyết định *cách* xóa (xóa hẳn hay xóa mềm) theo lịch sử dữ liệu. "Có lịch sử" = có bài nộp (`submissions`) hoặc phiên gia sư (`tutor_sessions.question_id`) liên quan.
-- **Phạm vi ẩn:** bản ghi `is_active = 0` chỉ bị ẩn ở **phía quản lý** — danh sách chủ đề / bài học / ngân hàng câu hỏi, form sửa và thao tác xóa (bản ghi đã xóa mềm coi như không tồn tại → 404), danh sách chọn bài học khi soạn câu hỏi / sinh đề AI / thêm bài giảng, số liệu dashboard giáo viên và Admin. **Phía học sinh không lọc `is_active`**: học sinh vẫn thấy chủ đề / bài học, xem bài giảng, luyện trắc nghiệm, nộp tự luận và hỏi gia sư trên nội dung đã xóa mềm để **ôn tập**; lịch sử làm bài giữ nguyên.
-- **Báo trước kết quả:** khi hiển thị danh sách quản lý, server tính sẵn `deleteMode` cho từng dòng bằng các truy vấn gộp `IN` (không N+1): `HARD` (chưa có lịch sử → hộp xác nhận báo "xóa hẳn, không hoàn tác được"), `SOFT` (có lịch sử → báo "chỉ ẩn khỏi trang quản lý, học sinh vẫn ôn tập được"), `BLOCKED` (còn mục con đang hoạt động → nút Xóa bị khóa, hiện lý do). Thành phần dùng lại: `WEB-INF/tags/delete-button.tag` (mọi chuỗi đưa vào thuộc tính HTML qua `fn:escapeXml`). Server vẫn kiểm tra lại khi nhận request xóa.
+- **Quyền xóa:** chỉ **người tạo** (giáo viên đã đăng chủ đề / bài học) hoặc **Admin** được xóa; giáo viên khác nhận 403. **Phạm vi ẩn:** chủ đề / bài học `is_active = 0` bị ẩn ở **cả phía quản lý lẫn phía học sinh** — danh sách chủ đề / bài học, form sửa và thao tác xóa (coi như không tồn tại → 404), danh sách chọn bài học khi soạn câu hỏi / sinh đề AI / thêm bài giảng, số liệu dashboard, danh sách chủ đề, trang bài học, luyện trắc nghiệm, tự luận và tiến độ của học sinh; học sinh không còn mở được bài học đã xóa, không làm / nộp / hỏi gia sư trên câu hỏi thuộc bài đó. Lịch sử làm bài trong CSDL giữ nguyên. *Lưu ý:* câu hỏi bị xóa mềm riêng lẻ trong một bài học còn hoạt động chưa bị ẩn với học sinh.
+- **Báo trước kết quả:** khi hiển thị danh sách quản lý, server tính sẵn `deleteMode` cho từng dòng bằng các truy vấn gộp `IN` (không N+1): `HARD` (chưa có lịch sử → hộp xác nhận báo "xóa hẳn, không hoàn tác được"), `SOFT` (có lịch sử → báo "xóa mềm: biến mất với giáo viên và học sinh, lịch sử giữ nguyên"), `BLOCKED` (còn mục con đang hoạt động → nút Xóa bị khóa, hiện lý do). Thành phần dùng lại: `WEB-INF/tags/delete-button.tag` (mọi chuỗi đưa vào thuộc tính HTML qua `fn:escapeXml`). Server vẫn kiểm tra lại khi nhận request xóa.
 
 #### UC-TEA-01 — Quản lý chủ đề / môn học (FR-TEA-01)
 
@@ -457,7 +457,7 @@ Chủ đề (`topics`) cùng bài học (`lessons`) là hai cấp "chuyên đề
 | `POST /teacher/topics/{id}/delete` | Xóa |
 
 - Validate VAL-06; tên chủ đề duy nhất (không phân biệt hoa thường) → 409 nếu trùng.
-- Xóa (BR-05): `lessonRepository.countByTopicIdAndIsActiveTrue(topicId) > 0` → 409 "Chủ đề còn bài học". Nếu không còn bài học đang hoạt động: xóa cứng khi chủ đề không còn bài học nào, ngược lại xóa mềm (`topics.is_active = 0`). Danh sách quản lý chỉ hiển thị `is_active = 1` (phía học sinh vẫn thấy). Tên chủ đề chỉ cần duy nhất trong các chủ đề đang hoạt động.
+- Xóa (BR-05): `lessonRepository.countByTopicIdAndIsActiveTrue(topicId) > 0` → 409 "Chủ đề còn bài học". Nếu không còn bài học đang hoạt động: xóa cứng khi chủ đề không còn bài học nào, ngược lại xóa mềm (`topics.is_active = 0`). Danh sách quản lý và danh sách của học sinh chỉ hiển thị `is_active = 1`; chỉ người tạo chủ đề hoặc Admin được xóa. Tên chủ đề chỉ cần duy nhất trong các chủ đề đang hoạt động.
 
 #### UC-TEA-02 — Quản lý bài học (FR-TEA-02)
 
@@ -469,8 +469,8 @@ Chủ đề (`topics`) cùng bài học (`lessons`) là hai cấp "chuyên đề
 
 - `topicId` phải tồn tại; `contentSummary` cho phép LaTeX (làm sạch bằng `HtmlSanitizer`).
 - **BR-03:** khi tạo, ghi `created_by` = người đang đăng nhập. Chỉ người tạo hoặc Admin được mở form sửa / sửa / xóa (sai chủ → 403); Admin sửa không đổi `created_by`. Giáo viên chỉ được **thêm bài học vào chủ đề do mình tạo** (Admin: mọi chủ đề) — giao diện chỉ liệt kê chủ đề của mình (Admin thấy mọi chủ đề, để sửa bài học của giáo viên khác mà không bị chuyển sang chủ đề khác), server vẫn kiểm tra lại. Danh sách chỉ hiện nút Sửa / Xóa cho người tạo hoặc Admin; giáo viên khác vẫn xem được bài học (nội dung dùng chung). Xóa tài khoản giáo viên đã tạo bài học → chỉ xóa mềm (BR-06).
-- Xóa (BR-05): chỉ chặn khi bài học còn câu hỏi **đang hoạt động** — `questionRepository.countByLessonIdAndIsActiveTrue(lessonId) == 0` (SQL tương đương: `SELECT COUNT(*) FROM questions WHERE lesson_id = ? AND is_active = 1`). Còn → 409 "Bài học còn câu hỏi đang hoạt động".
-  - Nếu bài học **chỉ còn câu hỏi đã xóa mềm** (`is_active = 0`): cho phép xóa. Không còn bài nộp / phiên gia sư nào liên quan → xóa cứng bài học (câu hỏi và bài giảng xóa theo `ON DELETE CASCADE`). Còn (để bảo toàn lịch sử) → xóa mềm bài học (`lessons.is_active = 0`, ẩn khỏi trang quản lý; học sinh vẫn ôn tập được).
+- Xóa (BR-05): xóa bài học thì **bài tập (câu hỏi) của bài cũng mất theo** — không còn chặn khi bài còn câu hỏi.
+  - Không còn bài nộp / phiên gia sư nào liên quan → xóa cứng bài học (câu hỏi và bài giảng xóa theo `ON DELETE CASCADE`). Còn (để bảo toàn lịch sử) → xóa mềm bài học (`lessons.is_active = 0`) **và toàn bộ câu hỏi của bài** (`questions.is_active = 0`); ẩn khỏi trang quản lý và khỏi học sinh.
   - Bài giảng (`lesson_materials`) bị xóa theo (`ON DELETE CASCADE`) sau khi có xác nhận ở giao diện.
 - Danh sách quản lý và truy vấn chọn bài học khi soạn nội dung chỉ lấy `is_active = 1`, sắp theo `order_index`.
 
@@ -663,7 +663,7 @@ FROM question_options WHERE question_id IN (?, ?, …) ORDER BY question_id, opt
 | Request | `{ "questionId": 102, "selectedOptionId": 408 }` |
 
 **Luồng chính**
-1. Kiểm tra câu hỏi tồn tại, `MULTIPLE_CHOICE` (không lọc `is_active`: học sinh vẫn ôn tập câu đã xóa mềm — BR-05).
+1. Kiểm tra câu hỏi tồn tại, `MULTIPLE_CHOICE` (không lọc `is_active` của câu hỏi, nhưng bài học chứa câu phải còn `is_active = 1`, nếu không coi như câu hỏi không tồn tại — BR-05).
 2. **Kiểm tra `selectedOptionId` thuộc `questionId`** (chống gửi option của câu khác):
 ```sql
 SELECT option_id, option_label, is_correct FROM question_options WHERE question_id = ?
@@ -1305,4 +1305,4 @@ Mục này ghi những chỗ mã nguồn **hiện tại** còn khác đặc tả
 
 **Đã khắc phục trong lần rà soát 2.1.4:** Admin sửa bài học của giáo viên khác không còn bị chuyển sang chủ đề khác (danh sách chủ đề của Admin gồm mọi chủ đề); giáo viên không còn mở được form sửa câu hỏi của người khác (403 theo BR-03, trước đây chỉ chặn lúc lưu); lỗi Gemini HTTP 503 / 422 sau khi hết lần thử trả 502 với thông báo cố định (không còn lộ nguyên văn lỗi của Google; 503 "hệ thống AI đang bận" và 422 do hệ thống tự tạo giữ nguyên); bỏ nhánh đăng nhập bằng SHA-256 không salt (chỉ chấp nhận BCrypt, đúng FRS 1.4).
 
-**Quyết định của nhóm (khác đặc tả gốc, đã cập nhật vào SRS / FRS):** BR-05 — nội dung xóa mềm chỉ ẩn ở phía quản lý, học sinh vẫn ôn tập được.
+**Quyết định của nhóm (đã cập nhật vào SRS / FRS):** BR-05 — chủ đề / bài học đã xóa (mềm) không hiển thị với học sinh; chỉ người tạo hoặc Admin được xóa.

@@ -1569,8 +1569,8 @@ class EduTutorIT {
     }
 
     /**
-     * BR-05 / TC-TEA-01 / TC-TEA-03: chặn khi còn bản ghi đang hoạt động; còn lịch sử thì xóa mềm và ẩn khỏi trang
-     * quản lý của giáo viên. Học sinh vẫn xem / ôn tập được nội dung đã xóa mềm (quyết định của nhóm, lệch BR-05).
+     * BR-05 / TC-TEA-01 / TC-TEA-03: chủ đề còn bài học thì chặn; bài học xóa kèm bài tập; còn lịch sử thì xóa mềm và ẩn khỏi trang
+     * quản lý của giáo viên. Chủ đề / bài học đã xóa mềm cũng biến mất với học sinh.
      */
     @Test
     @Order(56)
@@ -1609,35 +1609,29 @@ class EduTutorIT {
         t.get("/teacher/questions");
         // Trang quản lý báo trước kết quả nút Xóa (giáo viên vẫn là người quyết định có xóa hay không)
         assertTrue(t.get("/teacher/topics").has("Không thể xóa: chủ đề còn 1 bài học"), "chủ đề: nút xóa bị khóa, nêu lý do");
-        assertTrue(t.get("/teacher/lessons?topicId=" + topicId).has("Không thể xóa: bài học còn 1 câu hỏi"));
         assertTrue(t.get("/teacher/questions?lessonId=" + lessonId).has("chỉ được ẩn khỏi trang quản lý"),
                 "câu đã có bài làm: báo trước là xóa mềm");
-        // TC-TEA-03 (1): bài học còn câu hỏi đang hoạt động → chặn
-        t.form("/teacher/lessons", Map.of("action", "delete", "id", "" + lessonId));
-        assertEquals(1, count("SELECT CAST(IsActive AS INT) FROM Lessons WHERE LessonId = ?", lessonId));
-        assertTrue(t.get("/teacher/lessons").has("câu hỏi đang hoạt động"));
         // TC-TEA-01: chủ đề còn bài học đang hoạt động → chặn
         t.form("/teacher/topics", Map.of("action", "delete", "id", "" + topicId));
         assertEquals(1, count("SELECT CAST(IsActive AS INT) FROM Topics WHERE TopicId = ?", topicId));
         t.get("/teacher/topics");
 
-        // Câu hỏi có bài nộp → xóa mềm
-        t.form("/teacher/questions", Map.of("action", "delete", "id", "" + qid));
-        assertEquals(0, count("SELECT CAST(IsActive AS INT) FROM Questions WHERE QuestionId = ?", qid));
-        t.get("/teacher/questions");
-        // TC-TEA-03 (2): chỉ còn câu đã xóa mềm → được xóa; còn bài nộp nên bài học bị xóa mềm
+        // TC-TEA-03: xóa bài học thì bài tập của bài cũng mất; còn bài nộp nên bài học và câu hỏi bị xóa mềm
         t.form("/teacher/lessons", Map.of("action", "delete", "id", "" + lessonId));
         assertEquals(0, count("SELECT CAST(IsActive AS INT) FROM Lessons WHERE LessonId = ?", lessonId));
+        assertEquals(0, count("SELECT CAST(IsActive AS INT) FROM Questions WHERE QuestionId = ?", qid),
+                "bài tập của bài đã xóa cũng bị ẩn");
+        assertFalse(t.get("/teacher/questions").has("it_Câu xóa mềm"), "giáo viên không còn thấy bài tập của bài đã xóa");
         assertTrue(t.get("/teacher/lessons").has("xóa mềm"));
         assertFalse(t.get("/teacher/lessons").has("it_Bài xóa mềm"), "bài học đã xóa mềm bị ẩn");
-        assertTrue(st.get("/student/topics").has("it_Bài xóa mềm"), "học sinh vẫn thấy bài đã xóa mềm để ôn tập");
-        assertEquals(200, st.get("/student/lesson?id=" + lessonId).status(), "học sinh vẫn mở được bài đã xóa mềm");
-        assertTrue(st.get("/student/quiz?lessonId=" + lessonId).has("it_Câu xóa mềm"), "vẫn luyện lại được");
+        assertFalse(st.get("/student/topics").has("it_Bài xóa mềm"), "học sinh không thấy bài đã xóa");
+        assertFalse(st.get("/student/lesson?id=" + lessonId).has("it_Bài xóa mềm"), "học sinh không mở được bài đã xóa");
+        assertFalse(st.get("/student/quiz?lessonId=" + lessonId).has("it_Câu xóa mềm"), "không luyện được bài đã xóa");
         // Chủ đề chỉ còn bài học đã xóa mềm → xóa mềm chủ đề
         t.form("/teacher/topics", Map.of("action", "delete", "id", "" + topicId));
         assertEquals(0, count("SELECT CAST(IsActive AS INT) FROM Topics WHERE TopicId = ?", topicId));
         assertFalse(t.get("/teacher/topics").has("it_Chủ đề xóa mềm"));
-        assertTrue(st.get("/student/topics").has("it_Chủ đề xóa mềm"), "học sinh vẫn thấy chủ đề đã xóa mềm");
+        assertFalse(st.get("/student/topics").has("it_Chủ đề xóa mềm"), "học sinh không thấy chủ đề đã xóa");
         // Lịch sử của học sinh vẫn còn
         assertEquals(1, count("SELECT COUNT(*) FROM Submissions WHERE QuestionId = ?", qid));
         // Tên chuyên đề đã xóa mềm được dùng lại

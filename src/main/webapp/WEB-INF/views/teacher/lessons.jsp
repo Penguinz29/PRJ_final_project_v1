@@ -119,8 +119,8 @@
                                                                             value="${l.lessonId}">
                                                                     </form>
                                                                     <ui:delete-button form="#delL${l.lessonId}" mode="${l.deleteMode}"
-                                                                        question="Xóa bài học '${l.title}'?"
-                                                                        softNote="Bài học đã có học sinh làm bài nên chỉ được ẩn khỏi trang quản lý (xóa mềm); học sinh vẫn ôn tập được, lịch sử giữ nguyên."
+                                                                        question="Xóa bài học '${l.title}' và toàn bộ bài tập của bài?"
+                                                                        softNote="Xóa bài học sẽ xóa luôn bài tập của bài. Vì đã có học sinh làm bài nên chỉ xóa mềm: bài học và bài tập biến mất với giáo viên và học sinh, lịch sử làm bài giữ nguyên."
                                                                         blockedReason="Không thể xóa: bài học còn ${l.questionCount} câu hỏi. Hãy xóa các câu hỏi trước." />
                                                                     </c:if>
                                                                 </td>

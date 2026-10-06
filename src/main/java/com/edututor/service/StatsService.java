@@ -184,7 +184,7 @@ public class StatsService {
         }
         ProgressView overall = new ProgressView(0, "", total, answered, correct);
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("totalTopics", progress.size()); // học sinh vẫn học được chuyên đề đã xóa mềm
+        m.put("totalTopics", progress.size()); // chỉ chuyên đề đang hoạt động (đã xóa thì học sinh không thấy)
         m.put("topicProgress", progress);
         m.put("overall", overall);
         Double essayAvg = submissions.latestEssayAverage(studentId);

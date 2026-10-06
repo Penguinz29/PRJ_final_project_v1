@@ -11,15 +11,7 @@ import org.springframework.data.repository.query.Param;
 
 public interface LessonRepository extends JpaRepository<Lesson, Integer> {
 
-    /** Học sinh: bài học của nhiều chuyên đề, kể cả đã xóa mềm, bằng MỘT truy vấn IN (không N+1). */
-    @EntityGraph(attributePaths = "topic")
-    List<Lesson> findByTopic_TopicIdInOrderByDisplayOrderAscLessonIdAsc(Collection<Integer> topicIds);
-
-    /** Học sinh: mở bài học kể cả đã xóa mềm. */
-    @EntityGraph(attributePaths = "topic")
-    Optional<Lesson> findWithTopicByLessonId(Integer lessonId);
-
-    // Trang quản lý của giáo viên / Admin: chỉ bài học đang hoạt động (IsActive = 1)
+    // Mọi truy vấn (học sinh lẫn giáo viên / Admin) chỉ lấy bài học đang hoạt động (IsActive = 1)
 
     @EntityGraph(attributePaths = "topic")
     List<Lesson> findByActiveTrueOrderByCreatedAtDescLessonIdDesc();

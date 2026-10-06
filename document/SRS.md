@@ -5,7 +5,7 @@
 | Thông tin | Nội dung |
 |---|---|
 | Đồ án | PRJ301 — Java Web Application |
-| Phiên bản tài liệu | 2.1.4 (đồng bộ NFR-05 và TC-AI-07 với FRS 2.1.4). 2.1.3 (rà soát tài liệu so với mã nguồn: sửa các lỗi XSS tiêu đề / lộ stack trace, ngân sách thời gian AI ≤ 90 s, `AiConfigException` → 503, sinh đề AI loại câu lỗi + cảnh báo, hạn mức AI chỉ trừ sau khi dữ liệu hợp lệ, xóa người dùng kiểm tra cả `reviewed_by`; các chỗ còn khác đặc tả liệt kê ở FRS mục 10). 2.1.2 (đồng bộ với mã nguồn: script SQL `01_schema.sql` + `02_data.sql`, BR-03 áp dụng khi tạo bài học, trắc nghiệm ngẫu nhiên + chấm từng câu, tiến độ theo lần làm gần nhất; hiện trạng triển khai ở FRS mục 10). 2.1.1: BR-05 xóa mềm chỉ ẩn khỏi trang quản lý, học sinh vẫn ôn tập được; nút Xóa báo trước kết quả. 2.1.0: chuyển tầng dữ liệu sang JPA; bổ sung validation nhiều lớp, đối chiếu rubric, phụ lục Q&A |
+| Phiên bản tài liệu | 2.1.4 (đồng bộ NFR-05 và TC-AI-07 với FRS 2.1.4). 2.1.3 (rà soát tài liệu so với mã nguồn: sửa các lỗi XSS tiêu đề / lộ stack trace, ngân sách thời gian AI ≤ 90 s, `AiConfigException` → 503, sinh đề AI loại câu lỗi + cảnh báo, hạn mức AI chỉ trừ sau khi dữ liệu hợp lệ, xóa người dùng kiểm tra cả `reviewed_by`; các chỗ còn khác đặc tả liệt kê ở FRS mục 10). 2.1.2 (đồng bộ với mã nguồn: script SQL `01_schema.sql` + `02_data.sql`, BR-03 áp dụng khi tạo bài học, trắc nghiệm ngẫu nhiên + chấm từng câu, tiến độ theo lần làm gần nhất; hiện trạng triển khai ở FRS mục 10). 2.1.1: nút Xóa báo trước kết quả. (Sau 2.1.4: chủ đề / bài học đã xóa mềm ẩn cả với học sinh; chỉ người tạo hoặc Admin được xóa.) 2.1.0: chuyển tầng dữ liệu sang JPA; bổ sung validation nhiều lớp, đối chiếu rubric, phụ lục Q&A |
 | Kiến trúc | Spring MVC 6 (framework chọn từ danh sách của rubric), Jakarta Servlet 6.0, **Spring Data JPA + Hibernate 6.6**, Jakarta Bean Validation, SQL Server |
 | Giao diện | JSP + JSTL + **Bootstrap 5.3** (framework UI duy nhất) + KaTeX |
 | AI | Google Gemini REST API (model cấu hình được trong CSDL) |
@@ -160,7 +160,7 @@ Mô hình **MVC2**: Controller nhận request → Service xử lý nghiệp vụ
 | Mã | Yêu cầu | Ưu tiên |
 |---|---|---|
 | FR-TEA-01 | CRUD chủ đề (topics); không xóa chủ đề còn bài học đang hoạt động (BR-05) | M |
-| FR-TEA-02 | CRUD bài học (lessons); không xóa bài học còn câu hỏi **đang hoạt động** (`is_active = 1`, BR-05) | M |
+| FR-TEA-02 | CRUD bài học (lessons); xóa bài học thì bài tập (câu hỏi) của bài cũng mất theo (BR-05) | M |
 | FR-TEA-03 | CRUD **bài giảng** của bài học: `VIDEO` (URL), `YOUTUBE` (URL), `LINK` (website), `TEXT` (nội dung có LaTeX) | M |
 | FR-TEA-04 | CRUD câu hỏi trắc nghiệm (4 phương án, 1 đúng) và tự luận (đáp án/barem cho AI); danh sách có lọc + phân trang | M |
 | FR-TEA-05 | Sinh câu hỏi trắc nghiệm bằng AI theo chủ đề, bài, độ khó, số lượng; xem trước và chỉnh sửa | M |
@@ -289,7 +289,7 @@ flowchart TD
 - Một layout JSP chung (`layout.jsp`): thanh điều hướng trên cùng + menu bên theo vai trò + vùng nội dung; Bootstrap 5.3 responsive, dùng được trên điện thoại (cần cho chụp ảnh bài làm).
 - Công thức toán hiển thị bằng KaTeX trên mọi màn hình có nội dung toán (đề, đáp án, lời giải, chat tutor, nhận xét AI).
 - Mọi thao tác gọi AI hiển thị trạng thái đang xử lý (spinner), khóa nút gửi để tránh gửi trùng, và thông báo lỗi thân thiện khi thất bại.
-- Phân trang, thông báo (flash message) và xác nhận trước khi xóa theo một mẫu thống nhất. Hộp xác nhận xóa chủ đề / bài học / câu hỏi **báo trước kết quả** do server tính (BR-05): *xóa hẳn* (chưa có học sinh làm, không hoàn tác được), *ẩn khỏi trang quản lý* (xóa mềm, đã có lịch sử) hoặc *không thể xóa* (còn mục con đang hoạt động — nút Xóa bị khóa, hiện lý do).
+- Phân trang, thông báo (flash message) và xác nhận trước khi xóa theo một mẫu thống nhất. Hộp xác nhận xóa chủ đề / bài học / câu hỏi **báo trước kết quả** do server tính (BR-05): *xóa hẳn* (chưa có học sinh làm, không hoàn tác được), *xóa mềm* (đã có lịch sử, biến mất với giáo viên và học sinh) hoặc *không thể xóa* (còn mục con đang hoạt động — nút Xóa bị khóa, hiện lý do).
 
 ### 5.2. Sơ đồ điều hướng (sitemap) và danh sách màn hình
 
@@ -475,8 +475,8 @@ erDiagram
 | Bảng | Mục đích | Khóa ngoại | Ràng buộc chính |
 |---|---|---|---|
 | `users` | Tài khoản 3 vai trò | — | `username`, `email` duy nhất; `role ∈ {ADMIN, TEACHER, STUDENT}`; `status ∈ {ACTIVE, SUSPENDED, INACTIVE}` (ý nghĩa ở bảng trạng thái bên dưới) |
-| `topics` | Chuyên đề (cấp trên của bài học) | `created_by → users` | `topic_name` duy nhất; `order_index INT NOT NULL DEFAULT 1`; `is_active BIT NOT NULL DEFAULT 1` (xóa mềm khi đã có lịch sử; chỉ ẩn ở trang quản lý, BR-05) |
-| `lessons` | Bài học | `topic_id → topics`, `created_by → users` | `order_index INT NOT NULL DEFAULT 1`; `is_active BIT NOT NULL DEFAULT 1` (xóa mềm khi đã có lịch sử; chỉ ẩn ở trang quản lý, BR-05) |
+| `topics` | Chuyên đề (cấp trên của bài học) | `created_by → users` | `topic_name` duy nhất; `order_index INT NOT NULL DEFAULT 1`; `is_active BIT NOT NULL DEFAULT 1` (xóa mềm khi đã có lịch sử; ẩn với cả giáo viên và học sinh, BR-05) |
+| `lessons` | Bài học | `topic_id → topics`, `created_by → users` | `order_index INT NOT NULL DEFAULT 1`; `is_active BIT NOT NULL DEFAULT 1` (xóa mềm khi đã có lịch sử; ẩn với cả giáo viên và học sinh, BR-05) |
 | `lesson_materials` | Bài giảng (video/YouTube/link/text) | `lesson_id → lessons` (cascade), `created_by → users` | `material_type ∈ {VIDEO, YOUTUBE, LINK, TEXT}`; TEXT bắt buộc `content_text`, loại khác bắt buộc `url`; `order_index INT NOT NULL DEFAULT 1` |
 | `questions` | Ngân hàng câu hỏi | `lesson_id`, `created_by` | `question_type ∈ {MULTIPLE_CHOICE, ESSAY}`; `difficulty_level ∈ {EASY, MEDIUM, HARD, ADVANCED}`; `reference_solution` chỉ dùng cho AI chấm; `is_active BIT NOT NULL DEFAULT 1` (0 = xóa mềm, BR-05) |
 | `question_options` | Phương án A–D | `question_id → questions` (cascade) | `(question_id, option_label)` duy nhất |
@@ -542,7 +542,7 @@ Ghi chú thiết kế:
 | BR-02 | Hệ thống phải luôn còn ít nhất 1 Admin `ACTIVE`; không cho khóa/xóa/hạ quyền Admin cuối cùng; Admin không tự khóa chính mình |
 | BR-03 | Áp dụng cho **toàn bộ tài nguyên giáo viên**: chủ đề (`topics`), bài học (`lessons`), bài giảng (`lesson_materials`) và câu hỏi (`questions`). Giáo viên chỉ sửa/xóa mục có `created_by` là mình; Admin có toàn quyền trên toàn hệ thống. Mọi giáo viên vẫn được *xem* nội dung dùng chung. Giáo viên chỉ được **thêm bài học vào chủ đề do mình tạo** (để chủ đề của người khác không bị chặn xóa bởi bài học lạ) |
 | BR-04 | Câu trắc nghiệm có đúng 4 phương án A–D và đúng 1 phương án đúng; câu tự luận không có phương án |
-| BR-05 | Việc xóa luôn do **giáo viên / Admin chủ động** bấm Xóa và xác nhận; hệ thống chỉ quyết định *cách* xóa. **Câu hỏi:** đã có bài nộp (hoặc phiên gia sư mở từ câu đó) thì chuyển `is_active = 0` (xóa mềm), chưa có thì xóa hẳn. **Bài học:** không xóa nếu còn câu hỏi *đang hoạt động*; kiểm tra bằng `countByLessonIdAndIsActiveTrue(lessonId) == 0`. Nếu chỉ còn câu hỏi đã xóa mềm (`is_active = 0`) thì cho phép xóa: xóa cứng khi không còn bài nộp / phiên gia sư liên quan, ngược lại xóa mềm bài học (`lessons.is_active = 0`). **Chủ đề:** không xóa nếu còn bài học *đang hoạt động*; xóa cứng khi không còn bài học nào, ngược lại xóa mềm (`topics.is_active = 0`). **Phạm vi ẩn:** bản ghi xóa mềm chỉ bị ẩn ở **phía quản lý** (danh sách, sửa/xóa, chọn bài học khi soạn câu hỏi / sinh đề / thêm bài giảng, số liệu dashboard giáo viên và Admin chỉ lấy `is_active = 1`). **Phía học sinh** vẫn thấy và dùng bình thường (danh sách chủ đề / bài học, bài giảng, luyện trắc nghiệm, tự luận, gia sư AI) để **ôn tập**; lịch sử làm bài giữ nguyên. Tên chủ đề chỉ cần duy nhất trong các chủ đề đang hoạt động |
+| BR-05 | Việc xóa luôn do **giáo viên / Admin chủ động** bấm Xóa và xác nhận; hệ thống chỉ quyết định *cách* xóa. **Câu hỏi:** đã có bài nộp (hoặc phiên gia sư mở từ câu đó) thì chuyển `is_active = 0` (xóa mềm), chưa có thì xóa hẳn. **Bài học:** xóa bài học thì bài tập (câu hỏi) của bài cũng mất theo: xóa cứng (kèm câu hỏi) khi không còn bài nộp / phiên gia sư liên quan, ngược lại xóa mềm bài học (`lessons.is_active = 0`) và toàn bộ câu hỏi của bài (`questions.is_active = 0`). **Chủ đề:** không xóa nếu còn bài học *đang hoạt động*; xóa cứng khi không còn bài học nào, ngược lại xóa mềm (`topics.is_active = 0`). **Quyền xóa:** chỉ người tạo (giáo viên đã đăng) hoặc Admin được xóa chủ đề / bài học. **Phạm vi ẩn:** chủ đề / bài học xóa mềm bị ẩn ở **cả phía quản lý lẫn phía học sinh** (danh sách, sửa/xóa, chọn bài học khi soạn, số liệu dashboard, danh sách chủ đề / bài học, bài giảng, luyện trắc nghiệm, tự luận, gia sư AI, tiến độ của học sinh chỉ lấy `is_active = 1`); lịch sử làm bài trong CSDL giữ nguyên. Tên chủ đề chỉ cần duy nhất trong các chủ đề đang hoạt động |
 | BR-06 | Người dùng đã có dữ liệu liên quan chỉ được xóa mềm (`INACTIVE`) |
 | BR-07 | Mọi điểm quy về thang 10; điểm tự luận làm tròn tới 0.25 |
 | BR-08 | Câu hỏi do AI sinh phải được giáo viên xem trước và xác nhận mới lưu |
@@ -629,7 +629,7 @@ Tài khoản demo (dữ liệu mẫu): `admin`, `teacher1`, `teacher2`, `student
 | TC-ADM-02 | Mở khóa tài khoản `SUSPENDED` / thao tác trên tài khoản `INACTIVE` | `SUSPENDED` → `ACTIVE`; tài khoản `INACTIVE` không mở khóa / sửa được (409) mà chỉ có nút **Khôi phục** (`INACTIVE → ACTIVE`), sau đó đăng nhập lại được và lịch sử còn nguyên |
 | TC-TEA-01 | Xóa chủ đề còn bài học | Bị chặn, thông báo rõ (nút Xóa bị khóa kèm lý do; gửi thẳng request vẫn trả 409) |
 | TC-TEA-02 | Tạo câu trắc nghiệm có 2 đáp án đúng | Báo lỗi validation |
-| TC-TEA-03 | Xóa bài học còn câu hỏi `is_active = 1` / bài học chỉ còn câu hỏi `is_active = 0` | Trường hợp đầu bị chặn (409); trường hợp sau được phép xóa (BR-05): còn bài nộp thì xóa mềm — ẩn ở trang quản lý của giáo viên nhưng học sinh vẫn mở bài học và luyện lại được; không còn bài nộp thì xóa hẳn |
+| TC-TEA-03 | Xóa bài học có câu hỏi (có / chưa có bài nộp) | Bài học được xóa cùng bài tập của nó (BR-05): còn bài nộp thì xóa mềm bài học và câu hỏi — ẩn ở trang quản lý của giáo viên và học sinh cũng không còn thấy / mở được bài học; không còn bài nộp thì xóa hẳn |
 | TC-TEA-04 | Giáo viên B sửa/xóa chủ đề, bài học, bài giảng, câu hỏi do giáo viên A tạo | HTTP 403 (BR-03); Admin thao tác được |
 | TC-DB-01 | Chạy `EduTutor_Database.sql` trên SQL Server sạch | Tạo đủ 10 bảng + dữ liệu mẫu, không lỗi |
 | TC-DB-02 | Khởi động ứng dụng với `hbm2ddl.auto=none` | Hibernate nạp đủ 10 Entity, không lỗi mapping; không tự sửa bảng |

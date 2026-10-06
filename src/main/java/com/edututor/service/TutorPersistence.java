@@ -118,7 +118,7 @@ public class TutorPersistence {
                 if (questionId == null) {
                     throw new IllegalArgumentException("Thiếu câu hỏi cần hỏi gia sư.");
                 }
-                Question q = questionRepository.findWithLessonByQuestionId(questionId)
+                Question q = questionRepository.findWithLessonByQuestionIdAndLessonActiveTrue(questionId)
                         .orElseThrow(() -> new NotFoundException("Câu hỏi không tồn tại."));
                 if (q.getQuestionType() != QuestionType.MCQ) {
                     throw new IllegalArgumentException("Chế độ này chỉ dành cho câu trắc nghiệm.");

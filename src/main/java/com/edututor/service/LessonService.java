@@ -2,7 +2,6 @@ package com.edututor.service;
 
 import com.edututor.dto.LessonForm;
 import com.edututor.dto.LessonView;
-import com.edututor.exception.ConflictException;
 import com.edututor.exception.ForbiddenException;
 import com.edututor.exception.NotFoundException;
 import com.edututor.model.Lesson;
@@ -63,10 +62,10 @@ public class LessonService {
         }).orElse(null);
     }
 
-    /** Học sinh mở bài học để học / luyện / ôn tập: kể cả bài giáo viên đã xóa mềm; null nếu không tồn tại. */
+    /** Học sinh mở bài học để học / luyện tập; null nếu không tồn tại hoặc đã bị xóa. */
     @Transactional(readOnly = true)
     public LessonView getLessonForStudent(int lessonId) {
-        return lessonRepository.findWithTopicByLessonId(lessonId).map(l -> {
+        return lessonRepository.findWithTopicByLessonIdAndActiveTrue(lessonId).map(l -> {
             long n = questionRepository.countByLesson_LessonId(lessonId);
             return ViewMapper.toView(l, (int) n);
         }).orElse(null);
@@ -81,7 +80,7 @@ public class LessonService {
                 counts.put(c.getId(), (int) c.getTotal());
             }
         }
-        // Dự báo kết quả nút Xóa (BR-05): còn câu đang hoạt động → chặn; có bài nộp / phiên gia sư → xóa mềm
+        // Dự báo kết quả nút Xóa (BR-05): có bài nộp / phiên gia sư → xóa mềm, ngược lại xóa hẳn (kèm câu hỏi)
         Set<Integer> withHistory = new HashSet<>();
         if (!lessons.isEmpty()) {
             List<Integer> ids = lessons.stream().map(Lesson::getLessonId).toList();
@@ -91,7 +90,7 @@ public class LessonService {
         return lessons.stream().map(l -> {
             int active = counts.getOrDefault(l.getLessonId(), 0);
             LessonView v = ViewMapper.toView(l, active);
-            v.setDeleteMode(active > 0 ? "BLOCKED" : withHistory.contains(l.getLessonId()) ? "SOFT" : "HARD");
+            v.setDeleteMode(withHistory.contains(l.getLessonId()) ? "SOFT" : "HARD");
             return v;
         }).toList();
     }
@@ -135,9 +134,9 @@ public class LessonService {
     }
 
     /**
-     * BR-05: chỉ chặn khi bài học còn câu hỏi ĐANG HOẠT ĐỘNG (409). Chỉ còn câu đã xóa mềm thì được xóa:
-     * không còn bài nộp / phiên gia sư liên quan → xóa cứng (câu hỏi, bài giảng xóa theo ON DELETE CASCADE);
-     * còn → xóa mềm bài học (IsActive = 0) để giữ lịch sử.
+     * BR-05: xóa bài học thì bài tập (câu hỏi) của bài cũng mất theo. Không còn bài nộp / phiên gia sư liên quan
+     * → xóa cứng (câu hỏi, bài giảng xóa theo ON DELETE CASCADE); còn → xóa mềm bài học và toàn bộ câu hỏi của nó
+     * (IsActive = 0) để giữ lịch sử.
      *
      * @return true nếu xóa cứng, false nếu xóa mềm
      */
@@ -146,12 +145,10 @@ public class LessonService {
         Lesson l = lessonRepository.findByLessonIdAndActiveTrue(lessonId)
                 .orElseThrow(() -> new NotFoundException("Bài học không tồn tại."));
         requireOwner(l, actingUserId, admin); // BR-03
-        if (questionRepository.countByLesson_LessonIdAndActiveTrue(lessonId) > 0) {
-            throw new ConflictException("Bài học còn câu hỏi đang hoạt động nên không thể xóa. Hãy xóa các câu hỏi trước.");
-        }
         if (submissionRepository.existsByQuestion_Lesson_LessonId(lessonId)
                 || tutorSessionRepository.existsByQuestion_Lesson_LessonId(lessonId)) {
             l.setActive(false);
+            questionRepository.deactivateByLessonId(lessonId);
             return false;
         }
         lessonRepository.delete(l);

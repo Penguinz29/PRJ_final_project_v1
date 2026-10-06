@@ -88,8 +88,7 @@ public interface SubmissionRepository extends JpaRepository<Submission, Integer>
 
         // ---------- UC-STU-06 / BR-10: tiến độ tính theo lần làm GẦN NHẤT của mỗi câu
         // (CTE ROW_NUMBER()) ----------
-        // Phía học sinh không lọc IsActive: nội dung giáo viên đã xóa mềm vẫn được ôn
-        // tập (quyết định của nhóm).
+        // Chủ đề / bài học giáo viên đã xóa (IsActive = 0) không hiện với học sinh.
 
         /** Tiến độ trắc nghiệm theo từng chủ đề (kể cả chủ đề chưa làm câu nào). */
         @Query(value = "WITH latest AS ( SELECT s.QuestionId, s.IsCorrect, ROW_NUMBER() OVER (PARTITION BY s.QuestionId ORDER BY s.SubmittedAt DESC, s.SubmissionId DESC) AS rn FROM Submissions s WHERE s.StudentId = :studentId AND s.QuestionType = 'MCQ'), "
@@ -101,7 +100,7 @@ public interface SubmissionRepository extends JpaRepository<Submission, Integer>
                         + "          JOIN Lessons l ON l.LessonId = q.LessonId WHERE q.QuestionType = 'MCQ' GROUP BY l.TopicId) "
                         + "SELECT t.TopicId AS id, t.TopicName AS name, COALESCE(tt.total, 0) AS total, "
                         + "       COALESCE(d.answered, 0) AS answered, COALESCE(d.correct, 0) AS correct "
-                        + "FROM Topics t LEFT JOIN total tt ON tt.id = t.TopicId LEFT JOIN done d ON d.id = t.TopicId "
+                        + "FROM Topics t LEFT JOIN total tt ON tt.id = t.TopicId LEFT JOIN done d ON d.id = t.TopicId WHERE t.IsActive = 1 "
                         + "ORDER BY t.CreatedAt DESC, t.TopicId DESC", nativeQuery = true)
         List<ProgressRow> topicProgress(@Param("studentId") Integer studentId);
 
@@ -116,7 +115,7 @@ public interface SubmissionRepository extends JpaRepository<Submission, Integer>
                         + "SELECT l.LessonId AS id, l.Title AS name, COALESCE(tt.total, 0) AS total, "
                         + "       COALESCE(d.answered, 0) AS answered, COALESCE(d.correct, 0) AS correct "
                         + "FROM Lessons l LEFT JOIN total tt ON tt.id = l.LessonId LEFT JOIN done d ON d.id = l.LessonId "
-                        + "WHERE l.TopicId = :topicId ORDER BY l.DisplayOrder ASC, l.LessonId ASC", nativeQuery = true)
+                        + "WHERE l.TopicId = :topicId AND l.IsActive = 1 ORDER BY l.DisplayOrder ASC, l.LessonId ASC", nativeQuery = true)
         List<ProgressRow> lessonProgress(@Param("studentId") Integer studentId, @Param("topicId") Integer topicId);
 
         /**

@@ -66,7 +66,7 @@ public class SubmissionService {
      */
     @Transactional
     public QuizAnswerResponse submitMcqAnswer(int studentId, int questionId, int selectedOptionId) {
-        Question q = questionRepository.findWithLessonByQuestionId(questionId).orElse(null);
+        Question q = questionRepository.findWithLessonByQuestionIdAndLessonActiveTrue(questionId).orElse(null);
         if (q == null || q.getQuestionType() != QuestionType.MCQ) {
             throw new IllegalArgumentException("Câu hỏi trắc nghiệm không tồn tại.");
         }
@@ -177,7 +177,7 @@ public class SubmissionService {
     @Transactional
     public int saveEssaySubmission(int studentId, int questionId, String studentAnswer, String imagePath,
                                    double score, String aiFeedback, String suggestedCorrection) {
-        Question q = questionRepository.findWithLessonByQuestionId(questionId)
+        Question q = questionRepository.findWithLessonByQuestionIdAndLessonActiveTrue(questionId)
                 .orElseThrow(() -> new NotFoundException("Câu hỏi tự luận không tồn tại."));
         Submission sub = new Submission();
         sub.setStudent(userRepository.getReferenceById(studentId));

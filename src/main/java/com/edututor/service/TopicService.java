@@ -38,11 +38,11 @@ public class TopicService {
 
     /**
      * Tất cả chuyên đề kèm danh sách bài học (accordion bên học sinh): 2 truy vấn, không N+1.
-     * Gồm cả chuyên đề / bài học giáo viên đã xóa mềm để học sinh vẫn ôn tập được nội dung cũ.
+     * Chuyên đề / bài học đã bị xóa (xóa mềm) không hiển thị với học sinh.
      */
     @Transactional(readOnly = true)
     public List<TopicView> getAllTopicsWithLessons() {
-        return withLessons(topicRepository.findAllByOrderByCreatedAtDescTopicIdDesc(), true);
+        return withLessons(topicRepository.findByActiveTrueOrderByCreatedAtDescTopicIdDesc(), true);
     }
 
     @Transactional(readOnly = true)
@@ -57,8 +57,8 @@ public class TopicService {
                 false);
     }
 
-    /** @param includeInactive true: kèm bài học đã xóa mềm (phía học sinh); false: chỉ bài đang hoạt động (quản lý) */
-    private List<TopicView> withLessons(List<Topic> topics, boolean includeInactive) {
+    /** @param forStudent true: danh sách cho học sinh; false: trang quản lý (kèm dự báo kết quả nút Xóa) */
+    private List<TopicView> withLessons(List<Topic> topics, boolean forStudent) {
         List<TopicView> views = new ArrayList<>();
         Map<Integer, TopicView> byId = new LinkedHashMap<>();
         for (Topic t : topics) {
@@ -68,9 +68,8 @@ public class TopicService {
             byId.put(t.getTopicId(), v);
         }
         if (!byId.isEmpty()) {
-            List<Lesson> lessons = includeInactive
-                    ? lessonRepository.findByTopic_TopicIdInOrderByDisplayOrderAscLessonIdAsc(byId.keySet())
-                    : lessonRepository.findByTopic_TopicIdInAndActiveTrueOrderByDisplayOrderAscLessonIdAsc(byId.keySet());
+            List<Lesson> lessons = lessonRepository
+                    .findByTopic_TopicIdInAndActiveTrueOrderByDisplayOrderAscLessonIdAsc(byId.keySet());
             for (Lesson l : lessons) {
                 LessonView lv = ViewMapper.toView(l, 0);
                 TopicView owner = byId.get(l.getTopic().getTopicId());
@@ -79,7 +78,7 @@ public class TopicService {
             for (TopicView v : views) {
                 v.setLessonCount(v.getLessons().size());
             }
-            if (!includeInactive) {
+            if (!forStudent) {
                 // Dự báo kết quả nút Xóa (BR-05): còn bài học đang hoạt động → chặn; còn bài đã ẩn → xóa mềm
                 Map<Integer, Long> allLessons = new HashMap<>();
                 for (IdCount c : lessonRepository.countAllByTopicIds(byId.keySet())) {

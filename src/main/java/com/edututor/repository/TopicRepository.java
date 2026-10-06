@@ -8,12 +8,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface TopicRepository extends JpaRepository<Topic, Integer> {
 
-    /** Quan hệ to-one (giáo viên) nạp cùng một câu SQL bằng @EntityGraph, tránh N+1. */
-    /** Học sinh: mọi chuyên đề, kể cả đã xóa mềm (vẫn ôn tập được nội dung cũ). */
-    @EntityGraph(attributePaths = "teacher")
-    List<Topic> findAllByOrderByCreatedAtDescTopicIdDesc();
-
-    // Trang quản lý của giáo viên / Admin: chỉ chuyên đề đang hoạt động (IsActive = 1)
+    // Mọi truy vấn (học sinh lẫn giáo viên / Admin) chỉ lấy chuyên đề đang hoạt động (IsActive = 1).
+    // Quan hệ to-one (giáo viên) nạp cùng một câu SQL bằng @EntityGraph, tránh N+1.
 
     @EntityGraph(attributePaths = "teacher")
     List<Topic> findByActiveTrueOrderByCreatedAtDescTopicIdDesc();

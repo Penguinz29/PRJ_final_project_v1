@@ -90,7 +90,7 @@
                                                             </form>
                                                             <ui:delete-button form="#delT${t.topicId}" mode="${t.deleteMode}"
                                                                 question="Xóa chủ đề '${t.topicName}'?"
-                                                                softNote="Chủ đề còn bài học đã ẩn có lịch sử học tập nên chỉ được ẩn khỏi trang quản lý (xóa mềm); học sinh vẫn ôn tập được."
+                                                                softNote="Chủ đề còn bài học đã ẩn có lịch sử học tập nên chỉ được xóa mềm: chủ đề biến mất với giáo viên và học sinh."
                                                                 blockedReason="Không thể xóa: chủ đề còn ${t.lessonCount} bài học. Hãy xóa các bài học trước." />
                                                         </td>
                                                     </tr>
