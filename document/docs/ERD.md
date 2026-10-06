@@ -1,6 +1,4 @@
-# ERD — CSDL MathTutorDB (EduTutor Math 12)
-
-> Nguồn sự thật: `document/sql/01_schema.sql` (10 bảng). Sơ đồ dùng cú pháp Mermaid — xem trực tiếp trên GitHub, VS Code (extension Markdown Preview Mermaid) hoặc dán vào https://mermaid.live để xuất PNG/SVG.
+# ERD - CSDL MathTutorDB (EduTutor Math 12)
 
 ## 1. Sơ đồ quan hệ thực thể
 
@@ -191,7 +189,3 @@ erDiagram
 
 - **6 bảng lõi:** Users, Topics, Lessons, Questions, Submissions, TutorSessions.
 - **4 bảng phụ (chuẩn hóa):** LessonMaterials, QuestionOptions, TutorMessages (thuộc tính đa trị 1–N), AiConfigs (cấu hình).
-- Ràng buộc UNIQUE: `Users(Username)`, `Users(Email)`, `QuestionOptions(QuestionId, OptionLetter)`, `AiConfigs(ConfigKey)`.
-- Index: `LessonMaterials(LessonId, OrderIndex)`, `Questions(LessonId, IsActive)`, `Submissions(StudentId, SubmittedAt DESC)`, `TutorSessions(StudentId, CreatedAt DESC)`, `TutorMessages(SessionId, MessageId)`.
-- Giải thích chi tiết từng bảng/cột: `document/DATABASE.md`.
-- Xóa mềm bằng `IsActive` (Topics, Lessons, Questions) và `Status = 'INACTIVE'` (Users).

@@ -1,7 +1,5 @@
 # Giải thích cơ sở dữ liệu MathTutorDB (EduTutor Math 12)
 
-> Nguồn sự thật: `document/sql/01_schema.sql` (cấu trúc) và `document/sql/02_data.sql` (dữ liệu mẫu). Hibernate chạy với `hbm2ddl.auto = none` nên script SQL quyết định cấu trúc; mỗi bảng ánh xạ một Entity trong `com.edututor.model`. Sơ đồ ERD: xem `document/ERD.md`.
-
 ## 1. Tổng quan
 
 - **Hệ quản trị:** SQL Server 2022, tên CSDL `MathTutorDB`.
