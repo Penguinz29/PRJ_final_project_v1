@@ -204,6 +204,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Lời giải lưu dạng HTML từ trình soạn thảo: chuyển sang văn bản thuần (DOMParser không chạy script),
+    // giữ xuống dòng giữa các đoạn, rồi vẫn chèn bằng textContent để an toàn XSS.
+    function htmlToText(html) {
+        if (!html) return '';
+        const withBreaks = String(html)
+            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/<\/(p|div|li|h[1-6])\s*>/gi, '\n');
+        const doc = new DOMParser().parseFromString(withBreaks, 'text/html');
+        return (doc.body.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+    }
+
     document.querySelectorAll('.quiz-nav-btn').forEach(btn => {
         btn.addEventListener('click', () => carousel.to(parseInt(btn.dataset.slideTo, 10)));
     });
@@ -244,8 +255,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 feedback.querySelector('.feedback-title').textContent = d.isCorrect
                     ? 'Chính xác! +10 điểm'
                     : 'Chưa đúng. Đáp án đúng là ' + (d.correctOptionLabel || '') + '.';
-                feedback.querySelector('.feedback-explanation').textContent = d.explanationLatex
-                    ? 'Lời giải: ' + d.explanationLatex : '';
+                const explanation = htmlToText(d.explanationLatex);
+                feedback.querySelector('.feedback-explanation').textContent = explanation
+                    ? 'Lời giải: ' + explanation : '';
                 card.querySelector('.btn-ask-tutor').classList.toggle('d-none', !d.canAskTutor);
                 renderMath(feedback);
 

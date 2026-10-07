@@ -188,8 +188,10 @@
   padding: .85rem 3.6rem .85rem 1rem;
   font: inherit; line-height: 1.5; color: var(--tt-text);
 }
-.tutor-page .tt-composer textarea:disabled { color: var(--tt-muted); cursor: not-allowed; }
-.tutor-page .tt-composer:has(textarea:disabled) { background: #f1f5f9; }
+.tutor-page .tt-composer textarea:disabled {
+  color: var(--tt-muted); cursor: not-allowed;
+  background: #f1f5f9; border-radius: 17px;
+}
 
 .tutor-page .tt-send {
   position: absolute; right: .55rem; bottom: .55rem;
