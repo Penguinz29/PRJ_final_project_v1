@@ -95,6 +95,16 @@ public class QuestionService {
                 }).toList();
     }
 
+    /** Mọi câu tự luận của các bài học còn hiển thị (trang Làm tự luận mở từ sidebar): không kèm lời giải (BR-11). */
+    @Transactional(readOnly = true)
+    public List<QuestionView> getAllEssayQuestions() {
+        return questionRepository.findAllActiveForStudent(QuestionType.ESSAY).stream().map(q -> {
+            QuestionView v = ViewMapper.toView(q);
+            v.setExplanation(null);
+            return v;
+        }).toList();
+    }
+
     /**
      * Câu hỏi kèm phương án (có cờ đúng) để giáo viên sửa; null nếu không tồn tại.
      * BR-03: chỉ người tạo hoặc Admin được mở form (form lộ đáp án đúng và lời giải).

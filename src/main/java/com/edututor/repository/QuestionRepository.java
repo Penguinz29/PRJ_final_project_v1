@@ -27,6 +27,13 @@ public interface QuestionRepository extends JpaRepository<Question, Integer>, Jp
     List<Question> findByLesson_LessonIdAndQuestionTypeOrderByCreatedAtAscQuestionIdAsc(Integer lessonId,
                                                                                          QuestionType type);
 
+    /** Học sinh: mọi câu tự luận đang hoạt động của các bài học (và chủ đề) còn hiển thị, xếp theo bài học. */
+    @EntityGraph(attributePaths = "lesson")
+    @Query("select q from Question q where q.questionType = :type and q.active = true "
+            + "and q.lesson.active = true and q.lesson.topic.active = true "
+            + "order by q.lesson.lessonId asc, q.createdAt asc, q.questionId asc")
+    List<Question> findAllActiveForStudent(@Param("type") QuestionType type);
+
     /** Học sinh: làm bài, nộp bài, gia sư — chỉ khi bài học chứa câu hỏi còn hoạt động. */
     @EntityGraph(attributePaths = "lesson")
     Optional<Question> findWithLessonByQuestionIdAndLessonActiveTrue(Integer questionId);

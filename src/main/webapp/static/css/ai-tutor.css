@@ -224,7 +224,7 @@
 .tutor-page .tt-session + .tt-session { margin-top: .25rem; }
 .tutor-page .tt-session-title {
   font-weight: 600; font-size: .92rem; line-height: 1.4;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 .tutor-page .tt-session-meta {
   display: flex; align-items: center; justify-content: space-between; gap: .5rem;
