@@ -2162,3 +2162,51 @@ h6 {
   background: #f8fafc;
   border: 1px dashed var(--border);
 }
+
+/* ── YouTube Video Embed Player ── */
+.youtube-player-container,
+.material-link-container {
+  width: 100%;
+}
+
+.youtube-player-wrapper {
+  background-color: #0b0f19;
+  border-radius: 0.75rem !important; /* rounded-3 */
+  box-shadow: var(--shadow-sm, 0 2px 8px rgba(0, 0, 0, 0.06)) !important;
+  border: 1px solid var(--border) !important;
+  transition: transform var(--transition, 0.2s ease), box-shadow var(--transition, 0.2s ease);
+}
+
+.youtube-player-wrapper:hover {
+  box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.10)) !important;
+}
+
+.youtube-player-wrapper iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0.75rem !important;
+}
+
+.youtube-player-meta {
+  font-size: 0.85rem;
+}
+
+.youtube-player-meta .btn-outline-danger {
+  border-color: #ef4444;
+  color: #ef4444;
+  font-weight: 500;
+  border-radius: var(--radius-xs, 6px);
+  padding: 0.25rem 0.65rem;
+  transition: all var(--transition, 0.2s ease);
+}
+
+.youtube-player-meta .btn-outline-danger:hover {
+  background-color: #dc2626;
+  border-color: #dc2626;
+  color: #ffffff;
+}
+
+.youtube-player-meta .youtube-url-text {
+  max-width: 480px;
+}

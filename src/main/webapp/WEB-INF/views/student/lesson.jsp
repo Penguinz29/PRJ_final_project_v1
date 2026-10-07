@@ -103,26 +103,46 @@
                                                     </div>
                                                     <div class="card-body p-4">
                                                         <c:choose>
-                                                            <c:when test="${m.materialType == 'YOUTUBE' and not empty m.youtubeEmbedUrl}">
-                                                                <div class="ratio ratio-16x9">
-                                                                    <iframe src="${m.youtubeEmbedUrl}" title="<c:out value='${m.title}'/>"
-                                                                        allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; web-share"
-                                                                        referrerpolicy="strict-origin-when-cross-origin" loading="lazy"
-                                                                        allowfullscreen class="rounded"></iframe>
+                                                            <c:when test="${m.materialType == 'YOUTUBE'}">
+                                                                <div class="youtube-player-container"
+                                                                    data-url="<c:out value='${not empty m.youtubeEmbedUrl ? m.youtubeEmbedUrl : m.url}'/>"
+                                                                    data-title="<c:out value='${m.title}'/>">
+                                                                    <div class="ratio ratio-16x9 rounded-3 shadow-sm overflow-hidden youtube-player-wrapper border">
+                                                                        <iframe src="${not empty m.youtubeEmbedUrl ? m.youtubeEmbedUrl : ''}"
+                                                                            title="<c:out value='${m.title}'/>"
+                                                                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                                                            referrerpolicy="strict-origin-when-cross-origin" loading="lazy"
+                                                                            allowfullscreen class="w-100 h-100 border-0 rounded-3"></iframe>
+                                                                    </div>
+                                                                    <c:if test="${not empty m.url}">
+                                                                        <div class="youtube-player-meta mt-2 pt-1 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                                                            <a href="<c:out value='${m.url}'/>" target="_blank" rel="noopener noreferrer"
+                                                                                class="btn btn-sm btn-outline-danger d-inline-flex align-items-center">
+                                                                                <i class="bi bi-youtube me-1"></i>Xem trên YouTube
+                                                                            </a>
+                                                                            <span class="small text-muted text-break youtube-url-text"><c:out value="${m.url}" /></span>
+                                                                        </div>
+                                                                    </c:if>
                                                                 </div>
                                                             </c:when>
                                                             <c:when test="${m.materialType == 'VIDEO'}">
-                                                                <video controls preload="metadata" class="w-100 rounded"
+                                                                <video controls preload="metadata" class="w-100 rounded-3 shadow-sm border"
                                                                     src="<c:out value='${m.url}'/>">
                                                                     Trình duyệt không hỗ trợ phát video.
                                                                 </video>
                                                             </c:when>
                                                             <c:when test="${m.materialType == 'LINK'}">
-                                                                <a href="<c:out value='${m.url}'/>" target="_blank"
-                                                                    rel="noopener noreferrer" class="btn btn-outline-primary">
-                                                                    <i class="bi bi-box-arrow-up-right me-2"></i>Mở liên kết
-                                                                </a>
-                                                                <div class="small text-muted mt-1 text-break"><c:out value="${m.url}" /></div>
+                                                                <div class="material-link-container"
+                                                                    data-url="<c:out value='${m.url}'/>"
+                                                                    data-title="<c:out value='${m.title}'/>">
+                                                                    <div class="link-standard-view">
+                                                                        <a href="<c:out value='${m.url}'/>" target="_blank"
+                                                                            rel="noopener noreferrer" class="btn btn-outline-primary">
+                                                                            <i class="bi bi-box-arrow-up-right me-2"></i>Mở liên kết
+                                                                        </a>
+                                                                        <div class="small text-muted mt-2 text-break"><c:out value="${m.url}" /></div>
+                                                                    </div>
+                                                                </div>
                                                             </c:when>
                                                             <c:when test="${m.materialType == 'TEXT'}">
                                                                 <div class="latex-content" style="white-space:pre-wrap;line-height:1.7;"><ui:rich-text value="${m.contentText}" /></div>
@@ -171,6 +191,96 @@
                 <jsp:include page="../common/footer.jsp" />
                 <script>
                     document.addEventListener('DOMContentLoaded', function () {
+                        // 1. YouTube Video Embed Player Refactoring
+                        function extractYouTubeVideoId(url) {
+                            if (!url || typeof url !== 'string') return null;
+                            var trimmed = url.trim();
+                            var match = trimmed.match(/(?:https?:)?(?:\/\/)?(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|v\/|shorts\/|live\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/i);
+                            if (match && match[1]) return match[1];
+                            try {
+                                var parsed = new URL(trimmed.indexOf('://') === -1 ? 'https://' + trimmed : trimmed);
+                                var v = parsed.searchParams.get('v');
+                                if (v && /^[a-zA-Z0-9_-]{11}$/.test(v)) return v;
+                            } catch (e) {}
+                            return null;
+                        }
+
+                        function buildYouTubeEmbedUrl(url, videoId) {
+                            var embedUrl = 'https://www.youtube.com/embed/' + videoId + '?rel=0';
+                            try {
+                                var parsed = new URL(url.indexOf('://') === -1 ? 'https://' + url : url);
+                                var t = parsed.searchParams.get('t') || parsed.searchParams.get('start');
+                                if (t) {
+                                    var seconds = parseInt(t, 10);
+                                    if (!isNaN(seconds) && seconds > 0) {
+                                        embedUrl += '&start=' + seconds;
+                                    }
+                                }
+                            } catch (e) {}
+                            return embedUrl;
+                        }
+
+                        function escapeHtml(str) {
+                            if (!str) return '';
+                            return str.replace(/&/g, '&amp;')
+                                      .replace(/</g, '&lt;')
+                                      .replace(/>/g, '&gt;')
+                                      .replace(/"/g, '&quot;')
+                                      .replace(/'/g, '&#39;');
+                        }
+
+                        function initYouTubeEmbeds() {
+                            var containers = document.querySelectorAll('.youtube-player-container, .material-link-container');
+                            containers.forEach(function (container) {
+                                var rawUrl = container.getAttribute('data-url');
+                                if (!rawUrl) return;
+
+                                var videoId = extractYouTubeVideoId(rawUrl);
+                                if (!videoId) return;
+
+                                var embedUrl = buildYouTubeEmbedUrl(rawUrl, videoId);
+                                var title = container.getAttribute('data-title') || 'Video bài giảng';
+
+                                var existingIframe = container.querySelector('iframe');
+                                if (existingIframe) {
+                                    var src = existingIframe.getAttribute('src');
+                                    if (!src || src.indexOf('youtube.com/embed/') === -1) {
+                                        existingIframe.setAttribute('src', embedUrl);
+                                    }
+                                } else {
+                                    container.innerHTML =
+                                        '<div class="ratio ratio-16x9 rounded-3 shadow-sm overflow-hidden youtube-player-wrapper border">' +
+                                            '<iframe src="' + embedUrl + '" title="' + escapeHtml(title) + '" ' +
+                                                'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" ' +
+                                                'referrerpolicy="strict-origin-when-cross-origin" loading="lazy" ' +
+                                                'allowfullscreen class="w-100 h-100 border-0 rounded-3"></iframe>' +
+                                        '</div>' +
+                                        '<div class="youtube-player-meta mt-2 pt-1 d-flex align-items-center justify-content-between flex-wrap gap-2">' +
+                                            '<a href="' + escapeHtml(rawUrl) + '" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-danger d-inline-flex align-items-center">' +
+                                                '<i class="bi bi-youtube me-1"></i>Xem trên YouTube' +
+                                            '</a>' +
+                                            '<span class="small text-muted text-break youtube-url-text">' + escapeHtml(rawUrl) + '</span>' +
+                                        '</div>';
+                                }
+
+                                // Cập nhật icon YouTube trong Mục lục (TOC) nếu ban đầu được xếp vào mục liên kết
+                                var card = container.closest('[id^="material-"]');
+                                if (card && card.id) {
+                                    var tocLink = document.querySelector('#lessonToc a[href="#' + card.id + '"]');
+                                    if (tocLink) {
+                                        var icon = tocLink.querySelector('i');
+                                        if (icon && !icon.classList.contains('bi-youtube')) {
+                                            icon.className = 'bi bi-youtube me-2 text-danger';
+                                        }
+                                    }
+                                }
+                            });
+                        }
+
+                        // Khởi chạy YouTube Embed Parser
+                        initYouTubeEmbeds();
+
+                        // 2. Xử lý Mục lục (TOC)
                         var toc = document.getElementById('lessonToc');
                         if (!toc || !window.bootstrap) return;
 
