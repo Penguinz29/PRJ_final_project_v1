@@ -2210,3 +2210,25 @@ h6 {
 .youtube-player-meta .youtube-url-text {
   max-width: 480px;
 }
+
+/* ── LaTeX / KaTeX Typography in Lesson Content ── */
+.latex-content {
+  font-size: 1.05rem;
+  line-height: 1.8;
+  color: var(--text);
+  word-break: normal;
+  overflow-wrap: break-word;
+  text-align: left;
+}
+
+.latex-content .katex {
+  font-size: 1.05em;
+  line-height: 1.2;
+}
+
+.latex-content .katex-display {
+  margin: 0.75rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.25rem 0;
+}
