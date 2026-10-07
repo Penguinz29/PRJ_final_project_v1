@@ -70,6 +70,7 @@ public class GeminiService {
         long deadline = System.nanoTime() + TOTAL_BUDGET.toNanos();
         Exception last = null;
         boolean fallbackBroken = false;
+        boolean onFallback = false;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             long remainingSeconds = (deadline - System.nanoTime()) / 1_000_000_000L;
             if (attempt > 1 && remainingSeconds < MIN_ATTEMPT_SECONDS) {
@@ -77,18 +78,24 @@ public class GeminiService {
                         attempt - 1, maxAttempts);
                 break;
             }
-            // Model chính quá tải/timeout ở lần trước (503, 504...): lần sau chuyển sang model dự phòng nhẹ hơn
-            String model = (attempt > 1 && last instanceof AiServiceException && !fallbackModel.isBlank()
-                    && !fallbackBroken)
-                    ? fallbackModel : settings.model();
+            // Model chính quá tải/timeout (503, 504...): chuyển sang model dự phòng nhẹ hơn và GIỮ nó cho các lần thử
+            // còn lại (lỗi JSON ở lần sau không được đẩy yêu cầu quay lại model chính đang quá tải)
+            if (attempt > 1 && last instanceof AiServiceException && !fallbackModel.isBlank() && !fallbackBroken) {
+                onFallback = true;
+            }
+            String model = (onFallback && !fallbackBroken) ? fallbackModel : settings.model();
             // Mỗi lần thử tối đa 35 giây để còn thời gian cho lần thử lại (thay vì 1 lần treo hết ngân sách 90 giây)
             Settings attemptSettings = new Settings(settings.apiKey(), model, settings.temperature(),
                     settings.maxOutputTokens(),
                     (int) Math.max(1, Math.min(Math.min(settings.timeoutSeconds(), 35), remainingSeconds)));
+            long startedAt = System.nanoTime();
             try {
                 String raw = client.generate(attemptSettings, systemInstruction, turns, true);
-                return parser.apply(mapper.readTree(AiJsonParser.extractJson(raw)));
+                log.info("Gemini ok: model={} attempt={}/{} took={}ms", model, attempt, maxAttempts, elapsedMs(startedAt));
+                return parser.apply(mapper.readTree(AiJsonParser.repairLatexEscapes(AiJsonParser.extractJson(raw))));
             } catch (AiServiceException e) {
+                log.warn("Gemini loi: model={} attempt={}/{} took={}ms status={}", model, attempt, maxAttempts,
+                        elapsedMs(startedAt), e.getHttpStatus());
                 // Chưa cấu hình / HTTP 4xx (trừ 429): thử lại cũng vô ích
                 if (!e.isTransient()) {
                     // Model dự phòng sai/không khả dụng không được che lỗi thật của model chính: bỏ dự phòng, thử lại model chính
@@ -121,6 +128,10 @@ public class GeminiService {
         }
         throw new AiParseException("AI không trả về dữ liệu đúng định dạng sau " + maxAttempts + " lần thử. "
                 + "Vui lòng thử lại.", last);
+    }
+
+    private static long elapsedMs(long startedAtNanos) {
+        return (System.nanoTime() - startedAtNanos) / 1_000_000L;
     }
 
     private void sleep(long ms) {

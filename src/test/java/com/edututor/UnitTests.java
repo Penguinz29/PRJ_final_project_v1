@@ -53,6 +53,39 @@ class UnitTests {
         assertEquals("[1,2]", AiJsonParser.extractJson("  [1,2]  "));
     }
 
+    /** Giá trị chuỗi "k" sau khi vá rồi parse JSON thật bằng Jackson. */
+    private String repairedValue(String rawJson) throws Exception {
+        return mapper.readTree(AiJsonParser.repairLatexEscapes(rawJson)).get("k").asText();
+    }
+
+    @Test
+    void repairLatexEscapesFixesInvalidEscapes() throws Exception {
+        // \L, \s, \( không phải escape JSON: trước khi vá sẽ ném "Unrecognized character escape"
+        assertEquals("a \\Leftrightarrow b", repairedValue("{\"k\":\"a \\Leftrightarrow b\"}"));
+        assertEquals("\\sqrt{2} \\(x\\)", repairedValue("{\"k\":\"\\sqrt{2} \\(x\\)\"}"));
+    }
+
+    @Test
+    void repairLatexEscapesKeepsLatexThatLooksLikeJsonEscape() throws Exception {
+        // \f \t \n \b \r là escape hợp lệ: không vá thì \frac thành form-feed, \times thành tab (hỏng âm thầm)
+        assertEquals("\\frac{1}{2} \\times 3 \\neq 4 \\beta \\right)",
+                repairedValue("{\"k\":\"\\frac{1}{2} \\times 3 \\neq 4 \\beta \\right)\"}"));
+        assertEquals("\\text{abc} \\to \\theta", repairedValue("{\"k\":\"\\text{abc} \\to \\theta\"}"));
+    }
+
+    @Test
+    void repairLatexEscapesLeavesValidJsonUntouched() throws Exception {
+        assertEquals("dòng 1\ndòng 2\ttab \"q\" \\ / é",
+                repairedValue("{\"k\":\"dòng 1\\ndòng 2\\ttab \\\"q\\\" \\\\ \\/ \\u00e9\"}"));
+        // AI đã nhân đôi đúng: giữ nguyên
+        assertEquals("\\frac{1}{2}", repairedValue("{\"k\":\"\\\\frac{1}{2}\"}"));
+        // xuống dòng thật + từ tiếng Việt bắt đầu bằng n: không bị nhầm thành lệnh \nu
+        assertEquals("bước 1:\nnuôi", repairedValue("{\"k\":\"bước 1:\\nnuôi\"}"));
+        // không có dấu \ nào, hoặc null
+        assertEquals("{\"k\":1}", AiJsonParser.repairLatexEscapes("{\"k\":1}"));
+        assertNull(AiJsonParser.repairLatexEscapes(null));
+    }
+
     // ---------- ScoreUtil: thang 10, làm tròn 0.25 (BR-07) ----------
 
     @Test

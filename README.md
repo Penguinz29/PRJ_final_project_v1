@@ -25,7 +25,7 @@
 | **Cơ sở dữ liệu** | Microsoft SQL Server 2016+ | Driver `mssql-jdbc` |
 | **Validation** | **Jakarta Bean Validation** (Hibernate Validator 8) | Thông báo tiếng Việt trong `messages.properties` (UTF-8), hiển thị tại từng trường bằng `<form:errors>`; ràng buộc nghiệp vụ ở Service; ràng buộc `UNIQUE/CHECK/FK` ở CSDL |
 | **Bảo mật** | `AuthInterceptor` phân quyền ADMIN/TEACHER/STUDENT theo URL (cả `/api/**`), `CsrfInterceptor` (token CSRF cho mọi POST), mật khẩu **BCrypt**, đổi session ID sau đăng nhập, Jsoup làm sạch nội dung AI, ảnh upload kiểm tra magic-bytes và chỉ phục vụ cho đúng người | Chống SQL Injection / XSS / CSRF / session fixation |
-| **Trí tuệ nhân tạo** | Google Gemini API qua `java.net.http.HttpClient` (model, khóa API, nhiệt độ... cấu hình trong bảng `AiConfigs`) | Sinh đề, Gia sư AI step-by-step, chấm tự luận OCR; chạy bất đồng bộ (`CompletableFuture` + thread pool riêng), tự thử lại tối đa 3 lần |
+| **Trí tuệ nhân tạo** | Google Gemini API qua `java.net.http.HttpClient` (model, khóa API, nhiệt độ... cấu hình trong bảng `AiConfigs`) | Sinh đề, Gia sư AI step-by-step, chấm tự luận OCR; chạy bất đồng bộ (`CompletableFuture` + thread pool riêng), tự thử lại tối đa 3 lần, tự chuyển model dự phòng khi model chính quá tải (503/504), tự vá dấu `\` của LaTeX trong JSON AI trả về, ghi log thời lượng từng lần gọi |
 | **Giao diện (Frontend)** | HTML5, CSS3, Bootstrap 5, Bootstrap Icons, AJAX/Fetch | Responsive |
 | **Hiển thị Toán học** | KaTeX (Auto-render) | Công thức LaTeX |
 | **Log** | SLF4J + Logback | Không log khóa API, mật khẩu |
@@ -64,9 +64,11 @@ PRJ_final_project_v1/
 ├── pom.xml                                # Maven (WAR, Spring 6.2, Spring Data JPA, Hibernate 6.6, Hikari, Jackson, Jsoup...)
 ├── nb-configuration.xml                   # Gợi ý server Tomcat cho NetBeans
 ├── document/                              # SRS, FRS, Claude.md (quy tắc kỹ thuật)
+│   ├── docs/                              # DATABASE.md (từ điển dữ liệu), ERD.md, ERD + đặc tả ràng buộc (.docx)
 │   └── sql/                               # Kịch bản SQL Server
 │       ├── 01_schema.sql                  # Tạo CSDL MathTutorDB, 10 bảng + toàn bộ ràng buộc (XÓA CSDL cũ cùng tên)
-│       └── 02_data.sql                    # Dữ liệu mẫu phong phú (mật khẩu BCrypt của EduTutor@123, 15 khóa cấu hình AI)
+│       ├── 02_data.sql                    # Dữ liệu mẫu phong phú (mật khẩu BCrypt của EduTutor@123, 15 khóa cấu hình AI)
+│       └── 03_data_gdpt2018.sql           # (Tùy chọn) bổ sung chuyên đề / bài học / câu hỏi theo Toán 12 GDPT 2018; chạy lại không nhân đôi
 └── src/
     ├── main/
     │   ├── java/com/edututor/
@@ -102,7 +104,9 @@ PRJ_final_project_v1/
 ### Bước 2: Thiết lập Cơ sở Dữ liệu
 **Cài mới:** chạy trong SSMS 2 file trong `document/sql/`: `01_schema.sql` (tạo CSDL `MathTutorDB`, 10 bảng và ràng buộc — **xóa và tạo lại** nếu CSDL đã tồn tại) rồi `02_data.sql` (dữ liệu mẫu, mật khẩu mọi tài khoản `EduTutor@123`).
 
-**Đã có CSDL cũ** (ví dụ từ bản Ant): chạy lại 2 file trên để tạo CSDL mới đúng cấu trúc hiện tại (**dữ liệu cũ sẽ bị xóa**, thay bằng dữ liệu mẫu). Stop Tomcat trước khi chạy; sau đó vào **Cấu hình AI** nhập lại khóa Gemini.
+**Đã có CSDL cũ** (ví dụ từ bản Ant): chạy lại 2 file trên để tạo CSDL mới đúng cấu trúc hiện tại (**dữ liệu cũ sẽ bị xóa**, thay bằng dữ liệu mẫu). Stop Tomcat trước khi chạy; sau đó vào **Cấu hình AI** nhập lại khóa Gemini **và kiểm tra lại model** (mọi cấu hình AI, kể cả model đã đổi trên giao diện, bị đặt lại về giá trị mẫu — xem mục 8 nếu AI phản hồi chậm).
+
+**Dữ liệu bổ sung (tùy chọn):** chạy thêm `03_data_gdpt2018.sql` (sau 2 file trên) để có đủ 6 chương Toán 12 GDPT 2018 (thêm 4 chủ đề, 13 bài học, 73 câu trắc nghiệm, 5 tự luận). Chạy lại lần 2 sẽ tự bỏ qua, không nhân đôi.
 
 **Dữ liệu mẫu** trong `02_data.sql` đủ để xem hết các màn hình: 3 giáo viên, 12 học sinh (có tài khoản bị khóa, xóa mềm), 7 chủ đề / 15 bài học (có mục đã ẩn và bài học còn trống), bài giảng đủ 4 loại, 46 câu hỏi, ~150 bài làm trải 14 ngày (có làm lại cùng câu), bài tự luận chờ duyệt / đã duyệt và các phiên gia sư. Ảnh bài tự luận là URL minh họa `placehold.co` (cần mạng), URL video là ví dụ.
 
@@ -125,7 +129,7 @@ Hoặc dòng lệnh: `mvn clean package` rồi chép `target/edututor.war` vào 
 
 ### Bước 5 (tùy chọn): Chạy kiểm thử
 ```bash
-mvn clean package            # build WAR + 21 unit test, không cần CSDL
+mvn clean package            # build WAR + 24 unit test, không cần CSDL
 # Kiểm thử tích hợp (Tomcat nhúng + SQL Server thật + Gemini giả + đếm số câu SQL chống N+1).
 # Dùng CSDL riêng: chạy 01_schema.sql + 02_data.sql sau khi đổi tên MathTutorDB thành MathTutorDB_test:
 mvn clean verify -Pintegration -Dit.db.url="jdbc:sqlserver://localhost:1433;databaseName=MathTutorDB_test;encrypt=true;trustServerCertificate=true" -Dit.db.user=sa -Dit.db.pass=123
@@ -156,4 +160,29 @@ Tất cả các tài khoản mặc định có mật khẩu là: **`EduTutor@123
 - **Phản hồi API thống nhất:** mọi `/api/**` trả `{"success", "message", "data", "errors"}`; `GlobalExceptionHandler` ánh xạ lỗi sang mã HTTP (400 dữ liệu sai, 401, 403, 404, 409 xung đột, 422 AI trả dữ liệu không dùng được, 502/503/504 lỗi AI, 500 kèm mã tham chiếu `ERR-yyyyMMdd-xxxx`) và chuyển về trang trước kèm thông báo cho trang thường.
 - **CSRF:** mọi form POST có trường ẩn `_csrf`; `fetch` dùng `csrfFetch()` (header `X-CSRF-TOKEN` lấy từ `<meta name="csrf-token">`). Đăng xuất là `POST /logout`.
 - **Cấu hình bằng Java, không cần `web.xml`** (dự án không có `web.xml`): `WebAppInitializer` đăng ký DispatcherServlet, UTF-8 filter, multipart, session timeout 30 phút, cookie `HttpOnly` + `SameSite=Lax`. Trang lỗi nằm ở `WEB-INF/views/error/`.
+- **JSON từ AI chứa LaTeX:** AI hay quên nhân đôi dấu `\` (`\Leftrightarrow` làm JSON sai cú pháp; `\frac`, `\times` bị hiểu thành ký tự điều khiển). `AiJsonParser.repairLatexEscapes` tự sửa trước khi parse (chỉ trong chuỗi `"..."`, giữ nguyên escape JSON thật); lệnh LaTeX ngoài danh sách `LATEX_AFTER_BACKSLASH` có thể cần bổ sung.
+- **Model dự phòng:** khi model chính trả 503/504, `GeminiService` chuyển sang `gemini.fallbackModel` và **giữ model đó** cho các lần thử còn lại của cùng yêu cầu (không quay lại model chính đang quá tải). Lỗi 429 (hết hạn mức miễn phí) báo ngay, không thử lại.
 - **Phiên bản trước (Servlet thuần, JDBC thủ công; rồi JdbcTemplate)** đã được thay thế hoàn toàn; không còn `DBContext`, `*DAO`, `JdbcTemplate`, `@WebServlet`, `build.xml`/`nbproject` (Ant).
+
+---
+
+## 🩺 8. Xử lý sự cố: AI phản hồi chậm hoặc lỗi
+
+Mỗi lần gọi Gemini ghi một dòng log kèm thời lượng (xem cửa sổ log Tomcat / console):
+
+```
+INFO  GeminiService - Gemini ok:   model=gemini-3.5-flash-lite attempt=1/3 took=1423ms
+WARN  GeminiService - Gemini loi:  model=gemini-3.5-flash attempt=1/3 took=1373ms status=503
+```
+
+| Dấu hiệu trong log | Nguyên nhân thường gặp | Cách xử lý |
+|---|---|---|
+| `status=503` ("high demand") | Model chính của Google đang quá tải; mỗi lần lỗi tốn vài giây trước khi chuyển sang model dự phòng | Vào **Cấu hình AI**, đặt `DEFAULT_MODEL` (và `VISION_MODEL` nếu ảnh vẫn đọc tốt) sang model nhẹ như `gemini-3.5-flash-lite` |
+| `status=504` hoặc `took` ≥ 14000ms ở lần 1 | Model mạnh xử lý chậm (đặc biệt chấm ảnh) hoặc timeout 35 giây/lần | Dùng model nhẹ hơn; giảm `AI_TIMEOUT_SECONDS` |
+| `status=429` | Hết hạn mức miễn phí của Gemini | Chờ khoảng 1 phút hoặc dùng khóa API khác |
+| Sau khi tạo lại CSDL mà AI chậm hơn trước | `01_schema.sql` + `02_data.sql` đặt lại bảng `AiConfigs` về model mẫu và xóa khóa API | Nhập lại khóa và chọn lại model trong **Cấu hình AI**, bấm **Test kết nối** |
+| "Không đọc được bài làm" khi chấm tự luận | AI đánh giá ảnh không đọc được (`legible=false`), không phải lỗi hệ thống | Chụp rõ nét, đủ sáng, chữ to; nếu ảnh rõ vẫn báo lỗi, thử `VISION_MODEL = gemini-3.5-flash` |
+
+Thông số tham khảo đo được với `gemini-3.5-flash-lite`: gia sư AI và sinh đề thường mất 1–3 giây mỗi lượt. Chất lượng giải thích của model nhẹ có thể kém hơn model mạnh, nên thử một vài bài toán trước khi demo.
+
+> `gemini.thinkingBudget=0` (`application.properties`) chỉ có tác dụng với model `gemini-2.5-*` (không phải bản `pro`); model dòng 3.x bỏ qua tham số này.
