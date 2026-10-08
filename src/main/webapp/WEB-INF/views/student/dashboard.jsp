@@ -36,22 +36,25 @@
 
                                                     <%-- Hero banner --%>
                                                         <div class="hero-banner mb-4">
-                                                            <div class="hero-label">Chào mừng trở lại</div>
-                                                            <h2>Xin chào,
-                                                                <c:out
-                                                                    value="${sessionScope.LOGGED_IN_USER.fullName}" />!
-                                                            </h2>
-                                                            <p>Tiếp tục hành trình học Toán 12 của bạn ngay hôm nay.</p>
-                                                            <div class="d-flex flex-wrap gap-2">
-                                                                <a href="${pageContext.request.contextPath}/student/topics"
-                                                                    class="btn-hero-primary btn">
-                                                                    <i class="bi bi-book me-1"></i>Học ngay
-                                                                </a>
-                                                                <a href="${pageContext.request.contextPath}/student/ai-tutor"
-                                                                    class="btn-hero-outline btn">
-                                                                    <i class="bi bi-chat-dots me-1"></i>Hỏi AI
-                                                                </a>
+                                                            <div class="hero-banner-content">
+                                                                <div class="hero-label">Chào mừng trở lại</div>
+                                                                <h2>Xin chào,
+                                                                    <c:out
+                                                                        value="${sessionScope.LOGGED_IN_USER.fullName}" />!
+                                                                </h2>
+                                                                <p>Tiếp tục hành trình học Toán 12 của bạn ngay hôm nay.</p>
+                                                                <div class="d-flex flex-wrap gap-2">
+                                                                    <a href="${pageContext.request.contextPath}/student/topics"
+                                                                        class="btn-hero-primary btn">
+                                                                        <i class="bi bi-book me-1"></i>Học ngay
+                                                                    </a>
+                                                                    <a href="${pageContext.request.contextPath}/student/ai-tutor"
+                                                                        class="btn-hero-outline btn">
+                                                                        <i class="bi bi-chat-dots me-1"></i>Hỏi AI
+                                                                    </a>
+                                                                </div>
                                                             </div>
+                                                            <img src="${pageContext.request.contextPath}/static/images/mascot.png" alt="Mascot" class="welcome-mascot-img" />
                                                         </div>
 
                                                         <%-- Stat cards 2×2 --%>

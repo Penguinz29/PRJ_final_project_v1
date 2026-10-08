@@ -25,5 +25,5 @@
                         href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap"
                         rel="stylesheet">
                     <!-- App CSS -->
-                    <link href="${pageContext.request.contextPath}/static/css/style.css?v=2.3" rel="stylesheet">
+                    <link href="${pageContext.request.contextPath}/static/css/style.css?v=2.5" rel="stylesheet">
                 </head>
