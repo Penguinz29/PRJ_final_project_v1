@@ -183,6 +183,8 @@
       var selected = qs('[name="type"]:checked');
       var isMcq = selected && selected.value === 'MCQ';
       mcqBlock.style.display = isMcq ? '' : 'none';
+      var mcqPreview = qs('#mcqPreview');
+      if (mcqPreview) mcqPreview.style.display = isMcq ? '' : 'none';
       qsa('#mcqBlock input, #mcqBlock select', document).forEach(function (el) {
         el.disabled = !isMcq;
         if (!isMcq) el.removeAttribute('required');
@@ -314,17 +316,57 @@
   }
 
   /* ── KaTeX preview cho textarea ── */
+  /* ── HTML đơn giản an toàn (khớp HtmlSanitizer.toSafeHtml phía server) ── */
+  var SAFE_TAGS = 'p|br|b|i|u|strong|em|sub|sup|ul|ol|li|div|span|h[1-6]|table|thead|tbody|tr|th|td';
+  var SAFE_TAG_SET = SAFE_TAGS.replace('h[1-6]', 'h1|h2|h3|h4|h5|h6').toUpperCase().split('|');
+  var STRAY_LT = new RegExp('<(?!/?(' + SAFE_TAGS + ')\\b)', 'gi');
+
+  /**
+   * Trả về chuỗi HTML an toàn để gán innerHTML: chỉ giữ thẻ định dạng cơ bản, bỏ MỌI thuộc tính,
+   * thẻ khác (script, img, ...) chuyển thành văn bản thuần. DOMParser tạo tài liệu "chết"
+   * nên không chạy script / không tải ảnh trong lúc phân tích. Công thức $a<b$ được giữ nguyên.
+   */
+  function toSafeHtml(raw) {
+    if (raw == null || raw === '') return '';
+    var doc = new DOMParser().parseFromString(
+      '<body>' + String(raw).replace(STRAY_LT, '&lt;') + '</body>', 'text/html');
+    (function clean(node) {
+      Array.prototype.slice.call(node.childNodes).forEach(function (child) {
+        if (child.nodeType === 3) return;
+        if (child.nodeType !== 1) { node.removeChild(child); return; }
+        if (SAFE_TAG_SET.indexOf(child.tagName) === -1) {
+          child.replaceWith(document.createTextNode(child.textContent));
+          return;
+        }
+        Array.prototype.slice.call(child.attributes).forEach(function (a) {
+          child.removeAttribute(a.name);
+        });
+        clean(child);
+      });
+    })(doc.body);
+    return doc.body.innerHTML;
+  }
+  window.EduRich = { toSafeHtml: toSafeHtml };
+
   function initLatexPreview() {
     qsa('[data-latex-preview]').forEach(function (textarea) {
       var target = qs(textarea.dataset.latexPreview);
       if (!target) return;
+      var placeholder = target.innerHTML;
+      function update() {
+        if (!textarea.value.trim()) { target.innerHTML = placeholder; return; }
+        target.innerHTML = toSafeHtml(textarea.value);
+        renderMath(target);
+      }
       var timer;
       textarea.addEventListener('input', function () {
         clearTimeout(timer);
-        timer = setTimeout(function () {
-          target.textContent = textarea.value;
-          renderMath(target);
-        }, 300);
+        timer = setTimeout(update, 300);
+      });
+      update(); // trang sửa: nội dung có sẵn được preview ngay, không chờ nhập
+      // KaTeX nạp bằng defer: render lại công thức khi mọi script đã sẵn sàng
+      window.addEventListener('load', function () {
+        if (textarea.value.trim()) renderMath(target);
       });
     });
   }

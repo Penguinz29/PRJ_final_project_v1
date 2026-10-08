@@ -65,7 +65,7 @@
                         </div>
                         <h6 class="fw-bold text-muted mb-1" style="font-size: .85rem;">NỘI DUNG ĐỀ BÀI:</h6>
                         <div class="p-3 bg-light rounded border mb-3 latex-content" style="font-size: .95rem;">
-                            <c:out value="${not empty sub.questionContent ? sub.questionContent : sub.questionTitle}" />
+                            <ui:rich-text value="${not empty sub.questionContent ? sub.questionContent : sub.questionTitle}" />
                         </div>
 
                         <h6 class="fw-bold text-muted mb-1" style="font-size: .85rem;">BÀI LÀM CỦA HỌC SINH:</h6>

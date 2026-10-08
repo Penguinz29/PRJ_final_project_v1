@@ -7,7 +7,7 @@
         <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
             onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false})"></script>
         <!-- App JS -->
-        <script src="${pageContext.request.contextPath}/static/js/app.js"></script>
+        <script src="${pageContext.request.contextPath}/static/js/app.js?v=2.5"></script>
         </body>
 
         </html>

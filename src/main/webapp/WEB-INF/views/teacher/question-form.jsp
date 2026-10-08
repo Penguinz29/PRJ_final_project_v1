@@ -122,6 +122,7 @@
                                                             </label>
                                                             <input type="text" class="form-control font-monospace"
                                                                 name="opt_${letter}" maxlength="500"
+                                                                data-latex-preview="#previewOpt_${letter}"
                                                                 placeholder="Nhập đáp án ${letter}..."
                                                                 value="<c:out value='${optionMap[letter]}'/>">
                                                         </div>
@@ -153,6 +154,7 @@
                                                     <div class="card-body">
                                                         <textarea class="form-control font-monospace"
                                                             name="explanation" rows="4" maxlength="3000"
+                                                            data-latex-preview="#previewExplanation"
                                                             placeholder="Nhập lời giải chi tiết, có thể dùng LaTeX $...$ ..."><c:out value="${question.explanation}"/></textarea>
                                                     </div>
                                                 </div>
@@ -170,12 +172,32 @@
 
                                 <%-- Preview --%>
                                     <div class="col-lg-4">
-                                        <div class="card" style="position:sticky;top:calc(var(--navbar-h) + 1rem);">
+                                        <div style="position:sticky;top:calc(var(--navbar-h) + 1rem);">
+                                        <div class="card mb-3">
                                             <div class="card-header"><i class="bi bi-eye me-2"></i>Preview câu hỏi</div>
-                                            <div class="card-body" id="previewContent"
+                                            <div class="card-body latex-content" id="previewContent"
                                                 style="min-height:120px;font-size:.9rem;line-height:1.7;">
                                                 <span class="text-muted">Nhập nội dung để xem preview...</span>
                                             </div>
+                                        </div>
+                                        <div class="card mb-3" id="mcqPreview">
+                                            <div class="card-header"><i class="bi bi-list-check me-2"></i>Preview đáp án</div>
+                                            <div class="card-body" style="font-size:.9rem;line-height:1.7;">
+                                                <c:forEach var="letter" items="${'A,B,C,D'.split(',')}">
+                                                    <div class="d-flex align-items-baseline gap-2 mb-2">
+                                                        <span class="option-label border-0" style="background:var(--primary);color:#fff;">${letter}</span>
+                                                        <div class="latex-content flex-grow-1" id="previewOpt_${letter}"><span class="text-muted">—</span></div>
+                                                    </div>
+                                                </c:forEach>
+                                            </div>
+                                        </div>
+                                        <div class="card">
+                                            <div class="card-header"><i class="bi bi-lightbulb me-2"></i>Preview lời giải</div>
+                                            <div class="card-body latex-content" id="previewExplanation"
+                                                style="min-height:80px;font-size:.9rem;line-height:1.7;">
+                                                <span class="text-muted">Nhập lời giải để xem preview...</span>
+                                            </div>
+                                        </div>
                                         </div>
                                     </div>
                             </div>

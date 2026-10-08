@@ -413,7 +413,7 @@
                                                 const checkIcon = isCorrect ? '<i class="bi bi-check-circle-fill text-success ms-1"></i>' : '';
                                                 optionsHtml += '<div class="col-md-6">' +
                                                     '<div class="p-2 border rounded ' + badgeClass + '" style="font-size: .88rem;">' +
-                                                        '<strong>' + esc(opt.letter) + '.</strong> ' + esc(opt.content) + ' ' + checkIcon +
+                                                        '<strong>' + esc(opt.letter) + '.</strong> ' + EduRich.toSafeHtml(opt.content) + ' ' + checkIcon +
                                                     '</div>' +
                                                 '</div>';
                                             });
@@ -423,7 +423,7 @@
                                         let explanationHtml = '';
                                         if (q.explanation) {
                                             explanationHtml = '<div class="mt-2 p-2 bg-light rounded text-muted" style="font-size: .83rem;">' +
-                                                '<i class="bi bi-lightbulb text-warning me-1"></i><strong>Lời giải:</strong> ' + esc(q.explanation) +
+                                                '<i class="bi bi-lightbulb text-warning me-1"></i><strong>Lời giải:</strong> ' + EduRich.toSafeHtml(q.explanation) +
                                             '</div>';
                                         }
 
@@ -435,7 +435,7 @@
                                                         'Câu ' + (idx + 1) +
                                                         ' <span class="badge bg-primary-subtle text-primary ms-1" style="font-size: .75rem;">Mức ' + esc(q.level || 1) + '</span>' +
                                                     '</label>' +
-                                                    '<div class="latex-content mb-2">' + esc(q.content) + '</div>' +
+                                                    '<div class="latex-content mb-2">' + EduRich.toSafeHtml(q.content) + '</div>' +
                                                     optionsHtml +
                                                     explanationHtml +
                                                 '</div>' +

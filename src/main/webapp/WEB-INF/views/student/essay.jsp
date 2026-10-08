@@ -215,7 +215,7 @@
                             clearTimeout(timer);
                             if (!ta.value.trim()) { preview.hidden = true; preview.textContent = ''; return; }
                             timer = setTimeout(() => {
-                                preview.textContent = ta.value;
+                                preview.innerHTML = EduRich.toSafeHtml(ta.value);
                                 preview.hidden = false;
                                 if (window.renderMathInElement) renderMathInElement(preview, MATH);
                             }, 300);

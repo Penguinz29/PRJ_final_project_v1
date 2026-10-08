@@ -117,7 +117,7 @@
                                 <div class="col-lg-4">
                                     <div class="card" style="position:sticky;top:calc(var(--navbar-h) + 1rem);">
                                         <div class="card-header"><i class="bi bi-eye me-2"></i>Preview nội dung</div>
-                                        <div class="card-body" id="previewContent"
+                                        <div class="card-body latex-content" id="previewContent"
                                             style="min-height:200px;font-size:.9rem;line-height:1.7;">
                                             <span class="text-muted">Nhập nội dung bên trái để xem preview...</span>
                                         </div>
