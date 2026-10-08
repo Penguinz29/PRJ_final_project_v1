@@ -2275,3 +2275,6 @@ h6 {
   overflow-y: hidden;
   padding: 0.25rem 0;
 }
+
+/* Hình vẽ cắt từ SGK trong đề bài / lý thuyết */
+.sgk-figure { display: block; margin: .5rem auto; max-height: 360px; width: auto; max-width: 100%; }

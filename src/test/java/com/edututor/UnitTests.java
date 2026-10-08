@@ -241,6 +241,18 @@ class UnitTests {
         assertNull(HtmlSanitizer.clean(null));
     }
 
+    @Test
+    void safeHtmlAllowsOnlyLocalStaticImages() {
+        String ok = HtmlSanitizer.toSafeHtml("<p>Đề $x<y$</p><img src=\"/static/img/sgk/hinh-1-11.png\" alt=\"h\" onerror=\"x()\">", "/edututor");
+        assertTrue(ok.contains("src=\"/edututor/static/img/sgk/hinh-1-11.png\""));
+        assertFalse(ok.contains("onerror"));
+        assertTrue(ok.contains("$x&lt;y$"));
+        assertFalse(HtmlSanitizer.toSafeHtml("<img src=\"http://evil.test/x.png\">", "/edututor").contains("<img"));
+        assertFalse(HtmlSanitizer.toSafeHtml("<img src=\"data:image/png;base64,AAAA\">", "").contains("<img"));
+        assertFalse(HtmlSanitizer.toSafeHtml("<img src=\"/static/img/../../WEB-INF/x.png\">", "").contains("<img"));
+        assertFalse(HtmlSanitizer.toSafeHtml("<img src=\"//evil.test/static/img/a.png\">", "").contains("<img"));
+    }
+
     // ---------- Bean Validation + thông báo tiếng Việt (VAL-01…04, TC-VAL-01) ----------
 
     private LocalValidatorFactoryBean validator() {

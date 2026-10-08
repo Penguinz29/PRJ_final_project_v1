@@ -10,6 +10,7 @@
                     <meta charset="UTF-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1">
                     <meta name="csrf-token" content="${sessionScope.CSRF_TOKEN}">
+                    <meta name="ctx" content="${pageContext.request.contextPath}">
                     <title>${fn:escapeXml(not empty param.title ? param.title : 'MathTutor 12')} | MathTutor 12</title>
 
                     <!-- Bootstrap CSS -->

@@ -317,13 +317,13 @@
 
   /* ── KaTeX preview cho textarea ── */
   /* ── HTML đơn giản an toàn (khớp HtmlSanitizer.toSafeHtml phía server) ── */
-  var SAFE_TAGS = 'p|br|b|i|u|strong|em|sub|sup|ul|ol|li|div|span|h[1-6]|table|thead|tbody|tr|th|td';
+  var SAFE_TAGS = 'p|br|b|i|u|strong|em|sub|sup|ul|ol|li|div|span|h[1-6]|table|thead|tbody|tr|th|td|img';
   var SAFE_TAG_SET = SAFE_TAGS.replace('h[1-6]', 'h1|h2|h3|h4|h5|h6').toUpperCase().split('|');
   var STRAY_LT = new RegExp('<(?!/?(' + SAFE_TAGS + ')\\b)', 'gi');
 
   /**
    * Trả về chuỗi HTML an toàn để gán innerHTML: chỉ giữ thẻ định dạng cơ bản, bỏ MỌI thuộc tính,
-   * thẻ khác (script, img, ...) chuyển thành văn bản thuần. DOMParser tạo tài liệu "chết"
+   * thẻ khác (script, ...) chuyển thành văn bản thuần; <img> chỉ giữ khi src là /static/img/.... DOMParser tạo tài liệu "chết"
    * nên không chạy script / không tải ảnh trong lúc phân tích. Công thức $a<b$ được giữ nguyên.
    */
   function toSafeHtml(raw) {
@@ -338,9 +338,21 @@
           child.replaceWith(document.createTextNode(child.textContent));
           return;
         }
+        var src = child.tagName === 'IMG' ? child.getAttribute('src') : null;
         Array.prototype.slice.call(child.attributes).forEach(function (a) {
           child.removeAttribute(a.name);
         });
+        if (child.tagName === 'IMG') {
+          // chỉ cho ảnh nội bộ /static/img/... (khớp HtmlSanitizer phía server), nguồn khác bị bỏ
+          if (src && /^\/static\/img\/[A-Za-z0-9_.\/-]+$/.test(src) && src.indexOf('..') === -1) {
+            var ctxMeta = qs('meta[name="ctx"]');
+            child.setAttribute('src', (ctxMeta ? ctxMeta.getAttribute('content') : '') + src);
+            child.setAttribute('class', 'img-fluid sgk-figure');
+          } else {
+            child.remove();
+          }
+          return;
+        }
         clean(child);
       });
     })(doc.body);

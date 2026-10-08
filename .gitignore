@@ -12,6 +12,6 @@ Thumbs.db
 .DS_Store
 # Maven
 target/
-
+sách/
 .vscode/
 nb-configuration.xml
