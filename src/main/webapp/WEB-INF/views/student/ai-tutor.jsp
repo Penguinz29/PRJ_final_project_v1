@@ -103,7 +103,7 @@
                                 <div class="avatar"><i class="bi bi-robot"></i></div>
                                 <div class="bubble">
                                     <span class="typing-indicator"><span></span><span></span><span></span></span>
-                                    <span class="small text-muted ms-2">AI đang suy nghĩ...</span>
+                                    <span class="small text-muted ms-2">Gia sư AI đang suy nghĩ...</span>
                                 </div>
                             </div>
                         </div>
