@@ -104,11 +104,11 @@
                                                                         class="btn btn-sm btn-outline-secondary me-1"
                                                                         title="Quản lý bài giảng (video, link, văn bản)"><i
                                                                             class="bi bi-collection-play"></i></a>
-                                                                    <%-- BR-03: chỉ người tạo bài học hoặc Admin được sửa / xóa --%>
-                                                                    <c:if test="${sessionScope.LOGGED_IN_USER.admin or l.createdById == sessionScope.LOGGED_IN_USER.userId}">
                                                                     <a href="${pageContext.request.contextPath}/teacher/lessons?action=edit&id=${l.lessonId}"
                                                                         class="btn btn-sm btn-outline-primary me-1"><i
                                                                             class="bi bi-pencil"></i></a>
+                                                                    <%-- Mọi giáo viên được sửa bài học; chỉ người tạo hoặc Admin được xóa (xóa kéo theo câu hỏi của bài) --%>
+                                                                    <c:if test="${sessionScope.LOGGED_IN_USER.admin or l.createdById == sessionScope.LOGGED_IN_USER.userId}">
                                                                     <form class="d-inline" id="delL${l.lessonId}"
                                                                         action="${pageContext.request.contextPath}/teacher/lessons"
                                                                         method="post">

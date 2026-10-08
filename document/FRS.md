@@ -438,7 +438,7 @@ WHERE submission_type = 'ESSAY' AND status = 'AI_GRADED';                       
 
 ### 3.3. MODULE 3 — NỘI DUNG VÀ NGÂN HÀNG ĐỀ (TEACHER)
 
-Quyền: `TEACHER` và `ADMIN`. Quy tắc sở hữu BR-03 áp dụng cho **toàn bộ tài nguyên giáo viên** — chủ đề (`Topic`), bài học (`Lesson`), bài giảng (`LessonMaterial`) và câu hỏi (`Question`): giáo viên chỉ sửa/xóa bản ghi có `created_by = mình` (sai chủ → `ForbiddenException`, 403); Admin có toàn quyền trên toàn hệ thống. Giáo viên vẫn xem được nội dung dùng chung. Mọi form có CSRF; POST xong redirect (PRG).
+Quyền: `TEACHER` và `ADMIN`. Quy tắc BR-03: chủ đề (`Topic`), bài học (`Lesson`) và bài giảng (`LessonMaterial`) là **nội dung dùng chung** — mọi giáo viên đều xem, thêm và **sửa** được (kể cả của giáo viên khác); riêng thao tác **xóa** chủ đề / bài học chỉ dành cho người tạo hoặc Admin (xóa bài học kéo theo câu hỏi của bài). **Câu hỏi** (`Question`) chỉ người tạo (`created_by`/`teacher_id` = mình) hoặc Admin được sửa / xóa (sai chủ → `ForbiddenException`, 403). Admin có toàn quyền. Mọi form có CSRF; POST xong redirect (PRG).
 
 **Xóa và xóa mềm (BR-05, áp dụng cho UC-TEA-01, 02, 04):**
 - Việc xóa luôn do giáo viên / Admin **chủ động** bấm Xóa và xác nhận; hệ thống chỉ quyết định *cách* xóa (xóa hẳn hay xóa mềm) theo lịch sử dữ liệu. "Có lịch sử" = có bài nộp (`submissions`) hoặc phiên gia sư (`tutor_sessions.question_id`) liên quan.
@@ -468,7 +468,7 @@ Chủ đề (`topics`) cùng bài học (`lessons`) là hai cấp "chuyên đề
 | `POST /teacher/lessons/{id}/update`, `/{id}/delete` | Sửa, xóa |
 
 - `topicId` phải tồn tại; `contentSummary` cho phép LaTeX (làm sạch bằng `HtmlSanitizer`).
-- **BR-03:** khi tạo, ghi `created_by` = người đang đăng nhập. Chỉ người tạo hoặc Admin được mở form sửa / sửa / xóa (sai chủ → 403); Admin sửa không đổi `created_by`. Giáo viên chỉ được **thêm bài học vào chủ đề do mình tạo** (Admin: mọi chủ đề) — giao diện chỉ liệt kê chủ đề của mình (Admin thấy mọi chủ đề, để sửa bài học của giáo viên khác mà không bị chuyển sang chủ đề khác), server vẫn kiểm tra lại. Danh sách chỉ hiện nút Sửa / Xóa cho người tạo hoặc Admin; giáo viên khác vẫn xem được bài học (nội dung dùng chung). Xóa tài khoản giáo viên đã tạo bài học → chỉ xóa mềm (BR-06).
+- **BR-03:** khi tạo, ghi `created_by` = người đang đăng nhập. Chủ đề, bài học, bài giảng: mọi giáo viên được mở form sửa / sửa / thêm (người sửa không đổi `created_by`); chỉ người tạo hoặc Admin được **xóa** chủ đề / bài học (sai chủ → 403). Giáo viên được thêm bài học vào bất kỳ chủ đề nào; giao diện liệt kê mọi chủ đề. Câu hỏi: chỉ người tạo hoặc Admin được mở form sửa / sửa / xóa. Danh sách chủ đề / bài học hiện nút Sửa cho mọi giáo viên, nút Xóa chỉ cho người tạo hoặc Admin. Xóa tài khoản giáo viên đã tạo bài học → chỉ xóa mềm (BR-06).
 - Xóa (BR-05): xóa bài học thì **bài tập (câu hỏi) của bài cũng mất theo** — không còn chặn khi bài còn câu hỏi.
   - Không còn bài nộp / phiên gia sư nào liên quan → xóa cứng bài học (câu hỏi và bài giảng xóa theo `ON DELETE CASCADE`). Còn (để bảo toàn lịch sử) → xóa mềm bài học (`lessons.is_active = 0`) **và toàn bộ câu hỏi của bài** (`questions.is_active = 0`); ẩn khỏi trang quản lý và khỏi học sinh.
   - Bài giảng (`lesson_materials`) bị xóa theo (`ON DELETE CASCADE`) sau khi có xác nhận ở giao diện.

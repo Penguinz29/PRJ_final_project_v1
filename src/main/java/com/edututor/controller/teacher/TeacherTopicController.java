@@ -28,7 +28,7 @@ public class TeacherTopicController {
 
     @GetMapping("/teacher/topics")
     public String list(@SessionAttribute(AuthInterceptor.SESSION_USER) SessionUser user, Model model) {
-        model.addAttribute("topics", topicService.getTopicsByTeacher(user.getUserId()));
+        model.addAttribute("topics", topicService.getAllTopicsForManage());
         return "teacher/topics";
     }
 

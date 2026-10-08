@@ -44,7 +44,7 @@ Cấp trên của bài học (ví dụ "Đạo hàm", "Tích phân").
 | TopicId | INT IDENTITY | PK | |
 | TopicName | NVARCHAR(255) | NOT NULL | Tên chủ đề |
 | Description | NVARCHAR(MAX) | NULL | Mô tả |
-| TeacherId | INT | NOT NULL, FK → Users | Giáo viên tạo (BR-03: chỉ người tạo/Admin được sửa, xóa) |
+| TeacherId | INT | NOT NULL, FK → Users | Giáo viên tạo (BR-03: mọi giáo viên được sửa chủ đề; chỉ người tạo/Admin được xóa) |
 | OrderIndex | INT | NOT NULL, mặc định 1 | Thứ tự hiển thị |
 | IsActive | BIT | NOT NULL, mặc định 1 | **Xóa mềm**: `0` = ẩn (kể cả với học sinh) |
 | CreatedAt / UpdatedAt | DATETIME | | |
@@ -206,7 +206,7 @@ Index `IX_TutorMessages_Session (SessionId, MessageId)` để nạp hội thoạ
 ## 5. Lưu ý khi đối chiếu với code
 
 - `Users.IsActive` và `Submissions.IsReviewed` là cột cũ, luôn phải đồng bộ với `Status` ở tầng ứng dụng; nguồn sự thật là `Status`.
-- Quy tắc BR-04 (4 phương án, 1 đáp án đúng) và BR-03 (chỉ người tạo/Admin được sửa, xóa) không có ở tầng DB mà kiểm tra ở Service.
+- Quy tắc BR-04 (4 phương án, 1 đáp án đúng) và BR-03 (chủ đề/bài học/bài giảng dùng chung, chỉ người tạo/Admin được xóa; câu hỏi chỉ người tạo/Admin được sửa, xóa) không có ở tầng DB mà kiểm tra ở Service.
 - `Users.Email` cho phép NULL, nhưng đã UNIQUE: SQL Server chỉ cho **một** dòng có Email NULL. Cần lưu ý nếu tạo nhiều tài khoản không có email.
 
 ## 6. Dữ liệu mẫu (`02_data.sql`)

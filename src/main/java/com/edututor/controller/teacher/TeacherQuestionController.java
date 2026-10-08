@@ -54,10 +54,7 @@ public class TeacherQuestionController {
                        @RequestParam(defaultValue = "1") int page,
                        @SessionAttribute(AuthInterceptor.SESSION_USER) SessionUser user,
                        HttpServletRequest request, Model model) {
-        List<TopicView> topics = topicService.getTopicsByTeacher(user.getUserId());
-        if (topics.isEmpty()) {
-            topics = topicService.getAllTopics();
-        }
+        List<TopicView> topics = topicService.getAllTopics();
         model.addAttribute("topics", topics);
 
         boolean formPage = request.getServletPath().equals("/teacher/question/form")

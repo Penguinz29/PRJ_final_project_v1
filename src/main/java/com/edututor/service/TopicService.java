@@ -50,6 +50,12 @@ public class TopicService {
         return topicRepository.findByActiveTrueOrderByOrderIndexAscTopicIdAsc().stream().map(ViewMapper::toView).toList();
     }
 
+    /** Trang quản lý chuyên đề: mọi giáo viên xem được tất cả chuyên đề (kèm số bài học và dự báo nút Xóa). */
+    @Transactional(readOnly = true)
+    public List<TopicView> getAllTopicsForManage() {
+        return withLessons(topicRepository.findByActiveTrueOrderByOrderIndexAscTopicIdAsc(), false);
+    }
+
     /** Chuyên đề của một giáo viên kèm số bài học. */
     @Transactional(readOnly = true)
     public List<TopicView> getTopicsByTeacher(int teacherId) {
@@ -114,7 +120,9 @@ public class TopicService {
 
     @Transactional
     public void updateTopic(int topicId, TopicForm form, int actingUserId, boolean admin) {
-        Topic existing = requireOwned(topicId, actingUserId, admin);
+        // Mọi giáo viên được sửa chuyên đề (nội dung dùng chung); chỉ XÓA mới giới hạn người tạo / Admin (requireOwned)
+        Topic existing = topicRepository.findByTopicIdAndActiveTrue(topicId)
+                .orElseThrow(() -> new NotFoundException("Chuyên đề không tồn tại."));
         if (topicRepository.existsByTopicNameIgnoreCaseAndActiveTrueAndTopicIdNot(form.getTopicName(), topicId)) {
             throw new ConflictException("Tên chuyên đề đã tồn tại.", "topicName");
         }

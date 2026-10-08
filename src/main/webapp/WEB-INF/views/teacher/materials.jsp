@@ -76,7 +76,7 @@
                                 <c:otherwise>
                                     <c:forEach var="m" items="${materials}">
                                         <c:set var="canEdit"
-                                            value="${m.createdBy == sessionScope.LOGGED_IN_USER.userId or sessionScope.LOGGED_IN_USER.role == 'ADMIN'}" />
+                                            value="true" />
                                         <tr>
                                             <td class="text-muted">${m.orderIndex}</td>
                                             <td>

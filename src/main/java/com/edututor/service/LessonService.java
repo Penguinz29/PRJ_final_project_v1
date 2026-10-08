@@ -96,10 +96,9 @@ public class LessonService {
     }
 
     /**
-     * Form sửa bài học: chỉ người tạo hoặc Admin (BR-03).
+     * Form sửa bài học: mọi giáo viên được mở (bài học là nội dung dùng chung).
      *
      * @return bài học, hoặc null nếu không tồn tại / đã xóa mềm
-     * @throws ForbiddenException khi không phải người tạo
      */
     @Transactional(readOnly = true)
     public LessonView getLessonForEdit(int lessonId, int actingUserId, boolean admin) {
@@ -107,11 +106,10 @@ public class LessonService {
         if (l == null) {
             return null;
         }
-        requireOwner(l, actingUserId, admin);
         return getLessonById(lessonId);
     }
 
-    /** BR-03: giáo viên chỉ thêm bài học vào chủ đề của mình (Admin: mọi chủ đề). */
+    /** Mọi giáo viên được thêm bài học vào bất kỳ chuyên đề nào. */
     @Transactional
     public void createLesson(LessonForm form, int actingUserId, boolean admin) {
         Lesson l = new Lesson();
@@ -122,12 +120,11 @@ public class LessonService {
         lessonRepository.save(l);
     }
 
-    /** BR-03: chỉ người tạo hoặc Admin được sửa. */
+    /** Mọi giáo viên được sửa bài học; chỉ XÓA mới giới hạn người tạo / Admin (BR-03). */
     @Transactional
     public void updateLesson(LessonForm form, int actingUserId, boolean admin) {
         Lesson l = lessonRepository.findByLessonIdAndActiveTrue(form.getId())
                 .orElseThrow(() -> new NotFoundException("Bài học không tồn tại."));
-        requireOwner(l, actingUserId, admin);
         apply(l, form, actingUserId, admin);
         if (form.getDisplayOrder() != null) {
             l.setDisplayOrder(form.getDisplayOrder());
@@ -156,21 +153,16 @@ public class LessonService {
         return true;
     }
 
-    /** BR-03: giáo viên chỉ sửa / xóa bài học do mình tạo; Admin có toàn quyền. */
+    /** BR-03: xóa bài học kéo theo xóa câu hỏi của bài (có thể của giáo viên khác) nên chỉ người tạo hoặc Admin được xóa. */
     private void requireOwner(Lesson l, int actingUserId, boolean admin) {
         if (!admin && !l.getCreatedBy().getUserId().equals(actingUserId)) {
-            throw new ForbiddenException("Bạn chỉ được sửa hoặc xóa bài học do mình tạo.");
+            throw new ForbiddenException("Bạn chỉ được xóa bài học do mình tạo.");
         }
     }
 
     private void apply(Lesson l, LessonForm form, int actingUserId, boolean admin) {
         Topic topic = topicRepository.findByTopicIdAndActiveTrue(form.getTopicId())
                 .orElseThrow(() -> new IllegalArgumentException("Chủ đề không hợp lệ."));
-        // Bài học chỉ được đặt vào chủ đề của chính giáo viên (Admin: mọi chủ đề)
-        if (!admin && !topic.getTeacher().getUserId().equals(actingUserId)
-                && (l.getTopic() == null || !l.getTopic().getTopicId().equals(topic.getTopicId()))) {
-            throw new ForbiddenException("Bạn chỉ được thêm bài học vào chủ đề do mình tạo.");
-        }
         l.setTopic(topic);
         l.setTitle(form.getTitle());
         l.setSummary(form.getSummary());

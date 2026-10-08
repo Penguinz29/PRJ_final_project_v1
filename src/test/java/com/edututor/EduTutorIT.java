@@ -1412,31 +1412,40 @@ class EduTutorIT {
         c.form("/teacher/lessons", Map.of("action", "delete", "id", "" + lessonId));
         assertEquals(0, count("SELECT COUNT(*) FROM Lessons WHERE LessonId = ?", lessonId));
 
-        // teacher2 không sửa/xóa được chủ đề của teacher1
+        // teacher2 sửa được chủ đề của teacher1 (nội dung dùng chung) nhưng không xóa được
         Client t2 = new Client();
         t2.login("teacher2", "123456");
         assertEquals(403, t2.form("/teacher/topics", Map.of("action", "delete", "id", "" + topicId)).status());
         assertEquals(1, count("SELECT COUNT(*) FROM Topics WHERE TopicId = ?", topicId));
+        t2.form("/teacher/topics", Map.of("action", "update", "topicId", "" + topicId, "topicName", "it_Chủ đề GV2 sửa",
+                "description", "d3"));
+        assertEquals("it_Chủ đề GV2 sửa", scalar("SELECT TopicName FROM Topics WHERE TopicId = ?", topicId));
+        t2.form("/teacher/topics", Map.of("action", "update", "topicId", "" + topicId, "topicName", "it_Chủ đề sửa",
+                "description", "d2"));
 
-        // BR-03 / TC-TEA-04 cho bài học: chỉ người tạo hoặc Admin được sửa / xóa
+        // Bài học dùng chung: mọi giáo viên xem / sửa / thêm được; chỉ người tạo hoặc Admin được XÓA (BR-03 / TC-TEA-04)
         c.form("/teacher/lessons", Map.of("action", "create", "topicId", "" + topicId, "title", "it_Bài của GV1",
                 "summary", "s", "content", "c", "youtubeUrl", ""));
         int ownLesson = count("SELECT LessonId FROM Lessons WHERE Title = N'it_Bài của GV1'");
         int teacher1Id = count("SELECT UserId FROM Users WHERE Username = 'teacher1'");
         assertEquals(teacher1Id, count("SELECT CreatedBy FROM Lessons WHERE LessonId = ?", ownLesson), "ghi người tạo");
-        assertEquals(403, t2.get("/teacher/lessons?action=edit&id=" + ownLesson).status(), "GV2 không mở form sửa");
-        assertEquals(403, t2.form("/teacher/lessons", Map.of("action", "update", "id", "" + ownLesson,
-                "topicId", "" + topicId, "title", "it_GV2 sửa trộm", "summary", "s", "content", "c")).status());
-        assertEquals("it_Bài của GV1", scalar("SELECT Title FROM Lessons WHERE LessonId = ?", ownLesson));
+        assertEquals(200, t2.get("/teacher/lessons?action=edit&id=" + ownLesson).status(), "GV2 mở được form sửa");
+        t2.form("/teacher/lessons", Map.of("action", "update", "id", "" + ownLesson,
+                "topicId", "" + topicId, "title", "it_GV2 sửa bài", "summary", "s", "content", "c"));
+        assertEquals("it_GV2 sửa bài", scalar("SELECT Title FROM Lessons WHERE LessonId = ?", ownLesson));
+        assertEquals(teacher1Id, count("SELECT CreatedBy FROM Lessons WHERE LessonId = ?", ownLesson), "người tạo giữ nguyên");
         assertEquals(403, t2.form("/teacher/lessons", Map.of("action", "delete", "id", "" + ownLesson)).status());
         assertEquals(1, count("SELECT COUNT(*) FROM Lessons WHERE LessonId = ?", ownLesson));
-        // GV2 không được thêm bài học vào chủ đề của GV1
-        assertEquals(403, t2.form("/teacher/lessons", Map.of("action", "create", "topicId", "" + topicId,
-                "title", "it_GV2 chen bai", "summary", "s", "content", "c")).status());
-        assertEquals(0, count("SELECT COUNT(*) FROM Lessons WHERE Title = N'it_GV2 chen bai'"));
-        // GV2 không thấy nút Sửa / Xóa bài học của GV1 trong danh sách
-        assertFalse(t2.get("/teacher/lessons?topicId=" + topicId).has("action=edit&id=" + ownLesson));
-        assertTrue(c.get("/teacher/lessons?topicId=" + topicId).has("action=edit&id=" + ownLesson));
+        // GV2 thêm được bài học vào chủ đề của GV1
+        t2.form("/teacher/lessons", Map.of("action", "create", "topicId", "" + topicId,
+                "title", "it_GV2 chen bai", "summary", "s", "content", "c"));
+        assertEquals(1, count("SELECT COUNT(*) FROM Lessons WHERE Title = N'it_GV2 chen bai'"));
+        exec("DELETE FROM Lessons WHERE Title = N'it_GV2 chen bai'");
+        // GV2 thấy nút Sửa nhưng không có nút Xóa bài học của GV1; GV1 thấy cả hai
+        String t2List = t2.get("/teacher/lessons?topicId=" + topicId).body();
+        assertTrue(t2List.contains("action=edit&id=" + ownLesson));
+        assertFalse(t2List.contains("id=\"delL" + ownLesson + "\""));
+        assertTrue(c.get("/teacher/lessons?topicId=" + topicId).has("id=\"delL" + ownLesson + "\""));
         // Admin có toàn quyền
         Client adm = new Client();
         adm.login("admin", "123456");
@@ -1879,14 +1888,13 @@ class EduTutorIT {
         assertEquals(403, st.get(base).status());
         assertEquals(403, st.form(base, Map.of("materialType", "LINK", "title", "it_hs", "url", "https://a.com")).status());
 
-        // BR-03: giáo viên khác không sửa / xóa được; người tạo thì được
+        // Bài giảng dùng chung: giáo viên khác cũng sửa được; người tạo vẫn sửa được
         int mid = count("SELECT MaterialId FROM LessonMaterials WHERE Title = N'it_Trang web'");
         Client t2 = new Client();
         t2.login("teacher2", "123456");
-        assertEquals(403, t2.form("/teacher/materials/" + mid + "/update", Map.of("materialType", "LINK",
-                "title", "it_hack", "url", "https://a.com", "lessonId", "1")).status());
-        assertEquals(403, t2.form("/teacher/materials/" + mid + "/delete", Map.of()).status());
-        assertEquals("it_Trang web", scalar("SELECT Title FROM LessonMaterials WHERE MaterialId = ?", mid));
+        assertEquals(302, t2.form("/teacher/materials/" + mid + "/update", Map.of("materialType", "LINK",
+                "title", "it_Trang web GV2", "url", "https://a.com", "lessonId", "1")).status());
+        assertEquals("it_Trang web GV2", scalar("SELECT Title FROM LessonMaterials WHERE MaterialId = ?", mid));
 
         assertEquals(302, t1.form("/teacher/materials/" + mid + "/update", Map.of("materialType", "LINK",
                 "title", "it_Trang web sửa", "url", "https://vi.wikipedia.org", "orderIndex", "9", "lessonId", "1")).status());

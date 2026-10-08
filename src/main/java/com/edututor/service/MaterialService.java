@@ -56,33 +56,29 @@ public class MaterialService {
     }
 
     /**
-     * Sửa bài giảng (BR-03: chỉ người tạo hoặc Admin).
+     * Sửa bài giảng (mọi giáo viên được sửa).
      *
      * @return ID bài học chứa bài giảng (để chuyển hướng về đúng trang)
      */
     @Transactional
     public int update(int materialId, MaterialForm form, int actingUserId, boolean admin) {
-        LessonMaterial m = requireOwned(materialId, actingUserId, admin);
+        LessonMaterial m = requireExisting(materialId);
         apply(m, form);
         return m.getLesson().getLessonId();
     }
 
-    /** Xóa bài giảng (BR-03). Trả về ID bài học chứa nó. */
+    /** Xóa bài giảng (mọi giáo viên được xóa). Trả về ID bài học chứa nó. */
     @Transactional
     public int delete(int materialId, int actingUserId, boolean admin) {
-        LessonMaterial m = requireOwned(materialId, actingUserId, admin);
+        LessonMaterial m = requireExisting(materialId);
         int lessonId = m.getLesson().getLessonId();
         materialRepository.delete(m);
         return lessonId;
     }
 
-    private LessonMaterial requireOwned(int materialId, int actingUserId, boolean admin) {
-        LessonMaterial m = materialRepository.findWithOwnerByMaterialId(materialId)
+    private LessonMaterial requireExisting(int materialId) {
+        return materialRepository.findWithOwnerByMaterialId(materialId)
                 .orElseThrow(() -> new NotFoundException("Bài giảng không tồn tại."));
-        if (!admin && !m.getCreatedBy().getUserId().equals(actingUserId)) {
-            throw new ForbiddenException("Bạn chỉ được sửa hoặc xóa bài giảng do mình tạo.");
-        }
-        return m;
     }
 
     /** Gán dữ liệu từ form vào Entity sau khi kiểm tra ràng buộc theo loại (VAL-08). */
