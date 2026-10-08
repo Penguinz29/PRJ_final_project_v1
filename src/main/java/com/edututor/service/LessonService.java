@@ -45,7 +45,7 @@ public class LessonService {
 
     @Transactional(readOnly = true)
     public List<LessonView> getAllLessons() {
-        return toViews(lessonRepository.findByActiveTrueOrderByCreatedAtDescLessonIdDesc());
+        return toViews(lessonRepository.findByActiveTrueOrderByTopic_OrderIndexAscTopic_TopicIdAscDisplayOrderAscLessonIdAsc());
     }
 
     @Transactional(readOnly = true)
@@ -117,7 +117,8 @@ public class LessonService {
         Lesson l = new Lesson();
         apply(l, form, actingUserId, admin);
         l.setCreatedBy(userRepository.getReferenceById(actingUserId));
-        l.setDisplayOrder(form.getDisplayOrder() == null ? 0 : form.getDisplayOrder());
+        l.setDisplayOrder(form.getDisplayOrder() == null
+                ? lessonRepository.findMaxDisplayOrder(l.getTopic().getTopicId()) + 1 : form.getDisplayOrder());
         lessonRepository.save(l);
     }
 

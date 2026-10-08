@@ -42,18 +42,18 @@ public class TopicService {
      */
     @Transactional(readOnly = true)
     public List<TopicView> getAllTopicsWithLessons() {
-        return withLessons(topicRepository.findByActiveTrueOrderByCreatedAtDescTopicIdDesc(), true);
+        return withLessons(topicRepository.findByActiveTrueOrderByOrderIndexAscTopicIdAsc(), true);
     }
 
     @Transactional(readOnly = true)
     public List<TopicView> getAllTopics() {
-        return topicRepository.findByActiveTrueOrderByCreatedAtDescTopicIdDesc().stream().map(ViewMapper::toView).toList();
+        return topicRepository.findByActiveTrueOrderByOrderIndexAscTopicIdAsc().stream().map(ViewMapper::toView).toList();
     }
 
     /** Chuyên đề của một giáo viên kèm số bài học. */
     @Transactional(readOnly = true)
     public List<TopicView> getTopicsByTeacher(int teacherId) {
-        return withLessons(topicRepository.findByTeacher_UserIdAndActiveTrueOrderByCreatedAtDescTopicIdDesc(teacherId),
+        return withLessons(topicRepository.findByTeacher_UserIdAndActiveTrueOrderByOrderIndexAscTopicIdAsc(teacherId),
                 false);
     }
 
@@ -108,6 +108,7 @@ public class TopicService {
         t.setTopicName(form.getTopicName());
         t.setDescription(form.getDescription());
         t.setTeacher(userRepository.getReferenceById(teacherId));
+        t.setOrderIndex(topicRepository.findMaxOrderIndex() + 1);
         topicRepository.save(t);
     }
 

@@ -14,7 +14,11 @@ public interface LessonRepository extends JpaRepository<Lesson, Integer> {
     // Mọi truy vấn (học sinh lẫn giáo viên / Admin) chỉ lấy bài học đang hoạt động (IsActive = 1)
 
     @EntityGraph(attributePaths = "topic")
-    List<Lesson> findByActiveTrueOrderByCreatedAtDescLessonIdDesc();
+    List<Lesson> findByActiveTrueOrderByTopic_OrderIndexAscTopic_TopicIdAscDisplayOrderAscLessonIdAsc();
+
+    /** Thứ tự lớn nhất trong chuyên đề: bài học mới được xếp xuống cuối. */
+    @Query("select coalesce(max(l.displayOrder), 0) from Lesson l where l.topic.topicId = :topicId")
+    int findMaxDisplayOrder(@Param("topicId") Integer topicId);
 
     @EntityGraph(attributePaths = "topic")
     List<Lesson> findByTopic_TopicIdAndActiveTrueOrderByDisplayOrderAscLessonIdAsc(Integer topicId);

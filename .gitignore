@@ -12,6 +12,16 @@ Thumbs.db
 .DS_Store
 # Maven
 target/
+
 sách/
+document/must-fix/
+
 .vscode/
+
 nb-configuration.xml
+
+# Logs, packaged artifacts, other IDEs
+*.log
+*.war
+.idea/
+*.iml

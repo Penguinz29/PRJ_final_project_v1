@@ -61,7 +61,9 @@ public class QuestionService {
     public PageResult<QuestionView> search(int topicId, int lessonId, String type, int level, int page, int size) {
         Page<Question> result = questionRepository.findAll(
                 QuestionSpecs.search(topicId, lessonId, parseType(type), level),
-                Pager.pageRequest(page, size, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("questionId"))));
+                Pager.pageRequest(page, size, Sort.by(Sort.Order.asc("lesson.topic.orderIndex"), Sort.Order.asc("lesson.topic.topicId"),
+                        Sort.Order.asc("lesson.displayOrder"), Sort.Order.asc("lesson.lessonId"),
+                        Sort.Order.asc("questionId"))));
         // Dự báo kết quả nút Xóa (BR-05): đã có bài nộp / phiên gia sư → xóa mềm, chưa có → xóa hẳn
         Set<Integer> withHistory = new HashSet<>();
         List<Integer> ids = result.getContent().stream().map(Question::getQuestionId).toList();
@@ -87,7 +89,7 @@ public class QuestionService {
     @Transactional(readOnly = true)
     public List<QuestionView> getEssayQuestions(int lessonId) {
         return questionRepository
-                .findByLesson_LessonIdAndQuestionTypeOrderByCreatedAtAscQuestionIdAsc(lessonId, QuestionType.ESSAY)
+                .findByLesson_LessonIdAndQuestionTypeOrderByQuestionIdAsc(lessonId, QuestionType.ESSAY)
                 .stream().map(q -> {
                     QuestionView v = ViewMapper.toView(q);
                     v.setExplanation(null);

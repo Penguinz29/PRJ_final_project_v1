@@ -140,11 +140,6 @@
                                                                                                     class="bi bi-youtube me-1"></i>Xem
                                                                                                 trên YouTube
                                                                                             </a>
-                                                                                            <span
-                                                                                                class="small text-muted text-break youtube-url-text">
-                                                                                                <c:out
-                                                                                                    value="${m.url}" />
-                                                                                            </span>
                                                                                         </div>
                                                                                     </c:if>
                                                                                 </div>
@@ -301,7 +296,6 @@
                                             '<a href="' + escapeHtml(rawUrl) + '" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-danger d-inline-flex align-items-center">' +
                                             '<i class="bi bi-youtube me-1"></i>Xem trên YouTube' +
                                             '</a>' +
-                                            '<span class="small text-muted text-break youtube-url-text">' + escapeHtml(rawUrl) + '</span>' +
                                             '</div>';
                                     }
 
