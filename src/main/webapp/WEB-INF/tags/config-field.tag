@@ -20,7 +20,7 @@
 
 <div class="mb-3">
     <label for="cfg_${key}" class="form-label fw-semibold mb-1">
-        <c:out value="${label}" /> <code class="small fw-normal">${key}</code>
+        <c:out value="${label}" />
     </label>
     <c:choose>
         <c:when test="${empty item}">
@@ -61,11 +61,5 @@
     </c:choose>
     <div class="form-text">
         <c:if test="${not empty hint}"><c:out value="${hint}" /></c:if>
-        <c:if test="${not empty item.updatedByName}">
-            <span class="ms-1"><i class="bi bi-person"></i> <c:out value="${item.updatedByName}" /></span>
-        </c:if>
-        <c:if test="${not empty item.updatedAt}">
-            <span class="ms-1"><i class="bi bi-clock"></i> <fmt:formatDate value="${item.updatedAt}" pattern="dd/MM/yyyy HH:mm" /></span>
-        </c:if>
     </div>
 </div>
