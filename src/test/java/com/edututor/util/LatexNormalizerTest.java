@@ -84,4 +84,20 @@ class LatexNormalizerTest {
         assertEquals(cases, LatexNormalizer.normalize(cases));
         assertEquals(null, LatexNormalizer.normalize(null));
     }
+
+    @Test
+    void wrapsBareLatexRunsButKeepsVietnameseProse() {
+        assertEquals("đồng biến $/ (-1,0) \\cup (1;+\\infty)$",
+                LatexNormalizer.wrapBareMath("đồng biến / (-1,0) \\cup (1;+\\infty)"));
+        assertEquals("$y = \\sqrt[3]{(x^2-4)^2}$", LatexNormalizer.wrapBareMath("y = \\sqrt[3]{(x^2-4)^2}"));
+        assertEquals("Viết nhầm từ $(-\\infty; 0)$ thành (-1; 0).",
+                LatexNormalizer.wrapBareMath("Viết nhầm từ (-\\infty; 0) thành (-1; 0)."));
+    }
+
+    @Test
+    void wrapBareMathLeavesTextWithDollarsOrNoLatexAlone() {
+        assertEquals("Tính $\\int x\\,dx$", LatexNormalizer.wrapBareMath("Tính $\\int x\\,dx$"));
+        assertEquals("nghịch biến / (0, 1)", LatexNormalizer.wrapBareMath("nghịch biến / (0, 1)"));
+        assertEquals(null, LatexNormalizer.wrapBareMath(null));
+    }
 }

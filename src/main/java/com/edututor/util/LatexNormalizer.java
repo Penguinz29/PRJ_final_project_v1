@@ -36,6 +36,35 @@ public final class LatexNormalizer {
     /** "\hliney'" (mất khoảng trắng / xuống dòng sau \hline) là lệnh không tồn tại; tách lại thành "\hline y'". */
     private static final Pattern GLUED_HLINE = Pattern.compile("\\\\hline(?=[A-Za-z])");
 
+    /** Đoạn "giống toán": chỉ gồm ký tự ASCII của công thức; chữ Việt có dấu làm đứt đoạn nên lời văn không bị bọc nhầm. */
+    private static final Pattern BARE_MATH_RUN = Pattern.compile(
+            "(?<![\\p{L}\\p{M}])(?:\\\\[A-Za-z]+|[A-Za-z0-9^_{}()\\[\\];,.+\\-*=<>|'/ ])+(?![\\p{L}\\p{M}])");
+    private static final Pattern HAS_LATEX_COMMAND = Pattern.compile("\\\\[A-Za-z]{2,}|[\\^_]\\{");
+
+    /**
+     * OCR / AI chấm bài hay trả LaTeX trần ("(-\infty;0) \cup (1;+\infty)") không có dấu $ nên KaTeX không render.
+     * Với văn bản chưa có dấu $ nào, bọc từng đoạn chứa lệnh LaTeX bằng $...$; văn bản đã có $ giữ nguyên.
+     */
+    public static String wrapBareMath(String text) {
+        if (text == null || text.indexOf('$') >= 0 || text.indexOf('\\') < 0) {
+            return text;
+        }
+        Matcher m = BARE_MATH_RUN.matcher(text);
+        StringBuilder out = new StringBuilder();
+        int last = 0;
+        while (m.find()) {
+            String run = m.group();
+            String core = run.strip();
+            if (core.isEmpty() || !HAS_LATEX_COMMAND.matcher(core).find()) {
+                continue;
+            }
+            int start = m.start() + run.indexOf(core);
+            out.append(text, last, start).append('$').append(core).append('$');
+            last = start + core.length();
+        }
+        return out.append(text, last, text.length()).toString();
+    }
+
     public static String normalize(String text) {
         if (text == null) {
             return null;

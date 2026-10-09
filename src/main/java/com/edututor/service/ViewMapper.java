@@ -138,7 +138,7 @@ final class ViewMapper {
 
     /** Bỏ dòng trắng / khoảng trắng ở đầu và cuối (vùng white-space: pre-wrap sẽ hiện chúng thành khoảng trống lớn). */
     private static String stripOrNull(String s) {
-        return s == null ? null : s.strip();
+        return s == null ? null : LatexNormalizer.wrapBareMath(s.strip());
     }
 
     static AiConfigView toView(AiConfig c) {
