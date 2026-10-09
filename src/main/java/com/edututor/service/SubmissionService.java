@@ -19,6 +19,7 @@ import com.edututor.repository.QuizQuestionRow;
 import com.edututor.repository.SubmissionRepository;
 import com.edututor.repository.UserRepository;
 import com.edututor.util.HtmlSanitizer;
+import com.edututor.util.LatexNormalizer;
 import com.edututor.util.Pager;
 import com.edututor.util.ScoreUtil;
 import java.math.BigDecimal;
@@ -86,7 +87,7 @@ public class SubmissionService {
         }
         boolean isCorrect = selected.isCorrect();
         submissionRepository.save(newMcqSubmission(studentId, q, selected.getOptionLetter(), isCorrect));
-        String explanation = q.getExplanationLatex() == null ? null : HtmlSanitizer.clean(q.getExplanationLatex());
+        String explanation = q.getExplanationLatex() == null ? null : HtmlSanitizer.clean(LatexNormalizer.normalize(q.getExplanationLatex()));
         return new QuizAnswerResponse(isCorrect, correct != null ? correct.getOptionId() : null,
                 correct != null ? correct.getOptionLetter() : null, explanation,
                 isCorrect ? MCQ_CORRECT_SCORE.doubleValue() : 0.0, !isCorrect);

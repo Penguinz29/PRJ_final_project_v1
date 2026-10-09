@@ -6,6 +6,7 @@ import com.edututor.dto.GenerateQuestionsRequest;
 import com.edututor.dto.QuestionGenerationDTO;
 import com.edututor.dto.LessonView;
 import com.edututor.util.HtmlSanitizer;
+import com.edututor.util.LatexNormalizer;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
@@ -142,7 +143,7 @@ public class AiExamService {
                 correct++;
             }
             sorted.add(new QuestionGenerationDTO.Option(o.letter().trim().toUpperCase(),
-                    HtmlSanitizer.clean(o.content().trim()), ok));
+                    HtmlSanitizer.clean(LatexNormalizer.normalize(o.content().trim())), ok));
         }
         sorted.sort(Comparator.comparing(QuestionGenerationDTO.Option::letter));
         String letters = sorted.stream().map(QuestionGenerationDTO.Option::letter).reduce("", String::concat);
@@ -150,8 +151,8 @@ public class AiExamService {
             throw new IllegalArgumentException("Phương án phải là A-B-C-D và có đúng một đáp án đúng.");
         }
         // Mức độ luôn là mức giáo viên yêu cầu, không để AI ghi đè
-        return new QuestionGenerationDTO(HtmlSanitizer.clean(dto.content().trim()), level,
-                HtmlSanitizer.clean(dto.explanation().trim()), sorted);
+        return new QuestionGenerationDTO(HtmlSanitizer.clean(LatexNormalizer.normalize(dto.content().trim())), level,
+                HtmlSanitizer.clean(LatexNormalizer.normalize(dto.explanation().trim())), sorted);
     }
 
     /** Chấp nhận 1|2|3 hoặc EASY|MEDIUM|HARD|ADVANCED; để trống nghĩa là mức 1. */

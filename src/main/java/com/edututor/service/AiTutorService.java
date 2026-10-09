@@ -17,6 +17,7 @@ import com.edututor.service.TutorPersistence.SessionContext;
 import com.edututor.service.TutorPersistence.StartContext;
 import com.edututor.service.TutorPersistence.StartMode;
 import com.edututor.util.HtmlSanitizer;
+import com.edututor.util.LatexNormalizer;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
@@ -249,10 +250,11 @@ public class AiTutorService {
         if (needsInput && hint.isEmpty()) {
             hint = "Nhập dữ liệu còn thiếu để tiếp tục.";
         }
-        String summary = completed && !isBlank(r.finalSummary()) ? HtmlSanitizer.clean(r.finalSummary().trim()) : null;
+        String summary = completed && !isBlank(r.finalSummary())
+                ? HtmlSanitizer.clean(LatexNormalizer.normalize(r.finalSummary().trim())) : null;
         return new TutorStepResponse(null, current, total, correct,
-                HtmlSanitizer.clean(nullToEmpty(r.feedbackToStudent())),
-                HtmlSanitizer.clean(nullToEmpty(r.nextPromptOrQuestion())),
+                HtmlSanitizer.clean(LatexNormalizer.normalize(nullToEmpty(r.feedbackToStudent()))),
+                HtmlSanitizer.clean(LatexNormalizer.normalize(nullToEmpty(r.nextPromptOrQuestion()))),
                 needsInput, hint, completed ? "COMPLETED" : "ACTIVE", summary);
     }
 

@@ -24,7 +24,13 @@ public final class PromptBuilder {
             "2. Chỉ hỗ trợ học tập kiến thức phổ thông. Nếu yêu cầu ngoài phạm vi, từ chối lịch sự, ngắn gọn.",
             "3. Chỉ trả về JSON hợp lệ đúng cấu trúc yêu cầu; không thêm văn bản, không dùng ```.",
             "4. Công thức toán viết LaTeX trong $...$ hoặc $$...$$; trong chuỗi JSON phải escape dấu \\ thành \\\\.",
-            "5. Trả lời bằng tiếng Việt.");
+            "5. Trả lời bằng tiếng Việt. Xuống dòng trong chuỗi JSON dùng đúng một ký tự \\n (không viết \\\\n); không viết"
+                    + " chữ \"\\n\" vào giữa lời giải.",
+            "6. Công thức hiển thị bằng KaTeX: KHÔNG dùng \\begin{tabular}, \\begin{center}, \\textbf, \\includegraphics hay"
+                    + " bất kỳ lệnh LaTeX văn bản nào. Bảng biến thiên/bảng xét dấu viết bằng $$\\begin{array}{c|ccc} ... \\end{array}$$"
+                    + " (không đặt thêm $ trong bảng; dùng \\nearrow, \\searrow cho chiều biến thiên; sau \\hline phải có khoảng"
+                    + " trắng; mọi \\left, \\right phải kèm ký hiệu, ví dụ \\right. hoặc \\right]). Không viết đề cần hình vẽ"
+                    + " mà không mô tả được bằng chữ hoặc bảng.");
 
     private PromptBuilder() {
     }

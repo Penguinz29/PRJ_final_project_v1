@@ -18,6 +18,7 @@ import com.edututor.model.Topic;
 import com.edututor.model.TutorMessage;
 import com.edututor.model.TutorSession;
 import com.edututor.util.HtmlSanitizer;
+import com.edututor.util.LatexNormalizer;
 import com.edututor.model.User;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -86,8 +87,8 @@ final class ViewMapper {
         v.setLessonId(q.getLesson().getLessonId());
         v.setLessonTitle(HtmlSanitizer.toPlainText(q.getLesson().getTitle()));
         v.setQuestionType(q.getQuestionType().name());
-        v.setContent(q.getContent());
-        v.setExplanation(q.getExplanationLatex());
+        v.setContent(LatexNormalizer.normalize(q.getContent()));
+        v.setExplanation(LatexNormalizer.normalize(q.getExplanationLatex()));
         v.setLevel(q.getLevel());
         v.setAiGenerated(q.isAiGenerated());
         v.setTeacherId(q.getTeacher().getUserId());
@@ -100,7 +101,7 @@ final class ViewMapper {
         v.setOptionId(o.getOptionId());
         v.setQuestionId(o.getQuestion().getQuestionId());
         v.setOptionLetter(o.getOptionLetter());
-        v.setContent(o.getContent());
+        v.setContent(LatexNormalizer.normalize(o.getContent()));
         v.setCorrect(o.isCorrect());
         return v;
     }
@@ -179,7 +180,7 @@ final class ViewMapper {
         v.setSessionId(m.getSession().getSessionId());
         v.setSenderType(m.getSenderType().name());
         v.setStepNumber(m.getStepNumber());
-        v.setContentText(HtmlSanitizer.toPlainText(m.getContentText()));
+        v.setContentText(HtmlSanitizer.toPlainText(LatexNormalizer.normalize(m.getContentText())));
         v.setStepCompleted(m.isStepCompleted());
         v.setCreatedAt(toDate(m.getCreatedAt()));
         return v;

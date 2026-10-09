@@ -86,7 +86,7 @@ public final class HtmlSanitizer {
         if (text == null || text.isEmpty()) {
             return "";
         }
-        String protectedText = STRAY_LT.matcher(text).replaceAll("&lt;");
+        String protectedText = STRAY_LT.matcher(LatexNormalizer.normalize(text)).replaceAll("&lt;");
         Document.OutputSettings out = new Document.OutputSettings().prettyPrint(false);
         String cleaned = Jsoup.clean(protectedText, "", RICH, out);
         if (!cleaned.contains("<img")) {
