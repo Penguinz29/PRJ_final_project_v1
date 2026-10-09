@@ -5,6 +5,7 @@
         <%@ taglib prefix="ui" tagdir="/WEB-INF/tags" %>
             <%@ taglib prefix="c" uri="jakarta.tags.core" %>
                 <%@ taglib prefix="fmt" uri="jakarta.tags.fmt" %>
+                <%@ taglib prefix="fn" uri="jakarta.tags.functions" %>
 
                     <jsp:include page="../common/head.jsp">
                         <jsp:param name="title" value="Tổng quan Giáo viên" />
@@ -156,7 +157,16 @@
                                                                     <tr>
                                                                         <td>
                                                                             <div class="tc-student-cell">
-                                                                                <div class="tc-avatar"><c:out value="${sub.studentName}" /></div>
+                                                                                <div class="tc-avatar">
+                                                                                    <c:choose>
+                                                                                        <c:when test="${not empty sub.studentName}">
+                                                                                            <c:set var="nameParts" value="${fn:split(fn:trim(sub.studentName), ' ')}" />
+                                                                                            <c:set var="lastPartIdx" value="${fn:length(nameParts) - 1}" />
+                                                                                            <c:out value="${fn:substring(nameParts[lastPartIdx], 0, 1)}" />
+                                                                                        </c:when>
+                                                                                        <c:otherwise>H</c:otherwise>
+                                                                                    </c:choose>
+                                                                                </div>
                                                                                 <span class="fw-semibold"><c:out value="${sub.studentName}" /></span>
                                                                             </div>
                                                                         </td>
