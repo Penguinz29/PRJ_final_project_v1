@@ -1,188 +1,217 @@
-# 🎓 EduTutor Math 12 — Nền tảng Học tập & Ôn thi Toán 12 Tích hợp AI
+# 🎓 EduTutor Math 12
 
-> **Dự án Môn học:** PRJ301 (Java Web Application) — FPT University  
-> **Phiên bản:** 2.1 (Branch: `project-v2`)  
-> **Kiến trúc:** Spring MVC 6.2 thuần (không Spring Boot) + Spring Data JPA / Hibernate 6.6 + HikariCP trên Jakarta EE 10 / Servlet 6.0 (Tomcat 10.1), SQL Server, Google Gemini API  
+**Nền tảng học tập và ôn thi Toán 12 tích hợp AI (Google Gemini)**
 
----
+> Đồ án môn **PRJ301 – Java Web Application**, FPT University
+> Phiên bản **2.1.0** · nhánh `project-v2`
 
-## 📖 1. Giới thiệu tổng quan
+EduTutor Math 12 là website gia sư Toán lớp 12 (SGK Kết nối tri thức) cho 3 nhóm người dùng: **Admin, Giáo viên, Học sinh**. Hệ thống kết hợp quản lý học tập (bài giảng, ngân hàng câu hỏi, luyện trắc nghiệm) với 3 tính năng AI chạy thật:
 
-**EduTutor Math 12** là hệ thống web hỗ trợ học tập, ôn luyện và kiểm tra đánh giá môn **Toán lớp 12** theo chương trình THPT Quốc gia. Nền tảng kết hợp giữa quản lý học tập truyền thống (LMS) với các tính năng đột phá từ **Trí tuệ nhân tạo (Google Gemini AI)** nhằm hỗ trợ cả Học sinh, Giáo viên và Quản trị viên:
-- **Học sinh:** Ôn tập lý thuyết, xem bài giảng (YouTube, video, liên kết, văn bản), luyện trắc nghiệm bấm giờ, xem giải thích chi tiết, nộp bài viết tay và theo dõi lịch sử học tập.
-- **Giáo viên:** Soạn giáo án, quản lý ngân hàng câu hỏi, sinh đề trắc nghiệm tự động bằng AI, duyệt và điều chỉnh điểm bài tự luận viết tay của học sinh.
-- **Quản trị viên:** Quản lý tài khoản người dùng (khóa/mở khóa), theo dõi số liệu toàn trường và quản lý cấu hình kết nối AI.
+| Tính năng AI | Mô tả |
+|---|---|
+| **Sinh đề** | Giáo viên chọn chủ đề, AI sinh câu hỏi kèm đáp án và lời giải; xem trước rồi lưu hàng loạt |
+| **Gia sư từng bước** | Học sinh làm sai thì AI hướng dẫn từng bước; trạng thái bước do **server** điều khiển |
+| **Chấm tự luận bằng ảnh** | Học sinh chụp bài giải viết tay, AI nhận diện (OCR), chấm và nhận xét; giáo viên duyệt lại điểm |
 
----
-
-## 🛠️ 2. Công nghệ sử dụng (Tech Stack)
-
-| Thành phần | Công nghệ / Thư viện | Ghi chú |
-|------------|----------------------|---------|
-| **Ngôn ngữ** | Java 17 (build được bằng JDK 17 hoặc 21) | Chuẩn LTS |
-| **Web Framework** | **Spring MVC 6.2** (`@Controller`, `@RestController`, `@Service`, `@ControllerAdvice`), JSP + **Jakarta JSTL 3.0** (`jakarta.tags.*`) + Spring form tag | Chạy trên Tomcat 10.1 (Jakarta Servlet 6.0). Cấu hình **hoàn toàn bằng Java** (`WebAppInitializer`, `RootConfig`, `WebConfig`), không `applicationContext.xml` |
-| **Truy cập dữ liệu** | **Spring Data JPA 3.5 + Hibernate ORM 6.6** (Jakarta Persistence 3.1) + **HikariCP** | Repository là `interface extends JpaRepository`; `Specification` cho lọc động; `@EntityGraph` + truy vấn `IN` chống N+1; `@Transactional` ở tầng Service; `hbm2ddl.auto=none` (script SQL là nguồn sự thật) |
-| **Cơ sở dữ liệu** | Microsoft SQL Server 2016+ | Driver `mssql-jdbc` |
-| **Validation** | **Jakarta Bean Validation** (Hibernate Validator 8) | Thông báo tiếng Việt trong `messages.properties` (UTF-8), hiển thị tại từng trường bằng `<form:errors>`; ràng buộc nghiệp vụ ở Service; ràng buộc `UNIQUE/CHECK/FK` ở CSDL |
-| **Bảo mật** | `AuthInterceptor` phân quyền ADMIN/TEACHER/STUDENT theo URL (cả `/api/**`), `CsrfInterceptor` (token CSRF cho mọi POST), mật khẩu **BCrypt**, đổi session ID sau đăng nhập, Jsoup làm sạch nội dung AI, ảnh upload kiểm tra magic-bytes và chỉ phục vụ cho đúng người | Chống SQL Injection / XSS / CSRF / session fixation |
-| **Trí tuệ nhân tạo** | Google Gemini API qua `java.net.http.HttpClient` (model, khóa API, nhiệt độ... cấu hình trong bảng `AiConfigs`) | Sinh đề, Gia sư AI step-by-step, chấm tự luận OCR; chạy bất đồng bộ (`CompletableFuture` + thread pool riêng), tự thử lại tối đa 3 lần, tự chuyển model dự phòng khi model chính quá tải (503/504), tự vá dấu `\` của LaTeX trong JSON AI trả về, ghi log thời lượng từng lần gọi |
-| **Giao diện (Frontend)** | HTML5, CSS3, Bootstrap 5, Bootstrap Icons, AJAX/Fetch | Responsive |
-| **Hiển thị Toán học** | KaTeX (Auto-render) | Công thức LaTeX |
-| **Log** | SLF4J + Logback | Không log khóa API, mật khẩu |
-| **Build** | **Apache Maven** (cấu trúc chuẩn `src/main/java`, `src/main/webapp`; đóng gói `edututor.war`, context path `/edututor`) | Mở trực tiếp bằng **Apache NetBeans 17** (Maven Web Application) |
+Khóa API, model, nhiệt độ… do Admin cấu hình trên giao diện (bảng `ai_configs`), không cần sửa code.
 
 ---
 
-## 👥 3. Phân hệ chức năng theo Vai trò
+## 🧰 1. Framework và công nghệ sử dụng
 
-### 🛡️ Quản trị viên (Admin)
-- **Tổng quan hệ thống:** Thống kê số lượng học sinh, giáo viên, chủ đề và câu hỏi.
-- **Quản lý người dùng:** Tìm kiếm, lọc theo vai trò/trạng thái, phân trang; tạo, sửa, đổi vai trò, khóa/mở khóa, xóa (cứng hoặc mềm) và đặt lại mật khẩu.
-- **Cấu hình AI (FR-ADM-01/02):** Tùy chỉnh Gemini API Key, Provider, Model (mặc định `gemini-3.5-flash`, đổi được trên giao diện) và nút **Test kết nối** kiểm tra kết nối Google AI trực tiếp.
-- **Quản lý dữ liệu gốc:** Toàn quyền quản trị Chủ đề, Bài giảng và Ngân hàng câu hỏi.
+### Backend
 
-### 👨‍🏫 Giáo viên (Teacher)
-- **Quản lý chuyên đề & bài giảng:** Tạo mới, chỉnh sửa chuyên đề Toán 12, nhúng video bài giảng YouTube.
-- **Ngân hàng câu hỏi:** Quản lý câu hỏi trắc nghiệm (MCQ) và tự luận (ESSAY) với 3 mức độ (1 - Dễ, 2 - Trung bình, 3 - Khó; CSDL hiện giới hạn `Level` ∈ {1,2,3}, xem FRS mục 10).
-- **Sinh đề AI thông minh (FR-TEA-03):** Giáo viên chọn chủ đề và số lượng câu hỏi, Gemini AI tự động sinh đề kèm đáp án và lời giải chi tiết, xem trước qua KaTeX và lưu hàng loạt vào DB.
-- **Chấm bài tự luận (FR-TEA-04):** Xem ảnh bài làm viết tay của học sinh, xem văn bản nhận diện OCR từ AI, chấm điểm thang 10.0 và gửi nhận xét phản hồi.
-- **Theo dõi học sinh:** Xem tiến độ và lịch sử làm bài chi tiết của từng học sinh.
+| Thành phần | Công nghệ | Vai trò |
+|---|---|---|
+| Ngôn ngữ | **Java 17** | LTS |
+| Web framework | **Spring MVC 6.2** (không dùng Spring Boot) | Controller, Service, `@ControllerAdvice`, interceptor; cấu hình hoàn toàn bằng Java (`WebAppInitializer`, `RootConfig`, `WebConfig`), không có `web.xml` |
+| Servlet container | **Apache Tomcat 10.1** (Jakarta Servlet 6.0, JSP 3.1) | Namespace `jakarta.*` |
+| ORM / truy cập dữ liệu | **Spring Data JPA 3.5** + **Hibernate ORM 6.6** (Jakarta Persistence 3.1) | `JpaRepository`, `Specification`, `@EntityGraph`, projection; **không dùng JdbcTemplate** |
+| Connection pool | **HikariCP** | Pool kết nối |
+| Cơ sở dữ liệu | **Microsoft SQL Server** + driver `mssql-jdbc` | 10 bảng, script SQL là nguồn sự thật (`hbm2ddl.auto=none`) |
+| Validation | **Jakarta Bean Validation** (Hibernate Validator 8) | Thông báo tiếng Việt trong `messages.properties` |
+| Bảo mật | **spring-security-crypto** (BCrypt), `AuthInterceptor`, `CsrfInterceptor` | Chỉ dùng module crypto, không kéo cả Spring Security |
+| JSON | **Jackson** | Serialize `ApiResponse` và parse JSON từ AI |
+| Làm sạch HTML | **jsoup** | Sanitize nội dung AI trả về (chống XSS) |
+| Log | **SLF4J + Logback** | Không log khóa API, mật khẩu |
+| AI | **Google Gemini REST API** qua `java.net.http.HttpClient` | Không dùng SDK; gọi bất đồng bộ bằng `CompletableFuture` + thread pool riêng |
 
-### 🎓 Học sinh (Student)
-- **Đăng ký / Đăng nhập:** Học sinh tự đăng ký tài khoản với tính năng kiểm tra trùng lặp email.
-- **Học lý thuyết:** Xem nội dung tóm tắt, công thức và video bài giảng minh họa.
-- **Luyện thi trắc nghiệm (FR-STU-01/02):** Làm bài thi trắc nghiệm bấm giờ, chấm điểm tự động tức thì, xem lời giải chi tiết từng câu và **lưu kết quả vào CSDL `Submissions`**.
-- **Nộp bài tự luận:** Chụp ảnh bài giải viết tay và tải lên hệ thống.
-- **Lịch sử làm bài:** Xem lại toàn bộ các bài thi đã làm, kết quả Đúng/Sai, đáp án đã chọn và điểm số được giáo viên chấm.
+### Giao diện
+
+| Thành phần | Công nghệ |
+|---|---|
+| View | **JSP + Jakarta JSTL 3.0** (`jakarta.tags.*`) + Spring form tag + tag file dùng lại |
+| UI framework | **Bootstrap 5.3.3** + **Bootstrap Icons 1.11.3** (nạp qua CDN jsDelivr) |
+| Công thức toán | **KaTeX 0.16.9** (auto-render `$…$`, `$$…$$`) |
+| Script | JavaScript thuần (`app.js`: `csrfFetch`, `renderMath`, …), Fetch/AJAX |
+| Font | Be Vietnam Pro (Google Fonts) |
+
+### Build và kiểm thử
+
+| Thành phần | Công nghệ |
+|---|---|
+| Build | **Apache Maven**, đóng gói WAR (`edututor.war`, context path `/edututor`) |
+| Test | **JUnit 5** + **spring-test** (unit test chạy trong `mvn package`) |
+| Test tích hợp | **Tomcat nhúng** + SQL Server thật, chạy riêng bằng `maven-failsafe-plugin` (profile `integration`) |
+| IDE khuyến nghị | **Apache NetBeans 17** (Maven Web Application) |
 
 ---
 
-## 📁 4. Cấu trúc Dự án (Project Directory)
+## 👥 2. Chức năng theo vai trò
+
+### 🛡️ Admin
+- Thống kê tổng quan: số học sinh, giáo viên, chủ đề, câu hỏi.
+- Quản lý người dùng: tìm kiếm, lọc theo vai trò/trạng thái, phân trang; tạo, sửa, đổi vai trò, khóa/mở khóa, xóa, đặt lại mật khẩu.
+- **Cấu hình AI**: API key, model, tham số, prompt; nút **Test kết nối**.
+- Quản trị toàn bộ chủ đề, bài học, bài giảng, ngân hàng câu hỏi.
+
+### 👨‍🏫 Giáo viên
+- Quản lý chủ đề → bài học → bài giảng (video, YouTube, văn bản, liên kết).
+- Ngân hàng câu hỏi trắc nghiệm (MCQ) và tự luận (ESSAY), 3 mức độ khó.
+- **Sinh đề bằng AI**, xem trước bằng KaTeX, lưu hàng loạt.
+- **Duyệt bài tự luận**: xem ảnh bài làm, văn bản OCR; sửa điểm (điểm AI gốc `ai_score` được giữ nguyên) và gửi nhận xét.
+- Theo dõi tiến độ và lịch sử làm bài của học sinh.
+
+### 🎓 Học sinh
+- Tự đăng ký, đăng nhập; xem bài giảng.
+- Luyện trắc nghiệm ngẫu nhiên, chấm từng câu tức thì, xem lời giải; làm sai thì **gia sư AI** hướng dẫn từng bước.
+- Hỏi gia sư AI bất kỳ bài toán phổ thông nào.
+- Nộp ảnh bài giải tự luận để AI chấm.
+- Xem tiến độ, chuỗi ngày học và lịch sử làm bài.
+
+> Chủ đề và bài học đã xóa mềm bị ẩn với cả học sinh; chỉ người tạo hoặc Admin được xóa.
+
+---
+
+## 🔒 3. Bảo mật
+
+- Phân quyền theo URL (cả `/api/**`) bằng `AuthInterceptor`; mật khẩu băm **BCrypt**; đổi session ID sau đăng nhập; cookie `HttpOnly` + `SameSite=Lax`.
+- **CSRF**: mọi POST có `_csrf`; `fetch` dùng `csrfFetch()` (header `X-CSRF-TOKEN`).
+- Chống SQL injection (truy vấn tham số hóa), XSS (jsoup + `fn:escapeXml`); ảnh upload kiểm tra magic-bytes và chỉ phục vụ đúng người.
+- Không trả Entity ra view/JSON (dùng DTO); không lộ đáp án và lời giải trước khi nộp.
+- Validation 4 lớp: HTML5/JS → Bean Validation → nghiệp vụ ở Service → ràng buộc DB.
+
+---
+
+## 📁 4. Cấu trúc dự án
 
 ```
 PRJ_final_project_v1/
-├── pom.xml                                # Maven (WAR, Spring 6.2, Spring Data JPA, Hibernate 6.6, Hikari, Jackson, Jsoup...)
-├── nb-configuration.xml                   # Gợi ý server Tomcat cho NetBeans
-├── document/                              # SRS, FRS, Claude.md (quy tắc kỹ thuật)
-│   ├── docs/                              # DATABASE.md (từ điển dữ liệu), ERD.md, ERD + đặc tả ràng buộc (.docx)
-│   └── sql/                               # Kịch bản SQL Server
-│       ├── 01_schema.sql                  # Tạo CSDL MathTutorDB, 10 bảng + toàn bộ ràng buộc (XÓA CSDL cũ cùng tên)
-│       ├── 02_data.sql                    # Dữ liệu mẫu phong phú (mật khẩu BCrypt của EduTutor@123, 15 khóa cấu hình AI)
-│       └── 03_data_gdpt2018.sql           # (Tùy chọn) bổ sung chuyên đề / bài học / câu hỏi theo Toán 12 GDPT 2018; chạy lại không nhân đôi
+├── pom.xml
+├── document/
+│   ├── SRS.md, FRS.md, Claude.md          # Đặc tả yêu cầu, đặc tả chức năng, quy tắc kỹ thuật
+│   ├── docs/                              # DATABASE.md, ERD.md, ERD + đặc tả ràng buộc (.docx)
+│   └── sql/
+│       ├── 01_schema.sql                  # Tạo CSDL MathTutorDB + 10 bảng (XÓA CSDL cũ cùng tên)
+│       ├── 02_data.sql                    # Dữ liệu mẫu: người dùng, cấu hình AI…
+│       ├── 04_data_sgk_toan12.sql         # Nội dung SGK Toán 12 KNTT (thay nội dung mẫu cũ)
+│       └── 06_insert_submissions_sgk.sql  # Lịch sử bài làm mẫu (trắc nghiệm + tự luận)
 └── src/
     ├── main/
     │   ├── java/com/edututor/
-    │   │   ├── config/                    # WebAppInitializer (thay web.xml), RootConfig (DataSource, JPA, Transaction, Async), WebConfig (MVC, Validator, MessageSource)
-    │   │   ├── interceptor/               # AuthInterceptor (phân quyền), CsrfInterceptor
-    │   │   ├── controller/                # @Controller trả JSP: auth/, admin/, student/, teacher/, FileController
-    │   │   │   └── api/                   # @RestController trả JSON (ApiResponse): Admin/Teacher/Student/Tutor
-    │   │   ├── service/                   # @Service: nghiệp vụ + gọi AI; map Entity -> DTO trong @Transactional; TutorPersistence (ghi DB của gia sư)
-    │   │   ├── ai/                        # GeminiClient (HTTP), AiJsonParser
-    │   │   ├── repository/                # Spring Data JPA (JpaRepository) + spec/ (Specification)
-    │   │   ├── model/                     # Entity JPA (@Entity) + enum Role, QuestionType, ...
-    │   │   ├── dto/                       # Form (Bean Validation), View, Request/Response, ApiResponse, PageResult
-    │   │   ├── exception/                 # GlobalExceptionHandler (@ControllerAdvice) + các exception nghiệp vụ
-    │   │   └── util/                      # HtmlSanitizer, Pager, ScoreUtil, YoutubeUtil, WebUtil, FormErrors
-    │   ├── resources/                     # application.properties, messages.properties (UTF-8), logback.xml
-    │   └── webapp/                        # = "Web Pages" trong NetBeans
-    │       ├── META-INF/context.xml       # Context path /edututor (NetBeans cần file này)
-    │       ├── static/                    # css/, js/ (app.js: csrfFetch, renderMath, ...)
-    │       └── WEB-INF/
-    │           ├── views/                 # JSP: admin, auth, common, error, student, teacher
-    │           └── tags/                  # Tag file dùng lại: pagination.tag, flash.tag, delete-button.tag, config-field.tag, error-card.tag
-    └── test/java/com/edututor/            # UnitTests (chạy trong mvn package) + EduTutorIT, QueryCountIT (cần SQL Server)
+    │   │   ├── config/        # WebAppInitializer, RootConfig, WebConfig
+    │   │   ├── interceptor/   # AuthInterceptor, CsrfInterceptor
+    │   │   ├── controller/    # Trả JSP: auth, admin, teacher, student; api/ trả JSON
+    │   │   ├── service/       # Nghiệp vụ + gọi AI; TutorPersistence ghi DB của gia sư
+    │   │   ├── ai/            # GeminiClient, RateLimiter
+    │   │   ├── repository/    # Spring Data JPA + spec/ (Specification)
+    │   │   ├── model/         # Entity JPA + enum
+    │   │   ├── dto/           # Form, View, Request/Response, ApiResponse, PageResult
+    │   │   ├── exception/     # GlobalExceptionHandler + exception nghiệp vụ
+    │   │   └── util/          # HtmlSanitizer, LatexNormalizer, ScoreUtil, YoutubeUtil…
+    │   ├── resources/         # application.properties, messages.properties, logback.xml
+    │   └── webapp/
+    │       ├── static/        # css, js, img (ảnh hình vẽ SGK ở img/sgk)
+    │       └── WEB-INF/       # views/ (JSP), tags/ (tag file dùng lại)
+    └── test/                  # UnitTests (không cần DB) + *IT (cần SQL Server)
 ```
 
 ---
 
-## 🚀 5. Hướng dẫn Cài đặt & Khởi chạy
+## 🚀 5. Cài đặt và chạy
 
-### Bước 1: Chuẩn bị môi trường
-- **JDK 17**, **Apache NetBeans 17**, **Apache Tomcat 10.1** (Jakarta Servlet 6.0), **SQL Server** (bật TCP/IP cổng `1433`).
-- Maven đi kèm NetBeans (hoặc Maven 3.9+ độc lập).
+### Yêu cầu
+JDK 17 · Maven 3.9+ (hoặc Maven đi kèm NetBeans) · Tomcat 10.1 · SQL Server (bật TCP/IP cổng 1433).
 
-### Bước 2: Thiết lập Cơ sở Dữ liệu
-**Cài mới:** chạy trong SSMS 2 file trong `document/sql/`: `01_schema.sql` (tạo CSDL `MathTutorDB`, 10 bảng và ràng buộc — **xóa và tạo lại** nếu CSDL đã tồn tại) rồi `02_data.sql` (dữ liệu mẫu, mật khẩu mọi tài khoản `EduTutor@123`).
+### Bước 1 – Tạo cơ sở dữ liệu
+Chạy trong SSMS, theo thứ tự, các file trong `document/sql/`:
 
-**Đã có CSDL cũ** (ví dụ từ bản Ant): chạy lại 2 file trên để tạo CSDL mới đúng cấu trúc hiện tại (**dữ liệu cũ sẽ bị xóa**, thay bằng dữ liệu mẫu). Stop Tomcat trước khi chạy; sau đó vào **Cấu hình AI** nhập lại khóa Gemini **và kiểm tra lại model** (mọi cấu hình AI, kể cả model đã đổi trên giao diện, bị đặt lại về giá trị mẫu — xem mục 8 nếu AI phản hồi chậm).
+1. `01_schema.sql` – tạo `MathTutorDB` (**xóa và tạo lại** nếu đã tồn tại).
+2. `02_data.sql` – dữ liệu mẫu.
+3. `04_data_sgk_toan12.sql` – nội dung SGK Toán 12 (7 chủ đề, 26 bài, 63 câu MCQ, 182 câu tự luận). Chỉ chạy một lần; muốn chạy lại phải dựng lại DB.
+4. `06_insert_submissions_sgk.sql` – (tùy chọn) lịch sử bài làm mẫu.
 
-**Dữ liệu bổ sung (tùy chọn):** chạy thêm `03_data_gdpt2018.sql` (sau 2 file trên) để có đủ 6 chương Toán 12 GDPT 2018 (thêm 4 chủ đề, 13 bài học, 73 câu trắc nghiệm, 5 tự luận). Chạy lại lần 2 sẽ tự bỏ qua, không nhân đôi.
+> Dùng `sqlcmd` thì thêm cờ `-x` vì dữ liệu chứa ký tự `$(`:
+> `sqlcmd -S localhost -U sa -P <mật khẩu> -C -x -f 65001 -i 02_data.sql`
 
-**Dữ liệu mẫu** trong `02_data.sql` đủ để xem hết các màn hình: 3 giáo viên, 12 học sinh (có tài khoản bị khóa, xóa mềm), 7 chủ đề / 15 bài học (có mục đã ẩn và bài học còn trống), bài giảng đủ 4 loại, 46 câu hỏi, ~150 bài làm trải 14 ngày (có làm lại cùng câu), bài tự luận chờ duyệt / đã duyệt và các phiên gia sư. Ảnh bài tự luận là URL minh họa `placehold.co` (cần mạng), URL video là ví dụ.
+### Bước 2 – Cấu hình kết nối
+Sửa `src/main/resources/application.properties` (`db.url`, `db.username`, `db.password`) hoặc đặt biến môi trường `DB_URL`, `DB_USER`, `DB_PASS` (ưu tiên cao hơn). Ảnh bài làm tự luận lưu ở `app.upload-dir` (mặc định `C:/edututor/uploads`, đổi bằng `UPLOAD_DIR`).
 
-> Nếu chạy bằng `sqlcmd`, thêm cờ `-x` (tắt thay thế biến) vì dữ liệu mẫu chứa ký tự `$(`: `sqlcmd -S localhost -U sa -P 123 -C -x -f 65001 -i 02_data.sql`.
+### Bước 3 – Cấu hình AI
+Đăng nhập Admin → **Cấu hình AI** → nhập khóa Gemini, chọn model → **Test kết nối**. Có hiệu lực ngay, không cần khởi động lại. Tạo lại CSDL sẽ đặt lại cấu hình này về giá trị mẫu.
 
-### Bước 3: Cấu hình kết nối
-Sửa `src/main/resources/application.properties` (`db.url`, `db.username`, `db.password`) **hoặc** đặt biến môi trường / `-D` `DB_URL`, `DB_USER`, `DB_PASS` (ưu tiên cao hơn). Ảnh bài làm tự luận lưu ở `app.upload-dir` (mặc định `C:/edututor/uploads`, đổi bằng `UPLOAD_DIR`).
+### Bước 4 – Chạy
+**NetBeans 17:** *File → Open Project* → chọn Tomcat 10.1 trong *Project Properties → Run* → **Clean and Build** → **Run** → mở `http://localhost:8080/edututor/login`.
 
-Khóa Gemini API, model, temperature, số token **không** nằm trong file này: Admin nhập tại trang **Cấu hình AI** (lưu trong bảng `AiConfigs`, có hiệu lực ngay, không cần khởi động lại). Tên model Gemini thay đổi theo thời gian — hãy kiểm tra tên còn được hỗ trợ rồi bấm **Test kết nối**.
+**Dòng lệnh:** `mvn clean package`, rồi chép `target/edututor.war` vào `webapps/` của Tomcat 10.1.
 
-### Bước 4: Chạy trên NetBeans 17
-1. *File > Open Project* chọn thư mục dự án (nhận dạng là **Maven Web Application**).
-2. Thêm server nếu chưa có: *Services > Servers > Add Server > Apache Tomcat or TomEE*, trỏ tới thư mục **Tomcat 10.1**. Trong *Project Properties > Run* chọn server này.
-3. Bấm **Clean and Build**, rồi **Run**, mở `http://localhost:8080/edututor/login`.
-4. Khi sửa **Entity**, lớp cấu hình (`WebAppInitializer`, `RootConfig`, `WebConfig`), `pom.xml` hoặc `application.properties`: **Stop Tomcat -> Clean and Build -> Run** lại (Hibernate chỉ quét Entity lúc khởi động).
+> Khi sửa Entity, lớp cấu hình, `pom.xml` hoặc `application.properties`: **Stop Tomcat → Clean and Build → Run** lại.
 
-Hoặc dòng lệnh: `mvn clean package` rồi chép `target/edututor.war` vào `webapps/` của Tomcat 10.1.
-
-> Trình biên dịch phải bật `-parameters` (đã cấu hình sẵn trong `pom.xml`).
-
-### Bước 5 (tùy chọn): Chạy kiểm thử
+### Kiểm thử
 ```bash
-mvn clean package            # build WAR + 24 unit test, không cần CSDL
-# Kiểm thử tích hợp (Tomcat nhúng + SQL Server thật + Gemini giả + đếm số câu SQL chống N+1).
-# Dùng CSDL riêng: chạy 01_schema.sql + 02_data.sql sau khi đổi tên MathTutorDB thành MathTutorDB_test:
-mvn clean verify -Pintegration -Dit.db.url="jdbc:sqlserver://localhost:1433;databaseName=MathTutorDB_test;encrypt=true;trustServerCertificate=true" -Dit.db.user=sa -Dit.db.pass=123
+mvn clean package        # build WAR + unit test, không cần CSDL
+
+# Kiểm thử tích hợp (cần SQL Server, dùng CSDL riêng vì test XÓA bài làm và đặt lại mật khẩu seed)
+mvn clean verify -Pintegration \
+  -Dit.db.url="jdbc:sqlserver://localhost:1433;databaseName=MathTutorDB_test;encrypt=true;trustServerCertificate=true" \
+  -Dit.db.user=sa -Dit.db.pass=<mật khẩu>
 ```
-Bộ kiểm thử tích hợp **xóa bài làm, phiên gia sư và đặt lại mật khẩu seed** của CSDL được trỏ tới, vì vậy đừng chạy trên dữ liệu thật.
 
 ---
 
+## 🔑 6. Tài khoản thử nghiệm
 
-## 🔑 6. Tài khoản Thử nghiệm (Demo Accounts)
+Mật khẩu chung: **`EduTutor@123`**
 
-Tất cả các tài khoản mặc định có mật khẩu là: **`EduTutor@123`**
-
-| Vai trò | Tên đăng nhập | Email | Mục đích kiểm thử |
-|---------|---------------|-------|-------------------|
-| **Admin** | `admin` | `admin@mathtutor.com` | Quản trị hệ thống, bật/tắt tài khoản, cấu hình AI |
-| **Giáo viên** | `teacher1` | `huong@mathtutor.com` | Quản lý chuyên đề, sinh đề AI, duyệt điểm tự luận |
-| **Giáo viên** | `teacher2` | `quang@mathtutor.com` | Quản lý bài tập, theo dõi học sinh |
-| **Học sinh** | `student1` | `st1@example.com` | Làm bài trắc nghiệm, xem lịch sử làm bài |
-| **Học sinh** | `student2` | `st2@example.com` | Nộp bài tự luận viết tay |
-
----
-
-## ⚙️ 7. Lưu ý Kỹ thuật quan trọng
-- **Mật khẩu:** tài khoản seed dùng BCrypt (`EduTutor@123`). Chỉ chấp nhận mã băm BCrypt; mã băm SHA-256 của bản cũ bị từ chối (chạy lại `01_schema.sql` + `02_data.sql` để có dữ liệu BCrypt).
-- **Tầng dữ liệu:** Entity JPA ánh xạ **1-1 với 10 bảng** (tất cả do `01_schema.sql` tạo). Mọi quan hệ `LAZY`; Service map Entity sang DTO bên trong `@Transactional`; không bật Open-Session-In-View; câu hỏi làm bài chỉ chọn cột được phép (không lộ đáp án/lời giải trước khi nộp).
-- **Giao dịch & AI:** các lời gọi Gemini nằm **ngoài** transaction; phần ghi DB của gia sư AI nằm ở bean riêng `TutorPersistence`. Các endpoint `/api/tutor/next-step`, `/api/teacher/generate-questions`, `/api/student/submit-essay-ocr`, `/api/admin/ai-config/test-connection` trả `CompletableFuture`, chạy trên thread pool `aiExecutor` nên không chặn luồng Tomcat.
-- **Phản hồi API thống nhất:** mọi `/api/**` trả `{"success", "message", "data", "errors"}`; `GlobalExceptionHandler` ánh xạ lỗi sang mã HTTP (400 dữ liệu sai, 401, 403, 404, 409 xung đột, 422 AI trả dữ liệu không dùng được, 502/503/504 lỗi AI, 500 kèm mã tham chiếu `ERR-yyyyMMdd-xxxx`) và chuyển về trang trước kèm thông báo cho trang thường.
-- **CSRF:** mọi form POST có trường ẩn `_csrf`; `fetch` dùng `csrfFetch()` (header `X-CSRF-TOKEN` lấy từ `<meta name="csrf-token">`). Đăng xuất là `POST /logout`.
-- **Cấu hình bằng Java, không cần `web.xml`** (dự án không có `web.xml`): `WebAppInitializer` đăng ký DispatcherServlet, UTF-8 filter, multipart, session timeout 30 phút, cookie `HttpOnly` + `SameSite=Lax`. Trang lỗi nằm ở `WEB-INF/views/error/`.
-- **JSON từ AI chứa LaTeX:** AI hay quên nhân đôi dấu `\` (`\Leftrightarrow` làm JSON sai cú pháp; `\frac`, `\times` bị hiểu thành ký tự điều khiển). `AiJsonParser.repairLatexEscapes` tự sửa trước khi parse (chỉ trong chuỗi `"..."`, giữ nguyên escape JSON thật); lệnh LaTeX ngoài danh sách `LATEX_AFTER_BACKSLASH` có thể cần bổ sung.
-- **Model dự phòng:** khi model chính trả 503/504, `GeminiService` chuyển sang `gemini.fallbackModel` và **giữ model đó** cho các lần thử còn lại của cùng yêu cầu (không quay lại model chính đang quá tải). Lỗi 429 (hết hạn mức miễn phí) báo ngay, không thử lại.
-- **Phiên bản trước (Servlet thuần, JDBC thủ công; rồi JdbcTemplate)** đã được thay thế hoàn toàn; không còn `DBContext`, `*DAO`, `JdbcTemplate`, `@WebServlet`, `build.xml`/`nbproject` (Ant).
-
----
-
-## 🩺 8. Xử lý sự cố: AI phản hồi chậm hoặc lỗi
-
-Mỗi lần gọi Gemini ghi một dòng log kèm thời lượng (xem cửa sổ log Tomcat / console):
-
-```
-INFO  GeminiService - Gemini ok:   model=gemini-3.5-flash-lite attempt=1/3 took=1423ms
-WARN  GeminiService - Gemini loi:  model=gemini-3.5-flash attempt=1/3 took=1373ms status=503
-```
-
-| Dấu hiệu trong log | Nguyên nhân thường gặp | Cách xử lý |
+| Vai trò | Tên đăng nhập | Mục đích |
 |---|---|---|
-| `status=503` ("high demand") | Model chính của Google đang quá tải; mỗi lần lỗi tốn vài giây trước khi chuyển sang model dự phòng | Vào **Cấu hình AI**, đặt `DEFAULT_MODEL` (và `VISION_MODEL` nếu ảnh vẫn đọc tốt) sang model nhẹ như `gemini-3.5-flash-lite` |
-| `status=504` hoặc `took` ≥ 14000ms ở lần 1 | Model mạnh xử lý chậm (đặc biệt chấm ảnh) hoặc timeout 35 giây/lần | Dùng model nhẹ hơn; giảm `AI_TIMEOUT_SECONDS` |
-| `status=429` | Hết hạn mức miễn phí của Gemini | Chờ khoảng 1 phút hoặc dùng khóa API khác |
-| Sau khi tạo lại CSDL mà AI chậm hơn trước | `01_schema.sql` + `02_data.sql` đặt lại bảng `AiConfigs` về model mẫu và xóa khóa API | Nhập lại khóa và chọn lại model trong **Cấu hình AI**, bấm **Test kết nối** |
-| "Không đọc được bài làm" khi chấm tự luận | AI đánh giá ảnh không đọc được (`legible=false`), không phải lỗi hệ thống | Chụp rõ nét, đủ sáng, chữ to; nếu ảnh rõ vẫn báo lỗi, thử `VISION_MODEL = gemini-3.5-flash` |
+| Admin | `admin` | Quản trị, cấu hình AI |
+| Giáo viên | `teacher1` | Sở hữu nội dung SGK, sinh đề AI, duyệt tự luận |
+| Giáo viên | `teacher2` | Quản lý bài tập, theo dõi học sinh |
+| Học sinh | `student1`, `student2` | Làm bài trắc nghiệm, nộp tự luận, xem lịch sử |
 
-Thông số tham khảo đo được với `gemini-3.5-flash-lite`: gia sư AI và sinh đề thường mất 1–3 giây mỗi lượt. Chất lượng giải thích của model nhẹ có thể kém hơn model mạnh, nên thử một vài bài toán trước khi demo.
+---
 
-> `gemini.thinkingBudget=0` (`application.properties`) chỉ có tác dụng với model `gemini-2.5-*` (không phải bản `pro`); model dòng 3.x bỏ qua tham số này.
+## ⚙️ 7. Lưu ý kỹ thuật
+
+- **Tầng dữ liệu:** Entity ánh xạ 1-1 với 10 bảng; mọi quan hệ `LAZY`; Service map Entity → DTO trong `@Transactional`; không bật Open-Session-In-View.
+- **AI ngoài transaction:** lời gọi Gemini nằm ngoài transaction; các endpoint AI trả `CompletableFuture` chạy trên thread pool `aiExecutor`, không chặn luồng Tomcat.
+- **Phản hồi API thống nhất:** `/api/**` trả `{success, message, data, errors}`; `GlobalExceptionHandler` ánh xạ lỗi sang mã HTTP (400, 401, 403, 404, 409, 422, 502/503/504, 500 kèm mã tham chiếu).
+- **Độ bền của AI:** tự thử lại tối đa 3 lần, chuyển model dự phòng khi 503/504, tự vá dấu `\` của LaTeX trong JSON, chuẩn hóa LaTeX để KaTeX hiển thị được; lỗi 429 báo ngay.
+- **Hình trong đề:** ảnh SGK nhúng bằng `<img src="/static/img/sgk/...">`; bộ sanitize chỉ cho phép ảnh có `src` bắt đầu bằng `/static/img/`.
+- **Tiếng Việt:** mọi file lưu UTF-8; `CharacterEncodingFilter` được đăng ký trong `WebAppInitializer`.
+
+---
+
+## 🩺 8. Xử lý sự cố AI
+
+Mỗi lần gọi Gemini ghi một dòng log kèm thời lượng (`model`, `attempt`, `took`, `status`).
+
+| Dấu hiệu | Nguyên nhân thường gặp | Cách xử lý |
+|---|---|---|
+| `status=503` | Model chính quá tải | Đặt `DEFAULT_MODEL` sang model nhẹ hơn trong **Cấu hình AI** |
+| `status=504` / `took` rất lớn | Model chậm hoặc timeout | Dùng model nhẹ hơn, giảm `AI_TIMEOUT_SECONDS` |
+| `status=429` | Hết hạn mức miễn phí | Chờ khoảng 1 phút hoặc đổi khóa API |
+| AI chậm sau khi tạo lại CSDL | Cấu hình AI bị đặt về mẫu, mất khóa | Nhập lại khóa, chọn lại model, **Test kết nối** |
+| "Không đọc được bài làm" | Ảnh mờ (`legible=false`), không phải lỗi hệ thống | Chụp rõ, đủ sáng; thử `VISION_MODEL` mạnh hơn |
+
+---
+
+## 📚 9. Tài liệu đi kèm
+
+| File | Nội dung |
+|---|---|
+| `document/SRS.md` | Yêu cầu, phạm vi, nghiệm thu, đối chiếu đề bài |
+| `document/FRS.md` | Use case, luồng xử lý, phân quyền, luồng AI |
+| `document/Claude.md` | Quy tắc kỹ thuật và lộ trình xây dựng |
+| `document/docs/DATABASE.md`, `ERD.md` | Từ điển dữ liệu, sơ đồ ERD |
