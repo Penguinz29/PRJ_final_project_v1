@@ -120,7 +120,7 @@ final class ViewMapper {
         v.setQuestionContent(s.getQuestion().getContent());
         v.setQuestionAiGenerated(s.getQuestion().isAiGenerated());
         v.setQuestionType(s.getQuestionType().name());
-        v.setStudentAnswer(s.getStudentAnswer());
+        v.setStudentAnswer(stripOrNull(s.getStudentAnswer()));
         v.setEssayImagePath(s.getEssayImagePath());
         v.setIsCorrect(s.getIsCorrect());
         v.setScore(s.getFinalScore() == null ? null : s.getFinalScore().doubleValue());
@@ -128,12 +128,17 @@ final class ViewMapper {
         v.setStatus(s.getStatus().name());
         v.setReviewedByName(s.getReviewedBy() == null ? null : s.getReviewedBy().getFullName());
         v.setReviewedAt(toDate(s.getReviewedAt()));
-        v.setAiFeedback(s.getAiFeedback());
-        v.setSuggestedCorrection(s.getSuggestedCorrection());
-        v.setTeacherFeedback(s.getTeacherFeedback());
+        v.setAiFeedback(stripOrNull(s.getAiFeedback()));
+        v.setSuggestedCorrection(stripOrNull(s.getSuggestedCorrection()));
+        v.setTeacherFeedback(stripOrNull(s.getTeacherFeedback()));
         v.setReviewed(s.isReviewed());
         v.setSubmittedAt(toDate(s.getSubmittedAt()));
         return v;
+    }
+
+    /** Bỏ dòng trắng / khoảng trắng ở đầu và cuối (vùng white-space: pre-wrap sẽ hiện chúng thành khoảng trống lớn). */
+    private static String stripOrNull(String s) {
+        return s == null ? null : s.strip();
     }
 
     static AiConfigView toView(AiConfig c) {
