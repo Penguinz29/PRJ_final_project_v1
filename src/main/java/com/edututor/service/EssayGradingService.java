@@ -12,6 +12,7 @@ import com.edututor.repository.QuestionRepository;
 import com.edututor.exception.AiServiceException;
 import com.edututor.util.HtmlSanitizer;
 import com.edututor.util.ImageValidator;
+import com.edututor.util.LatexNormalizer;
 import com.edututor.util.ScoreUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -39,7 +40,10 @@ public class EssayGradingService {
                     + "\"suggestedCorrection\": string (lời giải đúng)}",
             "- legible = false khi ảnh mờ, không đọc được hoặc không phải bài giải toán: khi đó KHÔNG chấm điểm "
                     + "(score = 0), detailedFeedback nêu lý do ngắn gọn.",
-            "- errors liệt kê từng chỗ sai (rỗng nếu bài làm đúng hoàn toàn).");
+            "- errors liệt kê từng chỗ sai (rỗng nếu bài làm đúng hoàn toàn).",
+            "- MỌI công thức / biểu thức toán trong extractedText, detailedFeedback, errors, suggestedCorrection "
+                    + "PHẢI nằm trong dấu $...$ (ví dụ $(-\\infty; 0) \\cup (1; +\\infty)$), kể cả khi chép lại bài viết tay; "
+                    + "không để lệnh LaTeX trần ngoài dấu $.");
 
     static final String ILLEGIBLE_MESSAGE = "Không đọc được bài làm, vui lòng chụp lại rõ nét hơn.";
 
@@ -137,15 +141,14 @@ public class EssayGradingService {
         }
 
         double score = ScoreUtil.roundQuarter(result.score());
-        String extracted = HtmlSanitizer.clean(nullToEmpty(result.extractedText()));
-        String feedback = HtmlSanitizer.clean(nullToEmpty(result.detailedFeedback()));
-        String correction = HtmlSanitizer.clean(nullToEmpty(result.suggestedCorrection()));
+        String extracted = cleanMath(result.extractedText());
+        String feedback = cleanMath(result.detailedFeedback());
+        String correction = cleanMath(result.suggestedCorrection());
         List<EssayGradingResult.ErrorItem> errors = new ArrayList<>();
         if (result.errors() != null) {
             for (EssayGradingResult.ErrorItem e : result.errors()) {
                 if (e != null && !nullToEmpty(e.description()).isEmpty()) {
-                    errors.add(new EssayGradingResult.ErrorItem(HtmlSanitizer.clean(nullToEmpty(e.location())),
-                            HtmlSanitizer.clean(nullToEmpty(e.description()))));
+                    errors.add(new EssayGradingResult.ErrorItem(cleanMath(e.location()), cleanMath(e.description())));
                 }
             }
         }
@@ -163,6 +166,11 @@ public class EssayGradingService {
         }
         return new EssayOcrResponse(id, extracted, score, feedback, errors, correction, imageUrl, "AI_GRADED",
                 !errors.isEmpty() || score < 10.0);
+    }
+
+    /** Sửa LaTeX AI hay viết sai, bọc công thức trần bằng $...$ rồi lọc HTML. */
+    private static String cleanMath(String s) {
+        return HtmlSanitizer.clean(LatexNormalizer.wrapBareMath(LatexNormalizer.normalize(nullToEmpty(s))));
     }
 
     /** ai_feedback = nhận xét chung + danh sách lỗi sai (UC-OCR-02 bước 6). */
