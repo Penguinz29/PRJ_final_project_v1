@@ -11,6 +11,7 @@ import com.edututor.interceptor.AuthInterceptor;
 import com.edututor.service.AiExamService;
 import com.edututor.service.LessonService;
 import com.edututor.service.QuestionService;
+import com.edututor.util.HtmlSanitizer;
 import jakarta.validation.Valid;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -85,7 +86,7 @@ public class TeacherApiController {
         for (LessonView l : lessonService.getLessonsByTopic(topicId)) {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("lessonId", l.getLessonId());
-            m.put("title", l.getTitle());
+            m.put("title", HtmlSanitizer.toPlainText(l.getTitle()));
             result.add(m);
         }
         return ApiResponse.ok(result);

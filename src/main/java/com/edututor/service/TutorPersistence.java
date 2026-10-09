@@ -22,6 +22,7 @@ import com.edututor.repository.SubmissionRepository;
 import com.edututor.repository.TutorMessageRepository;
 import com.edututor.repository.TutorSessionRepository;
 import com.edututor.repository.UserRepository;
+import com.edututor.util.HtmlSanitizer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -129,10 +130,10 @@ public class TutorPersistence {
                     throw new ForbiddenException("Bạn chỉ có thể hỏi gia sư về câu trắc nghiệm mình đã làm sai.");
                 }
                 String chosen = describeChosen(questionId, selectedOptionId, wrong.get(0).getStudentAnswer());
-                String problem = q.getContent() + "\n\nHọc sinh đã chọn: " + chosen;
+                String problem = HtmlSanitizer.toPlainText(q.getContent()) + "\n\nHọc sinh đã chọn: " + chosen;
                 return new StartContext(mode, problem, "Em làm sai câu trắc nghiệm này, hãy hướng dẫn em:\n" + problem,
                         q.getLesson().getLessonId(), q.getLesson().getTitle(), q.getQuestionId(),
-                        q.getExplanationLatex());
+                        HtmlSanitizer.toPlainText(q.getExplanationLatex()));
             }
             case SUBMISSION -> {
                 if (submissionId == null) {
@@ -147,7 +148,8 @@ public class TutorPersistence {
                     throw new IllegalArgumentException("Chế độ này chỉ dành cho bài tự luận.");
                 }
                 Question q = s.getQuestion();
-                StringBuilder problem = new StringBuilder(q.getContent());
+                String questionText = HtmlSanitizer.toPlainText(q.getContent());
+                StringBuilder problem = new StringBuilder(questionText);
                 if (s.getStudentAnswer() != null && !s.getStudentAnswer().isBlank()) {
                     problem.append("\n\nBài làm của học sinh (đã nhận diện):\n").append(s.getStudentAnswer().trim());
                 }
@@ -156,9 +158,9 @@ public class TutorPersistence {
                 }
                 Lesson lesson = s.getLesson();
                 return new StartContext(mode, problem.toString(),
-                        "Em muốn hiểu lỗi sai trong bài tự luận này:\n" + q.getContent(),
+                        "Em muốn hiểu lỗi sai trong bài tự luận này:\n" + questionText,
                         lesson == null ? null : lesson.getLessonId(), lesson == null ? null : lesson.getTitle(),
-                        q.getQuestionId(), q.getExplanationLatex());
+                        q.getQuestionId(), HtmlSanitizer.toPlainText(q.getExplanationLatex()));
             }
             default -> throw new IllegalArgumentException("Chế độ không hợp lệ.");
         }
@@ -172,7 +174,7 @@ public class TutorPersistence {
                     ? o.getOptionId().equals(selectedOptionId)
                     : o.getOptionLetter().equalsIgnoreCase(letterFromSubmission == null ? "" : letterFromSubmission);
             if (match) {
-                return o.getOptionLetter() + ". " + o.getContent();
+                return o.getOptionLetter() + ". " + HtmlSanitizer.toPlainText(o.getContent());
             }
         }
         if (selectedOptionId != null) {

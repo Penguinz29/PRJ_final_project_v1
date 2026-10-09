@@ -18,6 +18,7 @@ import com.edututor.repository.SubmissionRepository;
 import com.edututor.repository.TopicRepository;
 import com.edututor.repository.TutorSessionRepository;
 import com.edututor.repository.UserRepository;
+import com.edututor.util.HtmlSanitizer;
 import com.edututor.util.Pager;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -249,7 +250,7 @@ public class StatsService {
      * tại.
      */
     public String topicName(int topicId) {
-        return topics.findById(topicId).map(t -> t.getTopicName()).orElse(null);
+        return topics.findById(topicId).map(t -> HtmlSanitizer.toPlainText(t.getTopicName())).orElse(null);
     }
 
     private static ProgressView toProgressView(ProgressRow r) {

@@ -4,6 +4,7 @@ import java.util.regex.Pattern;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.jsoup.parser.Parser;
 import org.jsoup.safety.Safelist;
 
 /**
@@ -42,7 +43,7 @@ public final class HtmlSanitizer {
 
     /** Thẻ được giữ lại; mọi dấu '<' khác (vd. $a<b$) được escape trước khi parse. */
     private static final Pattern STRAY_LT = Pattern.compile(
-            "<(?!/?(p|br|b|i|u|strong|em|sub|sup|ul|ol|li|div|span|h[1-6]|table|thead|tbody|tr|th|td|img)\\b)");
+            "<(?!/?(p|br|b|i|u|strong|em|sub|sup|ul|ol|li|div|span|h[1-6]|table|thead|tbody|tr|th|td|img)(?=[\\s/>]))");
 
     /**
      * Dùng khi hiển thị nội dung có thể chứa HTML đơn giản (p, ul, b...) lẫn công thức LaTeX:
@@ -50,6 +51,27 @@ public final class HtmlSanitizer {
      */
     public static String toSafeHtml(String text) {
         return toSafeHtml(text, "");
+    }
+
+    private static final Pattern BLOCK_END = Pattern.compile("(?i)<br\\s*/?>|</(p|div|li|h[1-6]|tr)>");
+    private static final Pattern CODE_BLOCK = Pattern.compile("(?is)<(script|style)\\b.*?</\\1\\s*>");
+    private static final Pattern MANY_BLANK_LINES = Pattern.compile("\\n{3,}");
+
+    /**
+     * Chuyển nội dung HTML (vd. đề SGK "&lt;p&gt;&lt;b&gt;Bài 15.&lt;/b&gt; ...&lt;/p&gt;") thành văn bản thuần để đưa vào
+     * hội thoại gia sư: bỏ mọi thẻ, giữ xuống dòng giữa các đoạn và giữ nguyên công thức LaTeX (kể cả '<', '>').
+     */
+    public static String toPlainText(String html) {
+        if (html == null || html.isEmpty()) {
+            return "";
+        }
+        String withoutCode = CODE_BLOCK.matcher(html).replaceAll("");
+        String protectedText = STRAY_LT.matcher(withoutCode).replaceAll("&lt;");
+        String withBreaks = BLOCK_END.matcher(protectedText).replaceAll("\n");
+        Document.OutputSettings out = new Document.OutputSettings().prettyPrint(false);
+        String stripped = Jsoup.clean(withBreaks, "", Safelist.none(), out);
+        String text = Parser.unescapeEntities(stripped, false).replace(' ', ' ');
+        return MANY_BLANK_LINES.matcher(text).replaceAll("\n\n").trim();
     }
 
     /** Ảnh minh họa chỉ được lấy từ thư mục tĩnh của ứng dụng (vd. hình vẽ trong SGK), không cho nguồn bên ngoài. */

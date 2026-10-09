@@ -17,6 +17,7 @@ import com.edututor.model.Submission;
 import com.edututor.model.Topic;
 import com.edututor.model.TutorMessage;
 import com.edututor.model.TutorSession;
+import com.edututor.util.HtmlSanitizer;
 import com.edututor.model.User;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -55,8 +56,8 @@ final class ViewMapper {
     static TopicView toView(Topic t) {
         TopicView v = new TopicView();
         v.setTopicId(t.getTopicId());
-        v.setTopicName(t.getTopicName());
-        v.setDescription(t.getDescription());
+        v.setTopicName(HtmlSanitizer.toPlainText(t.getTopicName()));
+        v.setDescription(HtmlSanitizer.toPlainText(t.getDescription()));
         v.setTeacherId(t.getTeacher().getUserId());
         v.setTeacherName(t.getTeacher().getFullName());
         v.setCreatedAt(toDate(t.getCreatedAt()));
@@ -67,9 +68,9 @@ final class ViewMapper {
         LessonView v = new LessonView();
         v.setLessonId(l.getLessonId());
         v.setTopicId(l.getTopic().getTopicId());
-        v.setTopicName(l.getTopic().getTopicName());
-        v.setTitle(l.getTitle());
-        v.setSummary(l.getSummary());
+        v.setTopicName(HtmlSanitizer.toPlainText(l.getTopic().getTopicName()));
+        v.setTitle(HtmlSanitizer.toPlainText(l.getTitle()));
+        v.setSummary(HtmlSanitizer.toPlainText(l.getSummary()));
         v.setContent(l.getContent());
         v.setDisplayOrder(l.getDisplayOrder());
         v.setCreatedById(l.getCreatedBy().getUserId());
@@ -83,7 +84,7 @@ final class ViewMapper {
         QuestionView v = new QuestionView();
         v.setQuestionId(q.getQuestionId());
         v.setLessonId(q.getLesson().getLessonId());
-        v.setLessonTitle(q.getLesson().getTitle());
+        v.setLessonTitle(HtmlSanitizer.toPlainText(q.getLesson().getTitle()));
         v.setQuestionType(q.getQuestionType().name());
         v.setContent(q.getContent());
         v.setExplanation(q.getExplanationLatex());
@@ -112,9 +113,9 @@ final class ViewMapper {
         v.setStudentName(s.getStudent().getFullName());
         v.setStudentEmail(s.getStudent().getEmail());
         v.setLessonId(s.getLesson() == null ? null : s.getLesson().getLessonId());
-        v.setLessonTitle(s.getLesson() == null ? null : s.getLesson().getTitle());
+        v.setLessonTitle(s.getLesson() == null ? null : HtmlSanitizer.toPlainText(s.getLesson().getTitle()));
         v.setQuestionId(s.getQuestion().getQuestionId());
-        v.setQuestionTitle(s.getQuestion().getContent());
+        v.setQuestionTitle(HtmlSanitizer.toPlainText(s.getQuestion().getContent()));
         v.setQuestionContent(s.getQuestion().getContent());
         v.setQuestionAiGenerated(s.getQuestion().isAiGenerated());
         v.setQuestionType(s.getQuestionType().name());
@@ -160,14 +161,14 @@ final class ViewMapper {
         v.setSessionId(s.getSessionId());
         v.setStudentId(s.getStudent().getUserId());
         v.setLessonId(s.getLesson() == null ? null : s.getLesson().getLessonId());
-        v.setLessonTitle(s.getLesson() == null ? null : s.getLesson().getTitle());
-        v.setTitle(s.getTitle());
+        v.setLessonTitle(s.getLesson() == null ? null : HtmlSanitizer.toPlainText(s.getLesson().getTitle()));
+        v.setTitle(HtmlSanitizer.toPlainText(s.getTitle()));
         v.setStatus(s.getStatus().name());
         v.setQuestionId(s.getQuestion() == null ? null : s.getQuestion().getQuestionId());
         v.setCurrentStep(s.getCurrentStep());
         v.setTotalSteps(s.getTotalSteps());
         v.setAwaitingInput(s.isAwaitingInput());
-        v.setInputHint(s.getInputHint());
+        v.setInputHint(HtmlSanitizer.toPlainText(s.getInputHint()));
         v.setCreatedAt(toDate(s.getCreatedAt()));
         return v;
     }
@@ -178,7 +179,7 @@ final class ViewMapper {
         v.setSessionId(m.getSession().getSessionId());
         v.setSenderType(m.getSenderType().name());
         v.setStepNumber(m.getStepNumber());
-        v.setContentText(m.getContentText());
+        v.setContentText(HtmlSanitizer.toPlainText(m.getContentText()));
         v.setStepCompleted(m.isStepCompleted());
         v.setCreatedAt(toDate(m.getCreatedAt()));
         return v;

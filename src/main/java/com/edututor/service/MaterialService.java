@@ -162,7 +162,7 @@ public class MaterialService {
         v.setMaterialId(m.getMaterialId());
         v.setLessonId(m.getLesson().getLessonId());
         v.setMaterialType(m.getMaterialType().name());
-        v.setTitle(m.getTitle());
+        v.setTitle(HtmlSanitizer.toPlainText(m.getTitle()));
         v.setUrl(m.getUrl());
         v.setContentText(m.getContentText());
         v.setOrderIndex(m.getOrderIndex());
