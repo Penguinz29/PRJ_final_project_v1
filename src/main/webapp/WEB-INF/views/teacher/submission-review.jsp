@@ -92,16 +92,8 @@
                                 <i class="bi bi-file-earmark-text me-1"></i>
                                 ${not empty sub.essayImagePath ? 'Nội dung nhận dạng OCR từ nét chữ viết tay:' : 'Văn bản lời giải của học sinh:'}
                             </p>
-                            <div class="latex-content" style="white-space: pre-wrap; font-size: .92rem;">
-                                <c:choose>
-                                    <c:when test="${not empty sub.studentAnswer}">
-                                        <c:out value="${sub.studentAnswer}" />
-                                    </c:when>
-                                    <c:otherwise>
-                                        <span class="text-muted italic">Học sinh chưa nhập văn bản lời giải.</span>
-                                    </c:otherwise>
-                                </c:choose>
-                            </div>
+                            <%-- Vùng pre-wrap giữ nguyên khoảng trắng: nội dung phải nằm sát thẻ, không xuống dòng/thụt lề trong mã JSP --%>
+                            <div class="latex-content" style="white-space: pre-wrap; font-size: .92rem;"><c:choose><c:when test="${not empty sub.studentAnswer}"><c:out value="${sub.studentAnswer}" /></c:when><c:otherwise><span class="text-muted italic">Học sinh chưa nhập văn bản lời giải.</span></c:otherwise></c:choose></div>
                         </div>
 
                         <!-- Nhận xét của AI OCR nếu có -->
@@ -110,9 +102,7 @@
                                 <h6 class="text-primary fw-bold mb-1">
                                     <i class="bi bi-robot me-1"></i>Đánh giá đề xuất từ Gemini Vision AI:
                                 </h6>
-                                <div class="latex-content small" style="white-space: pre-wrap;">
-                                    <c:out value="${sub.aiFeedback}" />
-                                </div>
+                                <div class="latex-content small" style="white-space: pre-wrap;"><c:out value="${sub.aiFeedback}" /></div>
                             </div>
                         </c:if>
                         <c:if test="${not empty sub.suggestedCorrection}">
@@ -120,9 +110,7 @@
                                 <h6 class="text-success fw-bold mb-1">
                                     <i class="bi bi-lightbulb me-1"></i>Lời giải gợi ý của AI:
                                 </h6>
-                                <div class="latex-content small" style="white-space: pre-wrap;">
-                                    <c:out value="${sub.suggestedCorrection}" />
-                                </div>
+                                <div class="latex-content small" style="white-space: pre-wrap;"><c:out value="${sub.suggestedCorrection}" /></div>
                             </div>
                         </c:if>
                     </div>
