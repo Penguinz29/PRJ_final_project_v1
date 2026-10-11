@@ -24,22 +24,28 @@
                             </h1>
                         </div>
 
-                        <div class="card mb-3">
-                            <div class="card-body py-2">
-                                <form action="${pageContext.request.contextPath}/teacher/students" method="get"
-                                    class="d-flex gap-2">
-                                    <input type="text" class="form-control form-control-sm" name="keyword"
-                                        placeholder="Tìm theo họ tên, username..." value="<c:out value='${keyword}'/>">
-                                    <button class="btn btn-sm btn-primary"><i class="bi bi-search"></i></button>
-                                    <c:if test="${not empty keyword}">
-                                        <a href="${pageContext.request.contextPath}/teacher/students"
-                                            class="btn btn-sm btn-outline-secondary">
-                                            <i class="bi bi-x-lg"></i>
-                                        </a>
-                                    </c:if>
-                                </form>
+                        <form action="${pageContext.request.contextPath}/teacher/students" method="get"
+                            class="card card-body mb-3">
+                            <div class="row g-2 align-items-end">
+                                <div class="col-md-6 col-lg-5">
+                                    <label class="form-label small fw-semibold mb-1" for="keyword">Tìm kiếm</label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" id="keyword" name="keyword"
+                                            maxlength="100" value="<c:out value='${keyword}'/>"
+                                            placeholder="Họ tên, tên đăng nhập hoặc email">
+                                        <button type="submit" class="btn btn-primary" title="Tìm kiếm">
+                                            <i class="bi bi-search me-1"></i>Tìm
+                                        </button>
+                                        <c:if test="${not empty keyword}">
+                                            <a href="${pageContext.request.contextPath}/teacher/students"
+                                                class="btn btn-outline-secondary" title="Xóa bộ lọc">
+                                                <i class="bi bi-x-lg"></i>
+                                            </a>
+                                        </c:if>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
+                        </form>
 
                         <div class="card table-card">
                             <div class="table-responsive">
@@ -62,7 +68,7 @@
                                                     <td colspan="7">
                                                         <div class="empty-state">
                                                             <i class="bi bi-people empty-icon"></i>
-                                                            <p>Bạn chưa phụ trách học sinh nào.</p>
+                                                            <p>${not empty keyword ? 'Không tìm thấy học sinh phù hợp.' : 'Bạn chưa phụ trách học sinh nào.'}</p>
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -108,7 +114,10 @@
                                 </table>
                             </div>
                         </div>
-                        <ui:pagination baseUrl="${pageContext.request.contextPath}/teacher/students${not empty keyword ? '?keyword='.concat(keyword) : ''}" page="${page}" totalPages="${totalPages}" />
+                        <c:url var="pageBase" value="/teacher/students">
+                            <c:if test="${not empty keyword}"><c:param name="keyword" value="${keyword}" /></c:if>
+                        </c:url>
+                        <ui:pagination baseUrl="${pageBase}" page="${page}" totalPages="${totalPages}" />
                     </main>
                 </div>
                 <jsp:include page="../common/footer.jsp" />

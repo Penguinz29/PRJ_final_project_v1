@@ -25,8 +25,10 @@ public class TeacherStudentController {
     }
 
     @GetMapping("/teacher/students")
-    public String students(@RequestParam(defaultValue = "1") int page, Model model) {
-        PageResult<UserView> result = userService.getUsersByRole("STUDENT", page, PAGE_SIZE);
+    public String students(@RequestParam(defaultValue = "") String keyword,
+                           @RequestParam(defaultValue = "1") int page, Model model) {
+        PageResult<UserView> result = userService.searchUsersByRole("STUDENT", keyword.trim(), page, PAGE_SIZE);
+        model.addAttribute("keyword", keyword.trim());
         model.addAttribute("students", result.getItems());
         model.addAttribute("page", result.getPage());
         model.addAttribute("totalPages", result.getTotalPages());

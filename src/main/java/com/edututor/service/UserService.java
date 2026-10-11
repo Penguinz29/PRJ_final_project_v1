@@ -12,6 +12,7 @@ import com.edututor.model.Role;
 import com.edututor.model.User;
 import com.edututor.model.UserStatus;
 import com.edututor.repository.UserRepository;
+import com.edututor.repository.spec.UserSpecs;
 import com.edututor.util.Pager;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -157,6 +158,16 @@ public class UserService {
     @Transactional(readOnly = true)
     public PageResult<UserView> getUsersByRole(String role, int page, int size) {
         Page<User> result = userRepository.findByRole(Role.valueOf(role),
+                Pager.pageRequest(page, size, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("userId"))));
+        Map<Integer, String> teacherNames = teacherNames(result.getContent());
+        return PageResult.of(result, u -> ViewMapper.toView(u, teacherNames.get(u.getTeacherId())));
+    }
+
+    /** Danh sách theo vai trò có tìm kiếm theo họ tên, username, email (rỗng = không lọc). */
+    @Transactional(readOnly = true)
+    public PageResult<UserView> searchUsersByRole(String role, String keyword, int page, int size) {
+        Page<User> result = userRepository.findAll(
+                UserSpecs.search(keyword, Role.valueOf(role), null),
                 Pager.pageRequest(page, size, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("userId"))));
         Map<Integer, String> teacherNames = teacherNames(result.getContent());
         return PageResult.of(result, u -> ViewMapper.toView(u, teacherNames.get(u.getTeacherId())));
