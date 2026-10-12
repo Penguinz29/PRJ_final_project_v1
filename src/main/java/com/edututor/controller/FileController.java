@@ -6,6 +6,7 @@ import com.edututor.exception.NotFoundException;
 import com.edututor.interceptor.AuthInterceptor;
 import com.edututor.service.FileStorageService;
 import com.edututor.service.SubmissionService;
+import com.edututor.util.DocumentValidator;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
@@ -20,7 +21,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.SessionAttribute;
 
 /**
- * Phục vụ ảnh bài làm tự luận lưu ngoài thư mục web. Ảnh chỉ được trả về cho chủ bài làm (học sinh),
+ * Phục vụ tệp bài làm (ảnh / PDF / Word) tự luận lưu ngoài thư mục web. Ảnh chỉ được trả về cho chủ bài làm (học sinh),
  * giáo viên hoặc admin; học sinh khác nhận 403. Tên tệp do server sinh nên không có path traversal.
  */
 @Controller
@@ -60,13 +61,12 @@ public class FileController {
         if (file == null) {
             throw new NotFoundException("Không tìm thấy ảnh bài làm.");
         }
-        String lower = filename.toLowerCase(Locale.ROOT);
-        MediaType type = lower.endsWith(".png") ? MediaType.IMAGE_PNG
-                : (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) ? MediaType.IMAGE_JPEG
-                : lower.endsWith(".webp") ? MediaType.parseMediaType("image/webp")
-                : MediaType.APPLICATION_OCTET_STREAM;
+        MediaType type = MediaType.parseMediaType(DocumentValidator.mimeForExtension(filename));
+        // Word không xem trực tiếp trên trình duyệt được: buộc tải về; ảnh và PDF xem tại chỗ
+        String disposition = filename.toLowerCase(Locale.ROOT).endsWith(".docx") ? "attachment" : "inline";
         return ResponseEntity.ok()
                 .contentType(type)
+                .header("Content-Disposition", disposition + "; filename=\"bai-lam-" + filename + "\"")
                 .cacheControl(CacheControl.maxAge(1, TimeUnit.HOURS).cachePrivate())
                 .header("X-Content-Type-Options", "nosniff")
                 .body(new FileSystemResource(file));

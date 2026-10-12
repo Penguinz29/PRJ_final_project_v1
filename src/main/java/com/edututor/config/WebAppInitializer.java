@@ -11,8 +11,8 @@ import org.springframework.web.servlet.support.AbstractAnnotationConfigDispatche
 /** Thay cho web.xml: đăng ký DispatcherServlet "/" (Spring MVC 6, Servlet 6.0) bằng Java config. */
 public class WebAppInitializer extends AbstractAnnotationConfigDispatcherServletInitializer {
 
-    private static final long MAX_FILE = 5L * 1024 * 1024;       // ảnh tối đa 5 MB
-    private static final long MAX_REQUEST = 6L * 1024 * 1024;    // + phần dư của multipart
+    private static final long MAX_FILE = 5L * 1024 * 1024;       // mỗi tệp (ảnh / PDF / Word) tối đa 5 MB
+    private static final long MAX_REQUEST = 11L * 1024 * 1024;   // 2 tệp (đề + đáp án) + phần dư của multipart
 
     @Override
     protected Class<?>[] getRootConfigClasses() {

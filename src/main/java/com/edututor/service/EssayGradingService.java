@@ -1,5 +1,6 @@
 package com.edututor.service;
 
+import com.edututor.ai.DocumentParts;
 import com.edututor.ai.GeminiClient.Part;
 import com.edututor.ai.GeminiClient.Turn;
 import com.edututor.ai.PromptBuilder;
@@ -11,13 +12,12 @@ import com.edututor.model.QuestionType;
 import com.edututor.repository.QuestionRepository;
 import com.edututor.exception.AiServiceException;
 import com.edututor.util.HtmlSanitizer;
-import com.edututor.util.ImageValidator;
+import com.edututor.util.DocumentValidator;
 import com.edututor.util.LatexNormalizer;
 import com.edututor.util.ScoreUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
@@ -73,7 +73,7 @@ public class EssayGradingService {
     }
 
     /**
-     * @param imageBytes ảnh bài làm (có thể null nếu học sinh chỉ nhập văn bản)
+     * @param imageBytes tệp bài làm: ảnh JPG/PNG/WebP, PDF hoặc Word .docx (null nếu học sinh chỉ nhập văn bản)
      * @param textAnswer lời giải dạng văn bản (có thể null)
      * @throws IllegalArgumentException dữ liệu đầu vào không hợp lệ
      * @throws com.edututor.exception.AiServiceException khi AI không chấm được
@@ -82,7 +82,7 @@ public class EssayGradingService {
         boolean hasImage = imageBytes != null && imageBytes.length > 0;
         boolean hasText = textAnswer != null && !textAnswer.isBlank();
         if (!hasImage && !hasText) {
-            throw new IllegalArgumentException("Vui lòng tải ảnh bài làm hoặc nhập lời giải.");
+            throw new IllegalArgumentException("Vui lòng tải tệp bài làm hoặc nhập lời giải.");
         }
         if (hasText && textAnswer.length() > 20000) {
             throw new IllegalArgumentException("Lời giải nhập tay quá dài.");
@@ -93,13 +93,13 @@ public class EssayGradingService {
             throw new IllegalArgumentException("Câu hỏi tự luận không tồn tại.");
         }
 
-        // VAL-18: ≤ 5MB, JPG / PNG / WebP theo magic bytes, đọc được và ≤ 4096×4096 px
-        ImageValidator.ImageInfo image = null;
+        // VAL-18: ≤ 5MB; ảnh JPG / PNG / WebP (đọc được, ≤ 4096×4096 px), PDF hoặc Word .docx theo magic bytes
+        DocumentValidator.Info image = null;
         if (hasImage) {
             if (imageBytes.length > maxFileSize) {
-                throw new IllegalArgumentException("Ảnh vượt quá dung lượng tối đa 5MB.");
+                throw new IllegalArgumentException("Tệp vượt quá dung lượng tối đa 5MB.");
             }
-            image = ImageValidator.validate(imageBytes);
+            image = DocumentValidator.validate(imageBytes);
         }
         // BR-13: dùng chung hạn mức học sinh với gia sư; chỉ trừ lượt sau khi dữ liệu và ảnh đã hợp lệ (UC-OCR-01)
         rateLimiter.check(studentId, RateLimiter.Action.STUDENT_AI);
@@ -110,15 +110,15 @@ public class EssayGradingService {
                 "QUESTION", question.getContent(),
                 "REFERENCE", (reference == null || reference.isBlank()) ? NO_REFERENCE : reference), JSON_FORMAT);
 
-        // Payload đa phương thức: [Ảnh Base64] + [bài làm học sinh]
+        // Payload đa phương thức: [ảnh / PDF Base64, hoặc chữ + ảnh nhúng trong Word] + [bài làm học sinh]
         StringBuilder prompt = new StringBuilder("Hãy chấm bài làm của học sinh.");
         if (hasText) {
             prompt.append("\n\nLỜI GIẢI HỌC SINH NHẬP BẰNG VĂN BẢN:\n").append(textAnswer.trim());
         }
         List<Part> parts = new ArrayList<>();
         if (hasImage) {
-            parts.add(Part.image(image.mimeType(), Base64.getEncoder().encodeToString(imageBytes)));
-            prompt.append("\n\n(Ảnh đính kèm là bài làm viết tay của học sinh.)");
+            parts.addAll(DocumentParts.of(image, imageBytes));
+            prompt.append("\n\n(Tệp đính kèm là bài làm của học sinh: ảnh viết tay, PDF hoặc Word.)");
         }
         parts.add(Part.text(prompt.toString()));
 

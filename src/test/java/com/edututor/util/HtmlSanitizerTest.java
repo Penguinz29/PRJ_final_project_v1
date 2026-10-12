@@ -3,6 +3,7 @@ package com.edututor.util;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
 class HtmlSanitizerTest {
@@ -28,5 +29,17 @@ class HtmlSanitizerTest {
     void toPlainTextHandlesNullAndEmpty() {
         assertEquals("", HtmlSanitizer.toPlainText(null));
         assertEquals("", HtmlSanitizer.toPlainText(""));
+    }
+
+    @Test
+    void plainTextNewlinesBecomeLineBreaksOutsideMath() {
+        String html = HtmlSanitizer.toSafeHtml("Cho hàm số:\na) $y=x^2$\nb) $$\\begin{array}{c}\n1\\\\2\n\\end{array}$$");
+        assertEquals(2, html.split("<br>", -1).length - 1);
+        assertTrue(html.contains("\\begin{array}{c}\n1"));
+    }
+
+    @Test
+    void existingHtmlIsLeftAlone() {
+        assertFalse(HtmlSanitizer.toSafeHtml("<p>Bài 1</p>\n<p>Bài 2</p>").contains("<br>"));
     }
 }

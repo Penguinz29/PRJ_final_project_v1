@@ -1,5 +1,6 @@
 package com.edututor.util;
 
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -74,6 +75,29 @@ public final class HtmlSanitizer {
         return MANY_BLANK_LINES.matcher(text).replaceAll("\n\n").trim();
     }
 
+    private static final Pattern BLOCK_TAG = Pattern.compile("(?i)<(p|br|div|li|ul|ol|table|h[1-6])[\\s/>]");
+    private static final Pattern MATH_SPAN = Pattern.compile("\\$\\$[\\s\\S]*?\\$\\$|\\$[^$]*\\$");
+
+    /**
+     * Nội dung thuần văn bản (nhập tay hoặc AI đọc từ PDF/Word) xuống dòng bằng ký tự LF, mà HTML bỏ qua LF.
+     * Nếu nội dung chưa có thẻ khối (p, br, li...), đổi LF thành {@code <br>}, trừ bên trong công thức $...$ / $$...$$
+     * (để KaTeX vẫn thấy nguyên một chuỗi). Nội dung HTML sẵn có (đề SGK) giữ nguyên.
+     */
+    static String newlinesToBreaks(String text) {
+        if (text.indexOf('\n') < 0 || BLOCK_TAG.matcher(text).find()) {
+            return text;
+        }
+        StringBuilder sb = new StringBuilder();
+        Matcher m = MATH_SPAN.matcher(text);
+        int last = 0;
+        while (m.find()) {
+            sb.append(text.substring(last, m.start()).replaceAll("\\r?\\n", "<br>")).append(m.group());
+            last = m.end();
+        }
+        sb.append(text.substring(last).replaceAll("\\r?\\n", "<br>"));
+        return sb.toString();
+    }
+
     /** Ảnh minh họa chỉ được lấy từ thư mục tĩnh của ứng dụng (vd. hình vẽ trong SGK), không cho nguồn bên ngoài. */
     private static final Pattern LOCAL_IMG = Pattern.compile("^/static/img/[A-Za-z0-9_./-]+$");
 
@@ -86,7 +110,7 @@ public final class HtmlSanitizer {
         if (text == null || text.isEmpty()) {
             return "";
         }
-        String protectedText = STRAY_LT.matcher(LatexNormalizer.normalize(text)).replaceAll("&lt;");
+        String protectedText = STRAY_LT.matcher(newlinesToBreaks(LatexNormalizer.normalize(text))).replaceAll("&lt;");
         Document.OutputSettings out = new Document.OutputSettings().prettyPrint(false);
         String cleaned = Jsoup.clean(protectedText, "", RICH, out);
         if (!cleaned.contains("<img")) {

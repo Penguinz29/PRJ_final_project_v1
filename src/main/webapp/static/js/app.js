@@ -326,10 +326,24 @@
    * thẻ khác (script, ...) chuyển thành văn bản thuần; <img> chỉ giữ khi src là /static/img/.... DOMParser tạo tài liệu "chết"
    * nên không chạy script / không tải ảnh trong lúc phân tích. Công thức $a<b$ được giữ nguyên.
    */
+  // Văn bản thuần xuống dòng bằng LF: đổi thành <br> (trừ trong công thức $...$ / $$...$$); nội dung HTML giữ nguyên
+  var BLOCK_TAG = /<(p|br|div|li|ul|ol|table|h[1-6])[\s\/>]/i;
+  var MATH_SPAN = /\$\$[\s\S]*?\$\$|\$[^$]*\$/g;
+  function newlinesToBreaks(text) {
+    if (text.indexOf('\n') === -1 || BLOCK_TAG.test(text)) return text;
+    var out = '', last = 0, m;
+    MATH_SPAN.lastIndex = 0;
+    while ((m = MATH_SPAN.exec(text)) !== null) {
+      out += text.slice(last, m.index).replace(/\r?\n/g, '<br>') + m[0];
+      last = m.index + m[0].length;
+    }
+    return out + text.slice(last).replace(/\r?\n/g, '<br>');
+  }
+
   function toSafeHtml(raw) {
     if (raw == null || raw === '') return '';
     var doc = new DOMParser().parseFromString(
-      '<body>' + String(raw).replace(STRAY_LT, '&lt;') + '</body>', 'text/html');
+      '<body>' + newlinesToBreaks(String(raw)).replace(STRAY_LT, '&lt;') + '</body>', 'text/html');
     (function clean(node) {
       Array.prototype.slice.call(node.childNodes).forEach(function (child) {
         if (child.nodeType === 3) return;

@@ -5,7 +5,7 @@
 | Thông tin | Nội dung |
 |---|---|
 | Đồ án | PRJ301 — Spring MVC 6 + Spring Data JPA (Hibernate) + SQL Server + Gemini API |
-| Phiên bản | 2.1.4 (khớp FRS với mã nguồn sau đợt rà soát backend: upload (không kiểm MIME), quy tắc `/uploads/**`, mã lỗi AI 6.1, UC-STU-04, UC-ADM-08, tên lớp / DTO, 1.7 ánh xạ tên cột và kiểu dữ liệu, bổ sung mục 10; dữ liệu mẫu phong phú nằm trong `02_data.sql`). 2.1.3 (rà soát tài liệu so với mã nguồn: cập nhật 1.1, UC-ADM-04/08, UC-TEA-05, UC-STU-07, 4.3, 6.1 và viết lại mục 10 theo hiện trạng). 2.1.2 (đồng bộ với mã nguồn: script SQL `01_schema.sql` + `02_data.sql`, BR-03 bài học, OCR `legible`/WebP, BR-09 tách điểm, hồ sơ cá nhân, kết quả theo câu, tiến độ BR-10, dashboard Admin, trắc nghiệm ngẫu nhiên + chấm từng câu; thêm mục 10 "Hiện trạng triển khai"). 2.1.1: nút Xóa báo trước kết quả. (Sau 2.1.4: chủ đề / bài học đã xóa mềm ẩn cả với học sinh; chỉ người tạo hoặc Admin được xóa.) 2.1.0: chuyển tầng dữ liệu sang JPA; bổ sung Bean Validation, đối chiếu rubric |
+| Phiên bản | 2.2.0 (nhập câu hỏi từ tệp PDF / Word / ảnh với tệp đáp án tùy chọn — UC-TEA-04b, `POST /api/teacher/extract-question`; học sinh nộp tự luận bằng ảnh / PDF / Word — UC-OCR-01; hiển thị xuống dòng cho văn bản thuần). 2.1.4 (khớp FRS với mã nguồn sau đợt rà soát backend: upload (không kiểm MIME), quy tắc `/uploads/**`, mã lỗi AI 6.1, UC-STU-04, UC-ADM-08, tên lớp / DTO, 1.7 ánh xạ tên cột và kiểu dữ liệu, bổ sung mục 10; dữ liệu mẫu phong phú nằm trong `02_data.sql`). 2.1.3 (rà soát tài liệu so với mã nguồn: cập nhật 1.1, UC-ADM-04/08, UC-TEA-05, UC-STU-07, 4.3, 6.1 và viết lại mục 10 theo hiện trạng). 2.1.2 (đồng bộ với mã nguồn: script SQL `01_schema.sql` + `02_data.sql`, BR-03 bài học, OCR `legible`/WebP, BR-09 tách điểm, hồ sơ cá nhân, kết quả theo câu, tiến độ BR-10, dashboard Admin, trắc nghiệm ngẫu nhiên + chấm từng câu; thêm mục 10 "Hiện trạng triển khai"). 2.1.1: nút Xóa báo trước kết quả. (Sau 2.1.4: chủ đề / bài học đã xóa mềm ẩn cả với học sinh; chỉ người tạo hoặc Admin được xóa.) 2.1.0: chuyển tầng dữ liệu sang JPA; bổ sung Bean Validation, đối chiếu rubric |
 | Liên quan | `EduTutor_SRS.md` (yêu cầu), `EduTutor_Database.sql` (CSDL) |
 | Quy ước tham chiếu | Bộ tài liệu gốc đặt trong `docs/`. Trong repo hiện tại: `document/SRS.md` ≙ `EduTutor_SRS.md`, `document/FRS.md` ≙ `EduTutor_FRS.md`, `document/sql/01_schema.sql` + `02_data.sql` ≙ `EduTutor_Database.sql` (cấu trúc + dữ liệu mẫu, xem mục 1.7). Tài khoản mẫu `admin`, `teacher1`, `student1`…, mật khẩu **`EduTutor@123`** |
 
@@ -93,7 +93,7 @@ Với lỗi validation, `message` là "Dữ liệu không hợp lệ" nối thê
 | XSS | Hiển thị bằng `<c:out>`; nội dung giàu (đề, lời giải, tin nhắn AI) được `HtmlSanitizer` (JSoup safelist rất hẹp) làm sạch **ở server** trước khi trả, rồi mới để KaTeX auto-render ở client. Không dùng `innerHTML` với dữ liệu chưa làm sạch. |
 | SQL Injection | JPA/Hibernate gửi mọi giá trị dưới dạng tham số (`PreparedStatement`); cấm nối chuỗi JPQL/SQL (1.1); `LIKE` dùng tham số `"%"+kw+"%"` sau khi escape `%`, `_`, `[`. |
 | Mass assignment | Bind request vào Form/DTO riêng; Service tự gán từng trường vào Entity. Không bao giờ nhận `role`, `status`, `studentId`, `isCorrect` từ client ở nơi không cho phép. |
-| Upload | Kiểm tra: kích thước ≤ 5 MB, định dạng JPEG / PNG / WebP xác định bằng **magic bytes** (không tin MIME hay đuôi tệp do client gửi), kích thước ảnh ≤ 4096×4096; lưu tên `UUID.ext` trong `${app.upload-dir}/essays/{studentId}/`, ngoài thư mục web; không bao giờ dùng tên file người dùng gửi. |
+| Upload | Kiểm tra (`DocumentValidator`): kích thước ≤ 5 MB mỗi tệp; ảnh JPEG / PNG / WebP, **PDF** (`%PDF-`) hoặc **Word `.docx`** (ZIP có `word/document.xml`; `.doc` cũ bị từ chối), xác định bằng **magic bytes** (không tin MIME hay đuôi tệp do client gửi), kích thước ảnh ≤ 4096×4096; lưu tên `UUID.ext` trong `${app.upload-dir}/essays/{studentId}/`, ngoài thư mục web; không bao giờ dùng tên file người dùng gửi. |
 | Dữ liệu nhạy cảm | Không log khóa API, mật khẩu, nội dung bài làm; che khóa khi hiển thị. |
 | Quyền sở hữu | Mọi truy vấn dữ liệu cá nhân có điều kiện `student_id = ?` lấy từ **session**, không từ tham số client. |
 
@@ -223,7 +223,7 @@ Lớp: `com.edututor.interceptor.AuthInterceptor implements HandlerInterceptor`,
 | 2 | `/admin/**`, `/api/admin/**` | Role = `ADMIN` |
 | 3 | `/teacher/**`, `/api/teacher/**` | Role ∈ {`TEACHER`, `ADMIN`} |
 | 4 | `/student/**`, `/api/student/**`, `/api/tutor/**` | Role = `STUDENT` |
-| 5 | `/uploads/**`, `/profile/**`, `/logout`, `/` | Chỉ cần đăng nhập. Riêng `/uploads/**` (ảnh bài tự luận) `AuthInterceptor` cho mọi vai trò đã đăng nhập đi qua; `FileController` mới kiểm tra quyền chi tiết: chủ bài, `TEACHER` hoặc `ADMIN` (mục 10) |
+| 5 | `/uploads/**`, `/profile/**`, `/logout`, `/` | Chỉ cần đăng nhập. Riêng `/uploads/**` (tệp bài tự luận: ảnh / PDF / Word) `AuthInterceptor` cho mọi vai trò đã đăng nhập đi qua; `FileController` mới kiểm tra quyền chi tiết: chủ bài, `TEACHER` hoặc `ADMIN` (mục 10) |
 | 6 | Còn lại | Từ chối (404) |
 
 > Điểm khác bản cũ: quy tắc phủ cả `/api/**` — nếu chỉ kiểm tra tiền tố `/admin/` và `/teacher/` thì học sinh vẫn gọi được `/api/teacher/generate-questions`.
@@ -537,6 +537,21 @@ WHERE q.is_active = 1
 ORDER BY q.created_at DESC, q.question_id DESC
 OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
 ```
+
+#### UC-TEA-04b — Nhập câu hỏi từ tệp PDF / Word / ảnh (FR-TEA-04)
+
+| | |
+|---|---|
+| URL | `POST /api/teacher/extract-question` — `multipart/form-data`: `questionFile` (bắt buộc), `answerFile` (**tùy chọn**), `type` (`MCQ` \| `ESSAY`) |
+| Vai trò | `TEACHER`, `ADMIN`. Hạn mức: dùng chung hạn mức sinh đề của giáo viên (`RateLimiter` `QUIZ_GEN`, BR-13) |
+
+**Luồng chính** (`TeacherApiController` → `QuestionImportService`, bất đồng bộ như UC-TEA-05)
+1. Đọc tệp ngay trên luồng request; mỗi tệp ≤ 5 MB; kiểm tra bằng `DocumentValidator` (ảnh JPG/PNG/WebP, PDF, Word `.docx`; xem VAL-18). Sai → 400.
+2. Dựng prompt (`PromptBuilder.system`): chép **nguyên văn** câu đầu tiên trong tệp, công thức trong `$...$`, **giữ nguyên cách xuống dòng** từng ý; có `answerFile` thì lấy đáp án và lời giải từ đó (`answerSource = FILE`), **không có thì AI tự giải** và chọn đáp án đúng (`answerSource = AI`).
+3. Gọi Gemini ở chế độ JSON (`VISION_MODEL` nếu có ảnh / PDF), thử lại tối đa 3 lần như UC-TEA-05. Server kiểm tra lại: trắc nghiệm phải đủ 4 phương án A–D và `correctOption` ∈ A–D; sanitize + chuẩn hóa LaTeX.
+4. Trả `QuestionExtractResult` (`type`, `content`, `options`, `correctOption`, `explanation`, `answerSource`). **Chưa ghi CSDL**: giao diện điền vào form câu hỏi (kể cả preview KaTeX) để giáo viên xem lại, sửa rồi bấm lưu theo UC-TEA-04. Câu có `answerSource = AI` được báo rõ để giáo viên kiểm tra kỹ.
+
+**Giới hạn:** mỗi tệp một câu hỏi (tệp nhiều câu thì lấy câu đầu tiên); không hỗ trợ `.doc` cũ; tệp gốc **không** được lưu lại (chỉ nội dung đã trích xuất vào các cột `questions` hiện có, không đổi lược đồ CSDL).
 
 #### UC-TEA-05 — Sinh câu hỏi bằng AI (FR-TEA-05)
 
@@ -860,17 +875,17 @@ OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
 
 ---
 
-### 3.6. MODULE 6 — CHẤM TỰ LUẬN QUA ẢNH VIẾT TAY (OCR)
+### 3.6. MODULE 6 — CHẤM TỰ LUẬN QUA ẢNH / PDF / WORD (OCR)
 
-#### UC-OCR-01 — Học sinh nộp ảnh bài giải (FR-OCR-01)
+#### UC-OCR-01 — Học sinh nộp bài giải: ảnh, PDF hoặc Word (FR-OCR-01)
 
 | | |
 |---|---|
-| URL | `POST /api/student/submit-essay-ocr` — `multipart/form-data`: `questionId`, `essayImage` (và/hoặc `studentAnswer`: lời giải gõ bằng văn bản, ≤ 20.000 ký tự — phải có ít nhất một trong hai) |
+| URL | `POST /api/student/submit-essay-ocr` — `multipart/form-data`: `questionId`, `essayImage` (tệp ảnh / PDF / `.docx`; tên tham số giữ nguyên) (và/hoặc `studentAnswer`: lời giải gõ bằng văn bản, ≤ 20.000 ký tự — phải có ít nhất một trong hai) |
 
 **Luồng chính** (`StudentApiController` → `EssayGradingService`, bất đồng bộ — NFR-02)
 1. Kiểm tra `questionId` tồn tại, `ESSAY` (không lọc `is_active`, BR-05).
-2. Kiểm tra file theo VAL-18: kích thước ≤ 5 MB, *magic bytes* (JPEG `FF D8 FF`; PNG `89 50 4E 47`; WebP `RIFF….WEBP`), đọc được bằng `ImageIO` và ≤ 4096×4096. Sai → 400 (TC-OCR-01, 02). *Triển khai* (`ImageValidator`): định dạng xác định bằng magic bytes, không tin đuôi tệp hay MIME do client gửi; JPEG / PNG đọc kích thước bằng `ImageIO` (chỉ đọc header); JDK không đọc được WebP nên kích thước WebP đọc trực tiếp từ header RIFF (`VP8` / `VP8L` / `VP8X`). Ảnh không hợp lệ bị từ chối **trước khi gọi AI**.
+2. Kiểm tra file theo VAL-18 (`DocumentValidator`): kích thước ≤ 5 MB, *magic bytes* (JPEG `FF D8 FF`; PNG `89 50 4E 47`; WebP `RIFF….WEBP`; PDF `%PDF-`; Word `.docx` là ZIP chứa `word/document.xml`). Sai → 400 (TC-OCR-01, 02, 05). Với **ảnh**: đọc được bằng `ImageIO` và ≤ 4096×4096. Với **Word**: giải nén có giới hạn (chống zip bomb), lấy văn bản (`w:t`, `m:t`) và tối đa 5 ảnh nhúng trong `word/media`; Word không có chữ lẫn ảnh bị từ chối. *Triển khai ảnh* (`ImageValidator`): định dạng xác định bằng magic bytes, không tin đuôi tệp hay MIME do client gửi; JPEG / PNG đọc kích thước bằng `ImageIO` (chỉ đọc header); JDK không đọc được WebP nên kích thước WebP đọc trực tiếp từ header RIFF (`VP8` / `VP8L` / `VP8X`). Ảnh không hợp lệ bị từ chối **trước khi gọi AI**.
 3. `RateLimiter.check(studentId, GRADING)` (hạn mức học sinh, 4.5).
 4. (Khuyến nghị — **chưa triển khai**) thu nhỏ ảnh có cạnh dài > 2000 px về 2000 px, xuất JPEG chất lượng 85 để giảm thời gian và token.
 5. Chuyển sang UC-OCR-02 (chấm). **Chưa lưu file** cho tới khi AI đọc được ảnh.
@@ -879,7 +894,7 @@ OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
 
 **Luồng chính** (`EssayGradingService`)
 1. Nạp `VISION_MODEL`, `GRADING_TEMPERATURE`, `MAX_OUTPUT_TOKENS`, `GRADING_PROMPT`; thay `{{QUESTION}}` bằng `question_text`, `{{REFERENCE}}` bằng `reference_solution` (rỗng → "Không có đáp án tham khảo, hãy tự giải để đối chiếu").
-2. Dựng payload đa phương thức: `parts = [ {text: prompt}, {inlineData: {mimeType, data: base64}} ]`, timeout = `2 × AI_TIMEOUT_SECONDS`, `responseMimeType = application/json`.
+2. Dựng payload đa phương thức (`DocumentParts`): `parts = [ {text: prompt}, … ]` với ảnh / PDF là `{inlineData: {mimeType, data: base64}}` (Gemini đọc trực tiếp PDF); Word gửi dưới dạng văn bản trích xuất + các ảnh nhúng. timeout = `2 × AI_TIMEOUT_SECONDS`, `responseMimeType = application/json`.
 3. Phản hồi JSON (`EssayGradingResult`):
 ```json
 {
@@ -893,7 +908,7 @@ OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
 ```
 4. Hậu xử lý: `score` ép về `[0,10]` và **làm tròn tới 0.25** (`ScoreUtil.roundQuarter(8.8) = 8.75`); sanitize mọi chuỗi.
 5. `legible = false` → trả **422** "Không đọc được bài làm, vui lòng chụp lại rõ nét hơn"; **không lưu** gì (TC-OCR-03).
-6. `legible = true` (AI bỏ trống trường này cũng coi là `true`) → lưu ảnh: `FileStorageService.storeEssay()` → `${app.upload-dir}/essays/{studentId}/{uuid}.{jpg|png|webp}` (đuôi theo định dạng thật); rồi `INSERT`; nếu `INSERT` lỗi thì xóa file vừa lưu:
+6. `legible = true` (AI bỏ trống trường này cũng coi là `true`) → lưu ảnh: `FileStorageService.storeEssay()` → `${app.upload-dir}/essays/{studentId}/{uuid}.{jpg|png|webp|pdf|docx}` (đuôi theo định dạng thật); rồi `INSERT`; nếu `INSERT` lỗi thì xóa file vừa lưu:
 ```sql
 INSERT INTO submissions (student_id, question_id, submission_type, essay_image_path, extracted_text,
                          ai_score, final_score, ai_feedback, suggested_correction, status)
@@ -908,9 +923,9 @@ VALUES (?, ?, 'ESSAY', ?, ?, ?, ?, ?, ?, 'AI_GRADED')      -- final_score = ai_s
 | URL | Chức năng |
 |---|---|
 | `GET /student/essay/result/{submissionId}` | Trang kết quả: ảnh, văn bản nhận diện (KaTeX), điểm, nhận xét, lời giải đúng, nhận xét giáo viên (nếu có) |
-| `GET /files/essays/{submissionId}` | Trả ảnh (stream) |
+| `GET /files/essays/{submissionId}` | Trả tệp bài làm (stream) |
 
-Phục vụ ảnh: tải `essay_image_path` theo `submissionId`, **kiểm tra quyền** (chủ bài, hoặc `TEACHER`/`ADMIN`) → nếu không phải 403; đặt `Content-Type` theo đuôi, `Cache-Control: private, max-age=3600`, `X-Content-Type-Options: nosniff`; chặn path traversal bằng `Path.normalize().startsWith(uploadRoot)`.
+Phục vụ ảnh: tải `essay_image_path` theo `submissionId`, **kiểm tra quyền** (chủ bài, hoặc `TEACHER`/`ADMIN`) → nếu không phải 403; đặt `Content-Type` theo đuôi (`DocumentValidator.mimeForExtension`; ảnh và PDF `inline`, Word `attachment`), `Cache-Control: private, max-age=3600`, `X-Content-Type-Options: nosniff`; chặn path traversal bằng `Path.normalize().startsWith(uploadRoot)`.
 
 #### UC-OCR-04 — Hỏi gia sư AI về lỗi sai tự luận (FR-OCR-04)
 Nút gọi `POST /api/tutor/start` với `{ "mode": "SUBMISSION", "submissionId": 77 }` (UC-TUT-01). Gia sư đi từng bước theo đúng chỗ sai mà AI đã chỉ ra.
@@ -1215,7 +1230,7 @@ Quy tắc: trang HTML → view lỗi; request `/api/**` hoặc `Accept: applicat
 | FR-TEA-01 | UC-TEA-01 | `/teacher/topics` | topics |
 | FR-TEA-02 | UC-TEA-02 | `/teacher/lessons` | lessons |
 | FR-TEA-03 | UC-TEA-03 | `/teacher/lessons/{id}/materials`, `/teacher/materials/{id}` | lesson_materials |
-| FR-TEA-04 | UC-TEA-04 | `/teacher/questions` | questions, question_options |
+| FR-TEA-04 | UC-TEA-04, UC-TEA-04b | `/teacher/questions`, `POST /api/teacher/extract-question` | questions, question_options |
 | FR-TEA-05 | UC-TEA-05 | `POST /api/teacher/generate-questions` | ai_configs, lessons, topics |
 | FR-TEA-06 | UC-TEA-06 | `POST /api/teacher/questions/batch-save` | questions, question_options |
 | FR-TEA-07 | UC-TEA-07 | `/teacher/submissions/essay` | submissions |
