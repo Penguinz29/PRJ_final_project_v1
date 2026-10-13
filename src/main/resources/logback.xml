@@ -6,7 +6,6 @@
         </encoder>
     </appender>
 
-    <logger name="com.edututor" level="INFO"/>
     <!-- Bật DEBUG để soi số câu SQL (kiểm tra N+1, TC-DB-03) khi phát triển -->
     <logger name="org.hibernate.SQL" level="WARN"/>
     <logger name="org.hibernate" level="WARN"/>

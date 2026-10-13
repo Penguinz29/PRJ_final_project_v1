@@ -68,15 +68,16 @@ Khóa API, model, nhiệt độ… do Admin cấu hình trên giao diện (bản
 ### 👨‍🏫 Giáo viên
 - Quản lý chủ đề → bài học → bài giảng (video, YouTube, văn bản, liên kết).
 - Ngân hàng câu hỏi trắc nghiệm (MCQ) và tự luận (ESSAY), 3 mức độ khó.
+- **Nhập câu hỏi từ tệp**: tải đề bài (PDF / Word `.docx` / ảnh) thay vì gõ tay; tệp đáp án là tùy chọn, không có thì AI tự giải và sinh đáp án + lời giải. Kết quả điền vào form để giáo viên xem lại trước khi lưu.
 - **Sinh đề bằng AI**, xem trước bằng KaTeX, lưu hàng loạt.
-- **Duyệt bài tự luận**: xem ảnh bài làm, văn bản OCR; sửa điểm (điểm AI gốc `ai_score` được giữ nguyên) và gửi nhận xét.
+- **Duyệt bài tự luận**: xem tệp bài làm (ảnh / PDF / Word), văn bản AI đọc được; sửa điểm (điểm AI gốc `ai_score` được giữ nguyên) và gửi nhận xét.
 - Theo dõi tiến độ và lịch sử làm bài của học sinh.
 
 ### 🎓 Học sinh
 - Tự đăng ký, đăng nhập; xem bài giảng.
 - Luyện trắc nghiệm ngẫu nhiên, chấm từng câu tức thì, xem lời giải; làm sai thì **gia sư AI** hướng dẫn từng bước.
 - Hỏi gia sư AI bất kỳ bài toán phổ thông nào.
-- Nộp ảnh bài giải tự luận để AI chấm.
+- Nộp bài giải tự luận bằng ảnh, PDF hoặc Word (.docx) để AI chấm.
 - Xem tiến độ, chuỗi ngày học và lịch sử làm bài.
 
 > Chủ đề và bài học đã xóa mềm bị ẩn với cả học sinh; chỉ người tạo hoặc Admin được xóa.
@@ -87,7 +88,7 @@ Khóa API, model, nhiệt độ… do Admin cấu hình trên giao diện (bản
 
 - Phân quyền theo URL (cả `/api/**`) bằng `AuthInterceptor`; mật khẩu băm **BCrypt**; đổi session ID sau đăng nhập; cookie `HttpOnly` + `SameSite=Lax`.
 - **CSRF**: mọi POST có `_csrf`; `fetch` dùng `csrfFetch()` (header `X-CSRF-TOKEN`).
-- Chống SQL injection (truy vấn tham số hóa), XSS (jsoup + `fn:escapeXml`); ảnh upload kiểm tra magic-bytes và chỉ phục vụ đúng người.
+- Chống SQL injection (truy vấn tham số hóa), XSS (jsoup + `fn:escapeXml`); tệp upload (ảnh / PDF / Word) kiểm tra magic-bytes, giải nén Word có giới hạn dung lượng, và chỉ phục vụ đúng người.
 - Không trả Entity ra view/JSON (dùng DTO); không lộ đáp án và lời giải trước khi nộp.
 - Validation 4 lớp: HTML5/JS → Bean Validation → nghiệp vụ ở Service → ràng buộc DB.
 
@@ -108,15 +109,14 @@ PRJ_final_project_v1/
 │       └── 06_insert_submissions_sgk.sql  # Lịch sử bài làm mẫu (trắc nghiệm + tự luận)
 └── src/
     ├── main/
-    │   ├── java/com/edututor/
-    │   │   ├── config/        # WebAppInitializer, RootConfig, WebConfig
-    │   │   ├── interceptor/   # AuthInterceptor, CsrfInterceptor
+    │   ├── java/
+    │   │   ├── config/        # WebAppInitializer, RootConfig, WebConfig, AuthInterceptor, CsrfInterceptor
     │   │   ├── controller/    # Trả JSP: auth, admin, teacher, student; api/ trả JSON
     │   │   ├── service/       # Nghiệp vụ + gọi AI; TutorPersistence ghi DB của gia sư
-    │   │   ├── ai/            # GeminiClient, RateLimiter
-    │   │   ├── repository/    # Spring Data JPA + spec/ (Specification)
+    │   │   ├── ai/            # GeminiClient, RateLimiter, PromptBuilder
+    │   │   ├── repository/    # Spring Data JPA + Specification
     │   │   ├── model/         # Entity JPA + enum
-    │   │   ├── dto/           # Form, View, Request/Response, ApiResponse, PageResult
+    │   │   ├── dto/           # form/ (Form), view/ (View, PageResult), api/ (Request/Response/Result)
     │   │   ├── exception/     # GlobalExceptionHandler + exception nghiệp vụ
     │   │   └── util/          # HtmlSanitizer, LatexNormalizer, ScoreUtil, YoutubeUtil…
     │   ├── resources/         # application.properties, messages.properties, logback.xml

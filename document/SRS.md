@@ -25,7 +25,7 @@ EduTutor Math 12 là website gia sư hỗ trợ học **Toán lớp 12** (Chươ
 - Quản lý người dùng, chủ đề, bài học và **bài giảng** (video, YouTube, văn bản, liên kết). Hai cấp **Chủ đề → Bài học** đóng vai trò "chuyên đề / môn học" của Toán 12; giao diện hiển thị nhãn **"Chuyên đề / Môn học"**.
 - Ngân hàng câu hỏi **trắc nghiệm và tự luận**; giáo viên có thể nhờ AI sinh đề.
 - Luyện tập trắc nghiệm, nhận phản hồi tức thì; khi làm sai, học sinh được **gia sư AI hướng dẫn từng bước**.
-- Luyện tập tự luận: học sinh **chụp/tải ảnh bài giải viết tay**, AI nhận diện, chấm và nhận xét; giáo viên duyệt lại điểm.
+- Luyện tập tự luận: học sinh **chụp/tải bài giải (ảnh viết tay, PDF hoặc Word .docx)**, AI nhận diện, chấm và nhận xét; giáo viên duyệt lại điểm.
 - Admin **cấu hình AI** (khóa API, model, tham số, prompt) từ giao diện, không cần sửa code.
 
 **Phạm vi nội dung:** Toán 12 với 4 chuyên đề mẫu (Đạo hàm – khảo sát hàm số; Nguyên hàm – tích phân; Oxyz; Xác suất có điều kiện). Thiết kế CSDL (`topics → lessons`) không gắn cứng với môn Toán 12, nên có thể mở rộng sang môn/lớp khác (Lý, Hóa, Sinh, Địa, Sử; lớp 6–12) bằng cách thêm bảng `subjects` và cột `grade` mà không đổi kiến trúc. Gia sư AI **không giới hạn trong 4 chuyên đề**: học sinh có thể hỏi bất kỳ bài toán phổ thông nào (xem FR-TUT-01).
@@ -162,10 +162,10 @@ Mô hình **MVC2**: Controller nhận request → Service xử lý nghiệp vụ
 | FR-TEA-01 | CRUD chủ đề (topics); không xóa chủ đề còn bài học đang hoạt động (BR-05) | M |
 | FR-TEA-02 | CRUD bài học (lessons); xóa bài học thì bài tập (câu hỏi) của bài cũng mất theo (BR-05) | M |
 | FR-TEA-03 | CRUD **bài giảng** của bài học: `VIDEO` (URL), `YOUTUBE` (URL), `LINK` (website), `TEXT` (nội dung có LaTeX) | M |
-| FR-TEA-04 | CRUD câu hỏi trắc nghiệm (4 phương án, 1 đúng) và tự luận (đáp án/barem cho AI); danh sách có lọc + phân trang | M |
+| FR-TEA-04 | CRUD câu hỏi trắc nghiệm (4 phương án, 1 đúng) và tự luận (đáp án/barem cho AI); danh sách có lọc + phân trang. **Nhập từ tệp:** giáo viên tải tệp đề bài (PDF / Word `.docx` / ảnh JPG, PNG, WebP, ≤ 5 MB) thay vì nhập tay; tệp đáp án là **tùy chọn** — không có thì AI tự giải và sinh đáp án + lời giải. Kết quả điền vào form để giáo viên xem lại, chỉnh sửa rồi mới lưu | M |
 | FR-TEA-05 | Sinh câu hỏi trắc nghiệm bằng AI theo chủ đề, bài, độ khó, số lượng; xem trước và chỉnh sửa | M |
 | FR-TEA-06 | Lưu hàng loạt câu hỏi AI đã duyệt (`is_ai_generated = 1`) | M |
-| FR-TEA-07 | Danh sách bài tự luận cần duyệt: xem ảnh, văn bản AI nhận diện, điểm AI, nhận xét; **sửa điểm** và thêm nhận xét giáo viên | M |
+| FR-TEA-07 | Danh sách bài tự luận cần duyệt: xem tệp bài làm (ảnh / PDF / Word), văn bản AI nhận diện, điểm AI, nhận xét; **sửa điểm** và thêm nhận xét giáo viên | M |
 | FR-TEA-08 | Xem kết quả làm bài của học sinh theo bài học/câu hỏi: với trắc nghiệm hiển thị song song **tỉ lệ đúng** (`correct_pct`) và **điểm trung bình thang 10** (`avg_score = correct_pct / 10`) | S |
 | FR-TEA-09 | Dashboard giáo viên: số bài chờ duyệt, câu hỏi gần đây | S |
 
@@ -195,7 +195,7 @@ Mô hình **MVC2**: Controller nhận request → Service xử lý nghiệp vụ
 
 | Mã | Yêu cầu | Ưu tiên |
 |---|---|---|
-| FR-OCR-01 | Học sinh tải ảnh bài giải (JPG/PNG/WebP, ≤ 5 MB), hỗ trợ chụp từ camera điện thoại | M |
+| FR-OCR-01 | Học sinh tải bài giải: ảnh (JPG/PNG/WebP), PDF hoặc Word `.docx`, ≤ 5 MB; điện thoại vẫn chụp ảnh được qua hộp thoại chọn tệp | M |
 | FR-OCR-02 | AI đọc ảnh, chép lại nội dung toán, kiểm tra từng bước, chấm thang 10 (làm tròn 0.25), chỉ vị trí sai, nêu lời giải đúng | M |
 | FR-OCR-03 | Lưu bài nộp và kết quả; học sinh xem lại ảnh + nhận xét; điểm AI chỉ là đề xuất cho tới khi giáo viên duyệt | M |
 | FR-OCR-04 | Nút **"Hỏi gia sư AI về lỗi sai"** mở phiên tutor từ bài tự luận vừa chấm | M |
@@ -257,7 +257,7 @@ flowchart TD
     Exp --> AskAI{Hỏi gia sư AI?}
     AskAI -->|Có| Tutor
     AskAI -->|Không| Next
-    Mode -->|Tự luận| Up[Tải ảnh bài giải]
+    Mode -->|Tự luận| Up[Tải ảnh / PDF / Word bài giải]
     Up --> Grade[AI đọc ảnh, chấm, nhận xét]
     Grade --> Wrong{Có lỗi sai?}
     Wrong -->|Có| AskAI2{Hỏi gia sư AI?}
@@ -510,7 +510,7 @@ Ghi chú thiết kế:
 - Script đầy đủ (DDL, chỉ mục, dữ liệu mẫu) trong `EduTutor_Database.sql` — trong repo là **2 file**: `document/sql/01_schema.sql` (tạo CSDL, 10 bảng, mọi ràng buộc PK/FK/UNIQUE/CHECK/DEFAULT và chỉ mục; **xóa CSDL cũ cùng tên**) và `document/sql/02_data.sql` (dữ liệu mẫu). CSDL cũ (tạo theo cấu trúc trước đây) được tạo lại bằng 2 file này (chi tiết FRS 1.7). Mật khẩu mẫu của mọi tài khoản seed là **`EduTutor@123`** (đạt VAL-02), được lưu dạng BCrypt.
 
 ### 6.3. Lưu trữ file
-Ảnh bài tự luận lưu ngoài thư mục web, tại `${app.upload-dir}/essays/{studentId}/{uuid}.{ext}`; CSDL chỉ lưu đường dẫn tương đối. Ảnh chỉ được phục vụ qua controller có kiểm tra quyền (chủ bài, giáo viên, admin).
+Tệp bài tự luận (ảnh / PDF / Word) lưu ngoài thư mục web, tại `${app.upload-dir}/essays/{studentId}/{uuid}.{ext}`; CSDL chỉ lưu đường dẫn tương đối. Tệp chỉ được phục vụ qua controller có kiểm tra quyền (chủ bài, giáo viên, admin).
 
 ---
 
@@ -522,7 +522,7 @@ Ghi chú thiết kế:
 | NFR-02 | Hiệu năng AI | Gọi AI chạy bất đồng bộ phía client (Fetch + spinner); phía server dùng `CompletableFuture`/`DeferredResult` để không giữ luồng Tomcat; timeout 30 s (ảnh 60 s) | Demo với mạng chậm |
 | NFR-03 | Bảo mật | 100% truy vấn tham số hóa (JPA/Hibernate dùng `PreparedStatement`, cấm nối chuỗi JPQL/SQL); không bind request thẳng vào Entity; mật khẩu băm **BCrypt**; `<c:out>`/escape và JSoup sanitize nội dung hiển thị; CSRF token cho mọi form/POST; cookie session `HttpOnly`, `SameSite=Lax`; đổi session ID sau đăng nhập | Review code + thử tấn công cơ bản |
 | NFR-04 | Phân quyền | Mọi URL (kể cả `/api/**`) kiểm tra vai trò ở server; không tin dữ liệu ẩn từ client; học sinh chỉ truy cập dữ liệu của mình | Test case TC-SEC |
-| NFR-05 | Bảo mật dữ liệu AI | Khóa API chỉ hiển thị dạng che (`AIza****abcd`), không ghi vào log; file upload chỉ chấp nhận định dạng xác định bằng *magic bytes* (không tin phần mở rộng hay MIME do client gửi), kiểm tra kích thước và kích thước ảnh, đổi tên ngẫu nhiên | Review |
+| NFR-05 | Bảo mật dữ liệu AI | Khóa API chỉ hiển thị dạng che (`AIza****abcd`), không ghi vào log; file upload chỉ chấp nhận định dạng xác định bằng *magic bytes* (không tin phần mở rộng hay MIME do client gửi), kiểm tra kích thước (và kích thước ảnh), Word `.docx` giải nén có giới hạn dung lượng (chống zip bomb), đổi tên ngẫu nhiên | Review |
 | NFR-06 | Kiểm soát chi phí | Giới hạn gọi AI theo `(userId, vai trò/hành động)`: học sinh `AI_RATE_LIMIT_PER_HOUR` (mặc định 60/giờ, gia sư + chấm ảnh); giáo viên `AI_RATE_LIMIT_TEACHER_PER_HOUR` (mặc định 300/giờ, sinh đề); Admin được miễn cho thao tác Test kết nối. Vượt hạn trả HTTP 429 | TC-AI-08 |
 | NFR-07 | Độ tin cậy | `@ControllerAdvice` xử lý lỗi tập trung; AI trả JSON sai cú pháp → thử lại tối đa 3 lần; lỗi HTTP 429/5xx → thử lại tối đa 2 lần với chờ lũy tiến; AI hỏng không làm sập chức năng khác | TC-AI-06, 07 |
 | NFR-08 | Toàn vẹn dữ liệu | Thao tác nhiều bước (tạo câu hỏi + 4 phương án, lưu hàng loạt) dùng `@Transactional` (`JpaTransactionManager`); không giữ transaction khi chờ AI | Test rollback |
@@ -575,7 +575,7 @@ Ghi chú thiết kế:
 | VAL-15 | `TUTOR_MIN_STEPS`/`MAX_STEPS` | Số nguyên 2–10 và MIN ≤ MAX |
 | VAL-16 | `AI_TIMEOUT_SECONDS` | 5–120 |
 | VAL-17 | Prompt | Không rỗng, ≤ 8.000 ký tự, giữ nguyên các placeholder `{{...}}` bắt buộc |
-| VAL-18 | Ảnh tự luận | JPG/PNG/WebP, ≤ 5 MB, kiểm tra magic bytes, kích thước tối đa 4096×4096 px |
+| VAL-18 | Tệp tự luận (học sinh) và tệp đề / đáp án (giáo viên) | Ảnh JPG/PNG/WebP (tối đa 4096×4096 px), PDF hoặc Word `.docx`; ≤ 5 MB mỗi tệp; kiểm tra magic bytes; không hỗ trợ `.doc` cũ |
 | VAL-19 | `studentInput` (tutor) | 1–2.000 ký tự |
 | VAL-20 | `final_score` | 0–10, bước 0.25 |
 | VAL-21 | `teacher_comment` | ≤ 1.000 ký tự |
@@ -625,6 +625,10 @@ Tài khoản demo (dữ liệu mẫu): `admin`, `teacher1`, `teacher2`, `student
 | TC-OCR-01 | Tải file `.exe` đổi tên thành `.jpg` | Từ chối (magic bytes) |
 | TC-OCR-02 | Tải ảnh 8 MB | Từ chối, báo dung lượng |
 | TC-OCR-03 | Tải ảnh không phải bài toán | `legible=false`, báo học sinh chụp lại, không lưu điểm |
+| TC-OCR-04 | Học sinh nộp bài tự luận bằng PDF hoặc Word `.docx` | AI chấm như với ảnh; giáo viên xem PDF ngay trên trang duyệt, Word có liên kết tải về |
+| TC-OCR-05 | Tải file `.doc` cũ hoặc `.xlsx` đổi tên thành `.docx` | Từ chối, báo chỉ nhận PDF / `.docx` / ảnh |
+| TC-TEA-05 | Giáo viên nhập câu hỏi từ tệp đề, **không** tải tệp đáp án | Form được điền đủ nội dung, 4 phương án, đáp án đúng và lời giải do AI sinh; báo rõ "do AI tự sinh"; chưa ghi CSDL cho tới khi bấm lưu |
+| TC-TEA-06 | Giáo viên nhập câu hỏi từ tệp đề **kèm** tệp đáp án | Đáp án và lời giải lấy từ tệp đáp án; các ý trong đề giữ nguyên cách xuống dòng |
 | TC-ADM-01 | Khóa Admin cuối cùng | Bị chặn (BR-02) |
 | TC-ADM-02 | Mở khóa tài khoản `SUSPENDED` / thao tác trên tài khoản `INACTIVE` | `SUSPENDED` → `ACTIVE`; tài khoản `INACTIVE` không mở khóa / sửa được (409) mà chỉ có nút **Khôi phục** (`INACTIVE → ACTIVE`), sau đó đăng nhập lại được và lịch sử còn nguyên |
 | TC-TEA-01 | Xóa chủ đề còn bài học | Bị chặn, thông báo rõ (nút Xóa bị khóa kèm lý do; gửi thẳng request vẫn trả 409) |

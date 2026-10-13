@@ -198,6 +198,7 @@ h6 {
   color: #fff;
   flex-shrink: 0;
   letter-spacing: 0;
+  text-transform: uppercase;
 }
 
 /* Dropdown */
@@ -1916,19 +1917,14 @@ h6 {
   background: linear-gradient(135deg, var(--primary), #818cf8);
   color: #fff;
   font-weight: 700;
-  font-size: .8rem;
+  font-size: .875rem;
+  line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  overflow: hidden;
-  /* Show only the first character via CSS */
-  text-indent: 0;
-  letter-spacing: -34px;
-  /* pushes subsequent chars out of view */
-  padding-left: 9px;
-  /* re-centers the first char */
   user-select: none;
+  text-transform: uppercase;
 }
 
 /* Question column: truncate long titles */

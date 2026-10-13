@@ -118,7 +118,7 @@ Gộp cả trắc nghiệm và tự luận, điểm thang 10.
 | QuestionId | INT | NOT NULL, FK → Questions | Câu hỏi được nộp |
 | QuestionType | VARCHAR(10) | NOT NULL, CHECK | `MCQ` / `ESSAY` (sao chép từ câu hỏi) |
 | StudentAnswer | NVARCHAR(MAX) | NULL | MCQ: chữ cái đã chọn; ESSAY: nội dung nhận diện/gõ tay |
-| EssayImagePath | VARCHAR(255) | NULL | Đường dẫn ảnh bài tự luận `/uploads/essays/{studentId}/{uuid}.{ext}` |
+| EssayImagePath | VARCHAR(255) | NULL | Đường dẫn tệp bài tự luận (ảnh / PDF / Word) `/uploads/essays/{studentId}/{uuid}.{ext}`, ext ∈ jpg, png, webp, pdf, docx |
 | IsCorrect | BIT | NULL | Kết quả đúng/sai (MCQ) |
 | AiScore | DECIMAL(4,2) | NULL, CHECK 0–10 | Điểm AI đề xuất — **không bao giờ bị ghi đè** (BR-09; Entity khai báo `updatable = false`) |
 | FinalScore | DECIMAL(4,2) | NULL, CHECK 0–10 | Điểm chính thức (MCQ: 10 hoặc 0; ESSAY: điểm giáo viên duyệt) |

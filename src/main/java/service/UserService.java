@@ -1,0 +1,191 @@
+package service;
+
+import dto.view.PageResult;
+import dto.form.PasswordChangeForm;
+import dto.form.ProfileForm;
+import dto.form.RegisterForm;
+import dto.view.SessionUser;
+import dto.view.UserView;
+import exception.ConflictException;
+import exception.NotFoundException;
+import model.Role;
+import model.User;
+import model.UserStatus;
+import repository.UserRepository;
+import repository.UserSpecs;
+import util.Pager;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/** Nghiệp vụ người dùng: xác thực, đăng ký, quản trị tài khoản. */
+@Service
+public class UserService {
+
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+
+    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
+    }
+
+    /**
+     * UC-AUTH-01: xác thực đăng nhập. Mật khẩu chỉ lưu bằng BCrypt (FRS 1.4); mã băm không phải BCrypt
+     * (ví dụ SHA-256 không salt của bản cũ) bị từ chối.
+     *
+     * @return người dùng để lưu vào session (không chứa mã băm), hoặc null nếu sai thông tin / tài khoản bị khóa
+     */
+    @Transactional(readOnly = true)
+    public SessionUser authenticate(String username, String plainPassword) {
+        if (username == null || username.isBlank() || plainPassword == null || plainPassword.isEmpty()) {
+            return null;
+        }
+        User user = userRepository.findByUsername(username.trim()).orElse(null);
+        if (user == null || !user.isActive() || user.getPasswordHash() == null) {
+            return null;
+        }
+        return passwordMatches(user, plainPassword)
+                ? new SessionUser(user.getUserId(), user.getUsername(), user.getFullName(), user.getRole().name())
+                : null;
+    }
+
+    // ---------- Hồ sơ cá nhân (UC-AUTH-04, UC-AUTH-05) ----------
+
+    /** Thông tin tài khoản của chính người dùng (không chứa mã băm mật khẩu). */
+    @Transactional(readOnly = true)
+    public UserView getProfile(int userId) {
+        return ViewMapper.toView(requireUser(userId), null);
+    }
+
+    /**
+     * UC-AUTH-04: cập nhật họ tên, email (VAL-03, 04). Username và vai trò không đổi được.
+     *
+     * @return SessionUser mới để thay vào session (họ tên hiển thị trên thanh điều hướng)
+     * @throws ConflictException email đã thuộc tài khoản khác (kèm tên trường)
+     */
+    @Transactional
+    public SessionUser updateProfile(int userId, ProfileForm form) {
+        User u = requireUser(userId);
+        if (userRepository.existsByEmailIgnoreCaseAndUserIdNot(form.getEmail(), userId)) {
+            throw new ConflictException("Email đã được sử dụng bởi tài khoản khác.", "email");
+        }
+        u.setFullName(form.getFullName());
+        u.setEmail(form.getEmail());
+        return new SessionUser(u.getUserId(), u.getUsername(), u.getFullName(), u.getRole().name());
+    }
+
+    /**
+     * UC-AUTH-05: đổi mật khẩu. Phải đúng mật khẩu cũ (BCrypt), xác nhận khớp, mật khẩu mới khác mật khẩu cũ.
+     *
+     * @throws ConflictException sai mật khẩu cũ / xác nhận không khớp / trùng mật khẩu cũ (kèm tên trường)
+     */
+    @Transactional
+    public void changePassword(int userId, PasswordChangeForm form) {
+        User u = requireUser(userId);
+        if (!passwordMatches(u, form.getCurrentPassword())) {
+            throw new ConflictException("Mật khẩu hiện tại không đúng.", "currentPassword");
+        }
+        if (!form.getNewPassword().equals(form.getConfirmPassword())) {
+            throw new ConflictException("Mật khẩu xác nhận không khớp.", "confirmPassword");
+        }
+        if (form.getNewPassword().equals(form.getCurrentPassword())) {
+            throw new ConflictException("Mật khẩu mới phải khác mật khẩu hiện tại.", "newPassword");
+        }
+        u.setPasswordHash(passwordEncoder.encode(form.getNewPassword()));
+    }
+
+    private User requireUser(int userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException("Tài khoản không tồn tại."));
+    }
+
+    /** So khớp mật khẩu với mã băm BCrypt đã lưu; mã băm định dạng khác luôn bị từ chối. */
+    private boolean passwordMatches(User user, String plain) {
+        String stored = user.getPasswordHash();
+        if (stored == null || plain == null || !isBcrypt(stored)) {
+            return false;
+        }
+        return passwordEncoder.matches(plain, stored);
+    }
+
+    private static boolean isBcrypt(String hash) {
+        return hash.startsWith("$2a$") || hash.startsWith("$2b$") || hash.startsWith("$2y$");
+    }
+
+    /**
+     * UC-AUTH-02: đăng ký tài khoản học sinh. Vai trò luôn là STUDENT, trạng thái ACTIVE (bỏ qua mọi giá trị
+     * từ client). Dữ liệu cú pháp đã được Bean Validation kiểm tra ở controller.
+     *
+     * @throws ConflictException trùng username / email (kèm tên trường để hiển thị tại ô nhập)
+     */
+    @Transactional
+    public void register(RegisterForm form) {
+        if (!form.getPassword().equals(form.getConfirmPassword())) {
+            throw new ConflictException("Mật khẩu xác nhận không khớp.", "confirmPassword");
+        }
+        if (userRepository.existsByUsernameIgnoreCase(form.getUsername())) {
+            throw new ConflictException("Tên đăng nhập đã được sử dụng. Vui lòng chọn tên khác.", "username");
+        }
+        if (userRepository.existsByEmailIgnoreCase(form.getEmail())) {
+            throw new ConflictException("Email đã được đăng ký. Vui lòng sử dụng email khác.", "email");
+        }
+        User u = new User();
+        u.setUsername(form.getUsername());
+        u.setPasswordHash(passwordEncoder.encode(form.getPassword()));
+        u.setFullName(form.getFullName());
+        u.setEmail(form.getEmail());
+        u.setRole(Role.STUDENT);
+        u.setStatus(UserStatus.ACTIVE);
+        try {
+            userRepository.saveAndFlush(u);
+        } catch (DataIntegrityViolationException e) {
+            // Ràng buộc UNIQUE của CSDL (lớp kiểm tra thứ 4): hai request đăng ký cùng lúc
+            throw new ConflictException("Tên đăng nhập hoặc email đã được sử dụng.", "username");
+        }
+    }
+
+    /** Danh sách theo vai trò có tìm kiếm theo họ tên, username, email (rỗng = không lọc). */
+    @Transactional(readOnly = true)
+    public PageResult<UserView> searchUsersByRole(String role, String keyword, int page, int size) {
+        Page<User> result = userRepository.findAll(
+                UserSpecs.search(keyword, Role.valueOf(role), null),
+                Pager.pageRequest(page, size, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("userId"))));
+        Map<Integer, String> teacherNames = teacherNames(result.getContent());
+        return PageResult.of(result, u -> ViewMapper.toView(u, teacherNames.get(u.getTeacherId())));
+    }
+
+    /** Vài người dùng mới nhất theo vai trò (dùng cho dashboard). */
+    @Transactional(readOnly = true)
+    public List<UserView> getRecentUsers(String role, int limit) {
+        Page<User> result = userRepository.findByRole(Role.valueOf(role), PageRequest.of(0, limit,
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("userId"))));
+        return result.getContent().stream().map(u -> ViewMapper.toView(u, null)).toList();
+    }
+
+    /** Tên giáo viên phụ trách của một trang học sinh, nạp bằng MỘT truy vấn IN. */
+    private Map<Integer, String> teacherNames(List<User> users) {
+        Set<Integer> ids = new HashSet<>();
+        for (User u : users) {
+            if (u.getTeacherId() != null) {
+                ids.add(u.getTeacherId());
+            }
+        }
+        Map<Integer, String> names = new HashMap<>();
+        if (!ids.isEmpty()) {
+            for (User t : userRepository.findAllById(ids)) {
+                names.put(t.getUserId(), t.getFullName());
+            }
+        }
+        return names;
+    }
+}

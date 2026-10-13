@@ -27,8 +27,10 @@
                                                         <c:choose>
                                                             <c:when
                                                                 test="${not empty sessionScope.LOGGED_IN_USER.fullName}">
+                                                                <c:set var="uParts" value="${fn:split(fn:trim(sessionScope.LOGGED_IN_USER.fullName), ' ')}" />
+                                                                <c:set var="lastUPartIdx" value="${fn:length(uParts) - 1}" />
                                                                 <c:out
-                                                                    value="${fn:substring(sessionScope.LOGGED_IN_USER.fullName, 0, 1)}" />
+                                                                    value="${fn:substring(uParts[lastUPartIdx], 0, 1)}" />
                                                             </c:when>
                                                             <c:otherwise>U</c:otherwise>
                                                         </c:choose>

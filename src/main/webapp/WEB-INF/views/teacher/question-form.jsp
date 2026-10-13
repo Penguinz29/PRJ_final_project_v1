@@ -39,6 +39,37 @@
                                             <input type="hidden" name="id" value="${question.questionId}">
                                         </c:if>
 
+                                        <%-- Nhập nhanh từ tệp: AI đọc đề (+ đáp án nếu có) rồi điền vào form để giáo viên xem lại --%>
+                                        <div class="card mb-3 border-primary-subtle" id="importCard">
+                                            <div class="card-header"><i class="bi bi-file-earmark-arrow-up me-2"></i>Nhập nhanh từ tệp (AI)</div>
+                                            <div class="card-body">
+                                                <p class="text-muted small mb-3">
+                                                    Tải tệp <strong>PDF, Word (.docx) hoặc ảnh</strong> chứa đề bài thay vì nhập tay. Mỗi tệp một câu hỏi, tối đa 5MB.
+                                                    Tệp đáp án là <strong>không bắt buộc</strong>: nếu bỏ trống, AI sẽ tự giải và sinh đáp án + lời giải.
+                                                    Bạn vẫn xem lại và chỉnh sửa trước khi bấm lưu.
+                                                </p>
+                                                <div class="row g-3">
+                                                    <div class="col-md-6">
+                                                        <label class="form-label fw-semibold" for="importQuestionFile">Tệp đề bài <span class="text-danger">*</span></label>
+                                                        <input type="file" class="form-control" id="importQuestionFile"
+                                                            accept="image/jpeg,image/png,image/webp,application/pdf,.pdf,.docx">
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label fw-semibold" for="importAnswerFile">Tệp đáp án <span class="text-muted fw-normal">(tùy chọn)</span></label>
+                                                        <input type="file" class="form-control" id="importAnswerFile"
+                                                            accept="image/jpeg,image/png,image/webp,application/pdf,.pdf,.docx">
+                                                    </div>
+                                                </div>
+                                                <div class="d-flex align-items-center gap-3 mt-3">
+                                                    <button type="button" class="btn btn-outline-primary" id="btnImportFile">
+                                                        <i class="bi bi-stars me-1"></i>Trích xuất bằng AI
+                                                    </button>
+                                                    <span class="spinner-border spinner-border-sm text-primary d-none" id="importSpinner"></span>
+                                                    <span class="small" id="importStatus"></span>
+                                                </div>
+                                            </div>
+                                        </div>
+
                                         <div class="card mb-3">
                                             <div class="card-header"><i class="bi bi-info-circle me-2"></i>Thông tin câu
                                                 hỏi</div>
@@ -203,7 +234,77 @@
                             </div>
                         </main>
                     </div>
+                    <script>
+                        // Nhập nhanh từ tệp: gửi tệp lên /api/teacher/extract-question rồi điền kết quả vào form
+                        document.addEventListener('DOMContentLoaded', function () {
+                            var btn = document.getElementById('btnImportFile');
+                            if (!btn) return;
+                            var qFile = document.getElementById('importQuestionFile');
+                            var aFile = document.getElementById('importAnswerFile');
+                            var spinner = document.getElementById('importSpinner');
+                            var status = document.getElementById('importStatus');
+                            var MAX = 5 * 1024 * 1024;
+
+                            function say(msg, cls) { status.textContent = msg; status.className = 'small ' + (cls || ''); }
+                            function setField(el, value) {
+                                if (!el) return;
+                                el.value = value || '';
+                                el.dispatchEvent(new Event('input', { bubbles: true })); // cập nhật preview LaTeX
+                            }
+
+                            btn.addEventListener('click', async function () {
+                                var form = document.querySelector('form.needs-validation');
+                                var type = form.querySelector('input[name=type]:checked');
+                                type = type ? type.value : 'MCQ';
+                                if (!qFile.files.length) { say('Vui lòng chọn tệp đề bài.', 'text-danger'); return; }
+                                var files = [qFile.files[0]].concat(aFile.files.length ? [aFile.files[0]] : []);
+                                for (var i = 0; i < files.length; i++) {
+                                    if (files[i].size > MAX) { say('Tệp "' + files[i].name + '" vượt quá 5MB.', 'text-danger'); return; }
+                                }
+                                var fd = new FormData();
+                                fd.append('type', type);
+                                fd.append('questionFile', qFile.files[0]);
+                                if (aFile.files.length) fd.append('answerFile', aFile.files[0]);
+
+                                btn.disabled = true;
+                                spinner.classList.remove('d-none');
+                                say('AI đang đọc tệp, vui lòng chờ (có thể mất vài chục giây)...', 'text-muted');
+                                try {
+                                    var res = await csrfFetch(document.body.dataset.ctx + '/api/teacher/extract-question', {
+                                        method: 'POST', headers: { 'Accept': 'application/json' }, body: fd
+                                    });
+                                    var data = await res.json().catch(function () {
+                                        return { success: false, message: 'Phản hồi không hợp lệ (HTTP ' + res.status + ').' };
+                                    });
+                                    if (!res.ok || !data.success) {
+                                        say(data.message || 'Không trích xuất được câu hỏi.', 'text-danger');
+                                        return;
+                                    }
+                                    var r = data.data;
+                                    setField(form.querySelector('[name=content]'), r.content);
+                                    setField(form.querySelector('[name=explanation]'), r.explanation);
+                                    if (r.type === 'MCQ') {
+                                        ['A', 'B', 'C', 'D'].forEach(function (l) {
+                                            setField(form.querySelector('[name=opt_' + l + ']'), (r.options || {})[l]);
+                                        });
+                                        var radio = form.querySelector('input[name=correctOption][value=' + r.correctOption + ']');
+                                        if (radio) radio.checked = true;
+                                    }
+                                    say(r.answerSource === 'FILE'
+                                        ? 'Đã điền form: đáp án lấy từ tệp đáp án. Hãy kiểm tra lại rồi bấm lưu.'
+                                        : 'Đã điền form: đáp án và lời giải do AI tự sinh (không có tệp đáp án). Hãy kiểm tra kỹ rồi bấm lưu.',
+                                        'text-success');
+                                } catch (err) {
+                                    say('Mất kết nối tới máy chủ hoặc quá thời gian chờ: ' + err.message, 'text-danger');
+                                } finally {
+                                    btn.disabled = false;
+                                    spinner.classList.add('d-none');
+                                }
+                            });
+                        });
+                    </script>
                     <jsp:include page="../common/footer.jsp" />
+
                 </body>
 
                 </html>

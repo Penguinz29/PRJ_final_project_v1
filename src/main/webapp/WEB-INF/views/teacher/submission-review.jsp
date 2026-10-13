@@ -71,7 +71,21 @@
                         <h6 class="fw-bold text-muted mb-1" style="font-size: .85rem;">BÀI LÀM CỦA HỌC SINH:</h6>
                         
                         <!-- Nếu có ảnh bài làm tự luận viết tay (OCR) -->
-                        <c:if test="${not empty sub.essayImagePath}">
+                        <c:set var="fileUrl" value="${sub.essayImagePath.startsWith('http') ? sub.essayImagePath : pageContext.request.contextPath.concat(sub.essayImagePath)}" />
+                        <c:if test="${not empty sub.essayImagePath and sub.essayImagePath.endsWith('.pdf')}">
+                            <div class="mb-3 p-2 border rounded bg-white">
+                                <p class="text-muted small mb-2"><i class="bi bi-file-earmark-pdf me-1"></i>Tệp PDF bài làm của học sinh:
+                                    <a href="${fileUrl}" target="_blank" rel="noopener">Mở ở tab mới</a></p>
+                                <iframe src="${fileUrl}" title="Bài làm PDF" style="width:100%;height:480px;border:1px solid #dee2e6;"></iframe>
+                            </div>
+                        </c:if>
+                        <c:if test="${not empty sub.essayImagePath and sub.essayImagePath.endsWith('.docx')}">
+                            <div class="mb-3 p-2 border rounded bg-white">
+                                <i class="bi bi-file-earmark-word me-1"></i>Tệp Word bài làm của học sinh:
+                                <a href="${fileUrl}">Tải về</a>
+                            </div>
+                        </c:if>
+                        <c:if test="${not empty sub.essayImagePath and not sub.essayImagePath.endsWith('.pdf') and not sub.essayImagePath.endsWith('.docx')}">
                             <div class="mb-3 text-center p-2 border rounded bg-white">
                                 <p class="text-muted small mb-2"><i class="bi bi-camera me-1"></i>Ảnh chụp bài làm viết tay của học sinh:</p>
                                 <img src="${sub.essayImagePath.startsWith('http') ? sub.essayImagePath : pageContext.request.contextPath.concat(sub.essayImagePath)}"
@@ -90,7 +104,7 @@
                         <div class="p-3 border rounded bg-white">
                             <p class="text-muted small mb-1 fw-bold">
                                 <i class="bi bi-file-earmark-text me-1"></i>
-                                ${not empty sub.essayImagePath ? 'Nội dung nhận dạng OCR từ nét chữ viết tay:' : 'Văn bản lời giải của học sinh:'}
+                                ${not empty sub.essayImagePath ? 'Nội dung AI đọc được từ tệp bài làm:' : 'Văn bản lời giải của học sinh:'}
                             </p>
                             <%-- Vùng pre-wrap giữ nguyên khoảng trắng: nội dung phải nằm sát thẻ, không xuống dòng/thụt lề trong mã JSP --%>
                             <div class="latex-content" style="white-space: pre-wrap; font-size: .92rem;"><c:choose><c:when test="${not empty sub.studentAnswer}"><c:out value="${sub.studentAnswer}" /></c:when><c:otherwise><span class="text-muted italic">Học sinh chưa nhập văn bản lời giải.</span></c:otherwise></c:choose></div>

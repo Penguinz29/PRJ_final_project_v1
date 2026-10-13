@@ -106,33 +106,35 @@
                                                         </div>
 
                                                         <div class="mb-4">
-                                                            <label class="form-label fw-semibold">Cách 2: Chụp ảnh bài
-                                                                làm (Chỉ 1 ảnh PNG/JPG, tối đa 5MB)</label>
+                                                            <label class="form-label fw-semibold">Cách 2: Tải tệp bài
+                                                                làm (ảnh PNG/JPG/WebP, PDF hoặc Word .docx, tối đa 5MB)</label>
                                                             <div class="dropzone" id="essayDropzone">
                                                                 <i
                                                                     class="bi bi-cloud-arrow-up display-4 text-muted mb-2"></i>
-                                                                <p class="mb-1 fw-bold fs-5 text-muted">Kéo thả ảnh vào
+                                                                <p class="mb-1 fw-bold fs-5 text-muted">Kéo thả tệp vào
                                                                     đây</p>
                                                                 <p class="text-muted small">hoặc click để chọn file</p>
-                                                                <%-- VAL-18: JPG / PNG / WebP ≤ 5MB, ≤ 4096×4096; capture mở camera sau trên điện thoại --%>
+                                                                <%-- VAL-18: ảnh JPG / PNG / WebP (≤ 4096×4096), PDF hoặc Word .docx, ≤ 5MB.
+                                                                     Không dùng capture để vẫn chọn được PDF/Word; điện thoại vẫn có tùy chọn chụp ảnh --%>
                                                                 <input type="file" name="essayImage" id="essayImageFile"
-                                                                    accept="image/jpeg,image/png,image/webp" capture="environment"
+                                                                    accept="image/jpeg,image/png,image/webp,application/pdf,.pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                                                                     style="display:none;" />
                                                                 <div id="imagePreview" style="display:none;"
                                                                     class="mt-3">
                                                                     <img src="" class="img-thumbnail"
                                                                         style="max-height:200px;" alt="Preview">
+                                                                    <div id="fileNameBox" class="fw-semibold" style="display:none;"></div>
                                                                     <button type="button"
                                                                         class="btn btn-sm btn-outline-danger mt-2 d-block mx-auto"
                                                                         id="btnRemoveImg">
-                                                                        Xóa ảnh
+                                                                        Xóa tệp
                                                                     </button>
                                                                 </div>
                                                             </div>
                                                         </div>
 
                                                         <div class="alert alert-info py-2" style="font-size:0.9rem;">
-                                                            <i class="bi bi-info-circle me-1"></i> Gemini AI sẽ nhận diện chữ viết tay và
+                                                            <i class="bi bi-info-circle me-1"></i> Gemini AI sẽ đọc bài làm (chữ viết tay, PDF hoặc Word) và
                                                             chấm điểm ngay (thang 10); giáo viên có thể điều chỉnh sau.
                                                         </div>
 
@@ -280,22 +282,34 @@
                                 if (fileInput.files && fileInput.files[0]) {
                                     const file = fileInput.files[0];
                                     if (file.size > 5 * 1024 * 1024) {
-                                        alert('Kích thước ảnh vượt quá 5MB.');
+                                        alert('Kích thước tệp vượt quá 5MB.');
                                         fileInput.value = '';
                                         return;
                                     }
-                                    const reader = new FileReader();
-                                    reader.onload = (e) => {
-                                        img.src = e.target.result;
+                                    const nameBox = document.getElementById('fileNameBox');
+                                    if (file.type.startsWith('image/')) {
+                                        nameBox.style.display = 'none';
+                                        img.style.display = '';
+                                        const reader = new FileReader();
+                                        reader.onload = (e) => {
+                                            img.src = e.target.result;
+                                            previewWrap.style.display = 'block';
+                                        };
+                                        reader.readAsDataURL(file);
+                                    } else {
+                                        // PDF / Word: không xem trước được, hiện tên tệp
+                                        img.style.display = 'none';
+                                        nameBox.textContent = '📄 ' + file.name;
+                                        nameBox.style.display = '';
                                         previewWrap.style.display = 'block';
-                                    };
-                                    reader.readAsDataURL(file);
+                                    }
                                 }
                             }
 
                             // Thu nhỏ ảnh (cạnh dài <= 1600px, JPEG) trước khi gửi để upload + AI xử lý nhanh hơn
                             async function shrinkImage(file) {
                                 const MAX = 1600;
+                                if (!file.type.startsWith('image/')) return file; // PDF / Word gửi nguyên bản
                                 try {
                                     const bmp = await createImageBitmap(file);
                                     const ratio = Math.min(1, MAX / Math.max(bmp.width, bmp.height));
@@ -320,7 +334,7 @@
                                 const text = form.querySelector('textarea').value.trim();
                                 const hasFile = fileInput.files.length > 0;
                                 if (text === '' && !hasFile) {
-                                    alert('Vui lòng nhập lời giải hoặc tải ảnh lên.');
+                                    alert('Vui lòng nhập lời giải hoặc tải tệp lên.');
                                     return;
                                 }
                                 const btn = document.getElementById('btnSubmitEssay');

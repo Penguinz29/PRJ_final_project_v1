@@ -80,12 +80,12 @@
                                                     </c:when>
                                                     <c:otherwise>
                                                         <c:forEach var="sub" items="${history}" varStatus="vs">
-                                                            <tr>
+                                                            <tr style="cursor:pointer;" onclick="location.href='${pageContext.request.contextPath}/student/history/${sub.submissionId}'">
                                                                 <td class="text-muted">${(page-1)*10 + vs.count}</td>
                                                                 <td>
                                                                     <div
                                                                         style="max-width:300px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;">
-                                                                        <c:out value="${sub.questionTitle}" />
+                                                                        <a href="${pageContext.request.contextPath}/student/history/${sub.submissionId}" class="text-decoration-none text-body"><c:out value="${sub.questionTitle}" /></a>
                                                                         <c:if test="${sub.questionAiGenerated}"><i
                                                                                 class="bi bi-stars text-ai ms-1"
                                                                                 title="Câu hỏi do AI sinh"></i></c:if>
