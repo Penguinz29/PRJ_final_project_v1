@@ -100,6 +100,10 @@
                                         class="sidebar-link ${param.active == 'student-topics' ? 'active' : ''}">
                                         <i class="bi bi-book"></i> Bài giảng
                                     </a>
+                                    <a href="${pageContext.request.contextPath}/student/quiz"
+                                        class="sidebar-link ${param.active == 'student-quiz' ? 'active' : ''}">
+                                        <i class="bi bi-ui-checks"></i> Làm trắc nghiệm
+                                    </a>
                                     <a href="${pageContext.request.contextPath}/student/essay"
                                         class="sidebar-link ${param.active == 'student-essay' ? 'active' : ''}">
                                         <i class="bi bi-camera"></i> Làm tự luận

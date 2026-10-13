@@ -3,7 +3,9 @@ package com.edututor.controller.student;
 import com.edututor.dto.LessonView;
 import com.edututor.dto.QuizQuestionView;
 import com.edututor.service.LessonService;
+import com.edututor.service.QuestionService;
 import com.edututor.service.SubmissionService;
+import com.edututor.service.TopicService;
 import java.util.List;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -19,10 +21,15 @@ public class StudentQuizController {
 
     private final LessonService lessonService;
     private final SubmissionService submissionService;
+    private final QuestionService questionService;
+    private final TopicService topicService;
 
-    public StudentQuizController(LessonService lessonService, SubmissionService submissionService) {
+    public StudentQuizController(LessonService lessonService, SubmissionService submissionService,
+                                 QuestionService questionService, TopicService topicService) {
         this.lessonService = lessonService;
         this.submissionService = submissionService;
+        this.questionService = questionService;
+        this.topicService = topicService;
     }
 
     /**
@@ -35,6 +42,11 @@ public class StudentQuizController {
                        @RequestParam(defaultValue = "") String difficulty,
                        @RequestParam(defaultValue = "" + SubmissionService.QUIZ_DEFAULT) int limit,
                        Model model) {
+        if (lessonId <= 0) {
+            model.addAttribute("topics", topicService.getAllTopicsWithLessons());
+            model.addAttribute("mcqCounts", questionService.getMcqCountsByLesson());
+            return "student/quiz-topics";
+        }
         LessonView lesson = lessonService.getLessonForStudent(lessonId);
         if (lesson == null) {
             return "redirect:/student/topics";

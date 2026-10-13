@@ -97,6 +97,16 @@ public class QuestionService {
                 }).toList();
     }
 
+    /** Số câu trắc nghiệm đang hoạt động của mỗi bài học (trang Làm trắc nghiệm mở từ sidebar). */
+    @Transactional(readOnly = true)
+    public java.util.Map<Integer, Integer> getMcqCountsByLesson() {
+        java.util.Map<Integer, Integer> counts = new java.util.HashMap<>();
+        for (Question q : questionRepository.findAllActiveForStudent(QuestionType.MCQ)) {
+            counts.merge(q.getLesson().getLessonId(), 1, Integer::sum);
+        }
+        return counts;
+    }
+
     /** Mọi câu tự luận của các bài học còn hiển thị (trang Làm tự luận mở từ sidebar): không kèm lời giải (BR-11). */
     @Transactional(readOnly = true)
     public List<QuestionView> getAllEssayQuestions() {
