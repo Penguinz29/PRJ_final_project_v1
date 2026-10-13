@@ -26,7 +26,7 @@ public class AdminContentController {
 
     @GetMapping("/admin/topics")
     public String topics(Model model) {
-        model.addAttribute("topics", topicService.getAllTopics());
+        model.addAttribute("topics", topicService.getAllTopicsForManage());
         return "admin/topics";
     }
 
