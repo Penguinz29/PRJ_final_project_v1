@@ -26,8 +26,8 @@
                                 class="sidebar-link ${param.active == 'admin-topics' ? 'active' : ''}">
                                 <i class="bi bi-folder2"></i> Chủ đề
                             </a>
-                            <a href="${pageContext.request.contextPath}/admin/lessons"
-                                class="sidebar-link ${param.active == 'admin-lessons' ? 'active' : ''}">
+                            <a href="${pageContext.request.contextPath}/teacher/lessons"
+                                class="sidebar-link ${param.active == 'admin-lessons' or param.active == 'teacher-lessons' ? 'active' : ''}">
                                 <i class="bi bi-journal-text"></i> Bài giảng
                             </a>
                             <a href="${pageContext.request.contextPath}/admin/questions"
