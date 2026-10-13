@@ -10,6 +10,9 @@ import com.edututor.service.MaterialService;
 import com.edututor.service.StatsService;
 import com.edututor.service.SubmissionService;
 import com.edututor.service.TopicService;
+import com.edututor.dto.MaterialView;
+import com.edututor.dto.SubmissionView;
+import jakarta.servlet.http.HttpSession;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,6 +29,7 @@ import org.springframework.web.bind.annotation.SessionAttribute;
 public class StudentController {
 
     private static final Logger log = LoggerFactory.getLogger(StudentController.class);
+    private static final String LAST_LESSON = "STUDENT_LAST_LESSON_ID";
 
     private final StatsService statsService;
     private final SubmissionService submissionService;
@@ -44,10 +48,34 @@ public class StudentController {
     }
 
     @GetMapping("/student/dashboard")
-    public String dashboard(@SessionAttribute(AuthInterceptor.SESSION_USER) SessionUser user, Model model) {
+    public String dashboard(@SessionAttribute(AuthInterceptor.SESSION_USER) SessionUser user, HttpSession session,
+                            Model model) {
         model.addAllAttributes(statsService.studentStats(user.getUserId()));
-        model.addAttribute("recentAttempts", submissionService.getRecentAttempts(user.getUserId(), 5));
+        addRecentLesson(user.getUserId(), session, model);
         return "student/dashboard";
+    }
+
+    /** Bài học gần nhất: bài vừa mở xem trong phiên này, nếu chưa có thì bài của lần làm bài gần nhất. */
+    private void addRecentLesson(int userId, HttpSession session, Model model) {
+        Integer lessonId = (Integer) session.getAttribute(LAST_LESSON);
+        if (lessonId == null) {
+            List<SubmissionView> recent = submissionService.getRecentAttempts(userId, 1);
+            if (!recent.isEmpty()) {
+                lessonId = recent.get(0).getLessonId();
+            }
+        }
+        LessonView lesson = lessonId == null ? null : lessonService.getLessonForStudent(lessonId);
+        if (lesson == null) {
+            return;
+        }
+        model.addAttribute("recentLesson", lesson);
+        try {
+            materialService.getByLesson(lessonId).stream()
+                    .filter(m -> "YOUTUBE".equals(m.getMaterialType()) || "VIDEO".equals(m.getMaterialType()))
+                    .findFirst().ifPresent(m -> model.addAttribute("recentVideo", m));
+        } catch (DataAccessException e) {
+            log.warn("Không đọc được LessonMaterials: {}", e.getMostSpecificCause().getMessage());
+        }
     }
 
     /** FR-STU-06: tiến độ bóc tách theo từng bài học của một chủ đề (lần làm gần nhất mỗi câu, BR-10). */
@@ -80,12 +108,13 @@ public class StudentController {
     }
 
     @GetMapping("/student/lesson")
-    public String lesson(@RequestParam(defaultValue = "0") int id, Model model) {
+    public String lesson(@RequestParam(defaultValue = "0") int id, HttpSession session, Model model) {
         LessonView lesson = lessonService.getLessonForStudent(id);
         if (lesson == null) {
             return "redirect:/student/topics";
         }
         model.addAttribute("lesson", lesson);
+        session.setAttribute(LAST_LESSON, id);
         // Bài giảng (video / YouTube / link / văn bản). Nếu bảng LessonMaterials chưa được tạo
         // (chưa chạy document/sql/01_schema.sql) thì vẫn hiển thị bài học bình thường.
         try {

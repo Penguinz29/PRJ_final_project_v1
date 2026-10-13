@@ -1,6 +1,6 @@
 <%-- File: WEB-INF/views/student/dashboard.jsp Controller: StudentController (GET /student/dashboard) Attributes:
     totalTopics(int), topicProgress(List<ProgressView>), overall(ProgressView),
-    essayAverage(Double), recentAttempts(List<SubmissionView>)
+    essayAverage(Double), recentLesson(LessonView), recentVideo(MaterialView)
         --%>
         <%@ page contentType="text/html;charset=UTF-8" pageEncoding="UTF-8" %>
             <%@ taglib prefix="ui" tagdir="/WEB-INF/tags" %>
@@ -185,114 +185,55 @@
                                                                     </div>
                                                                 </div>
 
-                                                                <%-- Lịch sử làm bài gần đây --%>
-                                                                    <div class="card">
-                                                                        <div class="card-header">
-                                                                            <i
-                                                                                class="bi bi-clock-history text-primary"></i>
-                                                                            Kết quả gần đây
-                                                                            <a href="${pageContext.request.contextPath}/student/history"
-                                                                                class="btn btn-sm btn-outline-primary ms-auto">Xem
-                                                                                tất cả</a>
-                                                                        </div>
-                                                                        <div class="table-responsive">
-                                                                            <table class="table table-hover mb-0">
-                                                                                <thead>
-                                                                                    <tr>
-                                                                                        <th>Câu hỏi</th>
-                                                                                        <th>Loại</th>
-                                                                                        <th>Kết quả</th>
-                                                                                    </tr>
-                                                                                </thead>
-                                                                                <tbody>
-                                                                                    <c:choose>
-                                                                                        <c:when
-                                                                                            test="${empty recentAttempts}">
-                                                                                            <tr>
-                                                                                                <td colspan="3"
-                                                                                                    class="text-center py-5">
-                                                                                                    <i
-                                                                                                        class="bi bi-inbox d-block fs-1 mb-2 opacity-25"></i>
-                                                                                                    Bạn chưa làm bài
-                                                                                                    nào.
-                                                                                                    <a
-                                                                                                        href="${pageContext.request.contextPath}/student/topics">Bắt
-                                                                                                        đầu học
-                                                                                                        ngay!</a>
-                                                                                                </td>
-                                                                                            </tr>
-                                                                                        </c:when>
-                                                                                        <c:otherwise>
-                                                                                            <c:forEach var="sub"
-                                                                                                items="${recentAttempts}">
-                                                                                                <tr>
-                                                                                                    <td
-                                                                                                        class="fw-semibold">
-                                                                                                        <c:out
-                                                                                                            value="${sub.questionTitle}" />
-                                                                                                    </td>
-                                                                                                    <td>
-                                                                                                        <c:choose>
-                                                                                                            <c:when
-                                                                                                                test="${sub.questionType == 'MCQ'}">
-                                                                                                                <span
-                                                                                                                    class="badge-ai">Trắc
-                                                                                                                    nghiệm</span>
-                                                                                                            </c:when>
-                                                                                                            <c:otherwise>
-                                                                                                                <span
-                                                                                                                    class="badge-approved">Tự
-                                                                                                                    luận</span>
-                                                                                                            </c:otherwise>
-                                                                                                        </c:choose>
-                                                                                                    </td>
-                                                                                                    <td>
-                                                                                                        <c:choose>
-                                                                                                            <c:when
-                                                                                                                test="${sub.questionType == 'MCQ'}">
-                                                                                                                <c:choose>
-                                                                                                                    <c:when
-                                                                                                                        test="${sub.correct}">
-                                                                                                                        <span
-                                                                                                                            class="badge-approved"><i
-                                                                                                                                class="bi bi-check-lg me-1"></i>Đúng</span>
-                                                                                                                    </c:when>
-                                                                                                                    <c:otherwise>
-                                                                                                                        <span
-                                                                                                                            class="badge-level-3"><i
-                                                                                                                                class="bi bi-x-lg me-1"></i>Sai</span>
-                                                                                                                    </c:otherwise>
-                                                                                                                </c:choose>
-                                                                                                            </c:when>
-                                                                                                            <c:otherwise>
-                                                                                                                <c:choose>
-                                                                                                                    <c:when
-                                                                                                                        test="${sub.reviewed}">
-                                                                                                                        <span
-                                                                                                                            class="badge-approved"><i
-                                                                                                                                class="bi bi-check2-circle me-1"></i>Đã
-                                                                                                                            chấm</span>
-                                                                                                                    </c:when>
-                                                                                                                    <c:otherwise>
-                                                                                                                        <span
-                                                                                                                            class="badge-draft"><i
-                                                                                                                                class="bi bi-hourglass-split me-1"></i>Chờ
-                                                                                                                            chấm</span>
-                                                                                                                    </c:otherwise>
-                                                                                                                </c:choose>
-                                                                                                            </c:otherwise>
-                                                                                                        </c:choose>
-                                                                                                    </td>
-                                                                                                </tr>
-                                                                                            </c:forEach>
-                                                                                        </c:otherwise>
-                                                                                    </c:choose>
-                                                                                </tbody>
-                                                                            </table>
-                                                                        </div>
-                                                                    </div>
+<%-- Bài học gần đây + video gần nhất --%>
+<div class="card">
+    <div class="card-header">
+        <i class="bi bi-journal-bookmark text-primary"></i>
+        Bài học gần đây
+        <a href="${pageContext.request.contextPath}/student/history" class="btn btn-sm btn-outline-primary ms-auto">Lịch sử làm bài</a>
+    </div>
+    <div class="card-body">
+        <c:choose>
+            <c:when test="${empty recentLesson}">
+                <div class="text-center py-4">
+                    <i class="bi bi-inbox d-block fs-1 mb-2 opacity-25"></i>
+                    Bạn chưa học bài nào.
+                    <a href="${pageContext.request.contextPath}/student/topics">Bắt đầu học ngay!</a>
+                </div>
+            </c:when>
+            <c:otherwise>
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                    <div>
+                        <div class="fw-semibold fs-5"><c:out value="${recentLesson.title}" /></div>
+                        <div class="text-muted small"><c:out value="${recentLesson.topicName}" /></div>
+                    </div>
+                    <a href="${pageContext.request.contextPath}/student/lesson?id=${recentLesson.lessonId}"
+                        class="btn btn-primary btn-sm ms-auto"><i class="bi bi-play-circle me-1"></i>Tiếp tục học</a>
+                </div>
+                <c:choose>
+                    <c:when test="${not empty recentVideo and recentVideo.materialType == 'YOUTUBE' and not empty recentVideo.youtubeEmbedUrl}">
+                        <div class="fw-semibold small mb-2"><i class="bi bi-youtube text-danger me-1"></i><c:out value="${recentVideo.title}" /></div>
+                        <div class="ratio ratio-16x9 rounded-3 overflow-hidden border">
+                            <iframe src="${recentVideo.youtubeEmbedUrl}" title="<c:out value='${recentVideo.title}'/>"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                referrerpolicy="strict-origin-when-cross-origin" loading="lazy" allowfullscreen
+                                class="w-100 h-100 border-0"></iframe>
+                        </div>
+                    </c:when>
+                    <c:when test="${not empty recentVideo and recentVideo.materialType == 'VIDEO'}">
+                        <div class="fw-semibold small mb-2"><i class="bi bi-camera-video me-1"></i><c:out value="${recentVideo.title}" /></div>
+                        <video controls preload="metadata" class="w-100 rounded-3 border" src="<c:out value='${recentVideo.url}'/>"></video>
+                    </c:when>
+                    <c:otherwise>
+                        <div class="text-muted small">Bài học này chưa có video.</div>
+                    </c:otherwise>
+                </c:choose>
+            </c:otherwise>
+        </c:choose>
+    </div>
+</div>
 
-                                                </div><%-- /col-lg-8 --%>
+</div><%-- /col-lg-8 --%>
 
                                                     <%-- ════ RIGHT COL (col-lg-4) ════ --%>
                                                         <div class="col-lg-3">
