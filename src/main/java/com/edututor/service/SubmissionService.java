@@ -166,6 +166,25 @@ public class SubmissionService {
         return PageResult.of(result, ViewMapper::toView);
     }
 
+    /** Chi tiết một lần làm bài của chính học sinh: đề, phương án + đáp án đúng (trắc nghiệm), lời giải. */
+    @Transactional(readOnly = true)
+    public SubmissionView getStudentSubmissionDetail(int studentId, int submissionId) {
+        Submission s = submissionRepository.findWithDetailsBySubmissionId(submissionId)
+                .filter(x -> x.getStudent().getUserId() == studentId)
+                .orElseThrow(() -> new NotFoundException("Không tìm thấy bài làm."));
+        SubmissionView v = ViewMapper.toView(s);
+        Question q = s.getQuestion();
+        if (q.getExplanationLatex() != null && !q.getExplanationLatex().isBlank()) {
+            v.setExplanation(HtmlSanitizer.clean(LatexNormalizer.normalize(q.getExplanationLatex())));
+        }
+        if (s.getQuestionType() == QuestionType.MCQ) {
+            for (QuestionOption o : optionRepository.findByQuestion_QuestionIdOrderByOptionLetterAsc(q.getQuestionId())) {
+                v.getOptions().add(new SubmissionView.OptionDetail(o.getOptionLetter(), o.getContent(), o.isCorrect()));
+            }
+        }
+        return v;
+    }
+
     @Transactional(readOnly = true)
     public List<SubmissionView> getRecentAttempts(int studentId, int limit) {
         return submissionRepository.findByStudent_UserId(studentId, PageRequest.of(0, limit, NEWEST_FIRST))

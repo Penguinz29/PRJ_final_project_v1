@@ -10,6 +10,7 @@ import com.edututor.service.SubmissionService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.SessionAttribute;
 
@@ -46,5 +47,13 @@ public class StudentHistoryController {
         model.addAttribute("totalRecords", result.getTotalItems());
         model.addAttribute("type", filter);
         return "student/history";
+    }
+
+    /** Chi tiết một lần làm bài: nội dung đã làm (trắc nghiệm) / bài đã nộp (tự luận) cùng kết quả, lời giải. */
+    @GetMapping("/student/history/{submissionId}")
+    public String detail(@PathVariable int submissionId,
+                         @SessionAttribute(AuthInterceptor.SESSION_USER) SessionUser user, Model model) {
+        model.addAttribute("sub", submissionService.getStudentSubmissionDetail(user.getUserId(), submissionId));
+        return "student/history-detail";
     }
 }

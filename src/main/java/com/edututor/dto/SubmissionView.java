@@ -210,4 +210,30 @@ public class SubmissionView implements Serializable {
 
     public String getSuggestedCorrection() { return suggestedCorrection; }
     public void setSuggestedCorrection(String suggestedCorrection) { this.suggestedCorrection = suggestedCorrection; }
+
+    /** Lời giải của câu hỏi (chỉ nạp ở trang chi tiết lịch sử). */
+    private String explanation;
+    /** Các phương án kèm đáp án đúng (chỉ nạp ở trang chi tiết lịch sử, câu trắc nghiệm). */
+    private java.util.List<OptionDetail> options = new java.util.ArrayList<>();
+
+    public String getExplanation() { return explanation; }
+    public void setExplanation(String explanation) { this.explanation = explanation; }
+    public java.util.List<OptionDetail> getOptions() { return options; }
+    public void setOptions(java.util.List<OptionDetail> options) { this.options = options; }
+
+    public static class OptionDetail implements Serializable {
+        private final String letter;
+        private final String content;
+        private final boolean correct;
+
+        public OptionDetail(String letter, String content, boolean correct) {
+            this.letter = letter;
+            this.content = content;
+            this.correct = correct;
+        }
+
+        public String getLetter() { return letter; }
+        public String getContent() { return content; }
+        public boolean isCorrect() { return correct; }
+    }
 }
