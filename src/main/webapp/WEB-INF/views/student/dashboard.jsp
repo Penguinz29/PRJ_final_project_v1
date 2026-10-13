@@ -54,7 +54,7 @@
                                                                     </a>
                                                                 </div>
                                                             </div>
-                                                            <img src="${pageContext.request.contextPath}/static/images/mascot.png" alt="Mascot" class="welcome-mascot-img" />
+                                                            <img src="${pageContext.request.contextPath}/static/img/mascot.png" alt="Mascot" class="welcome-mascot-img" />
                                                         </div>
 
                                                         <%-- Stat cards 2×2 --%>

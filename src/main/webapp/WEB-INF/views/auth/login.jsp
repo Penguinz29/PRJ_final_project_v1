@@ -420,7 +420,7 @@
 
                 <!-- Foreground Blurred 3D Cube -->
                 <div class="bg-blur-cube" aria-hidden="true">
-                    <img src="${pageContext.request.contextPath}/static/images/rubik-3d.png" alt="">
+                    <img src="${pageContext.request.contextPath}/static/img/rubik-3d.png" alt="">
                 </div>
 
                 <main class="auth-card">
@@ -434,7 +434,7 @@
                             <p class="aside-sub">Gợi ý từng bước, không đưa đáp án ngay.</p>
 
                             <div class="rubik-stage">
-                                <img src="${pageContext.request.contextPath}/static/images/rubik-3d.png" alt="3D Rubik"
+                                <img src="${pageContext.request.contextPath}/static/img/rubik-3d.png" alt="3D Rubik"
                                     class="rubik-3d-img">
                                 <div class="rubik-shadow"></div>
                             </div>

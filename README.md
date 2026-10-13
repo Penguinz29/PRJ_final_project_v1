@@ -109,15 +109,14 @@ PRJ_final_project_v1/
 │       └── 06_insert_submissions_sgk.sql  # Lịch sử bài làm mẫu (trắc nghiệm + tự luận)
 └── src/
     ├── main/
-    │   ├── java/com/edututor/
-    │   │   ├── config/        # WebAppInitializer, RootConfig, WebConfig
-    │   │   ├── interceptor/   # AuthInterceptor, CsrfInterceptor
+    │   ├── java/
+    │   │   ├── config/        # WebAppInitializer, RootConfig, WebConfig, AuthInterceptor, CsrfInterceptor
     │   │   ├── controller/    # Trả JSP: auth, admin, teacher, student; api/ trả JSON
     │   │   ├── service/       # Nghiệp vụ + gọi AI; TutorPersistence ghi DB của gia sư
-    │   │   ├── ai/            # GeminiClient, RateLimiter
-    │   │   ├── repository/    # Spring Data JPA + spec/ (Specification)
+    │   │   ├── ai/            # GeminiClient, RateLimiter, PromptBuilder
+    │   │   ├── repository/    # Spring Data JPA + Specification
     │   │   ├── model/         # Entity JPA + enum
-    │   │   ├── dto/           # Form, View, Request/Response, ApiResponse, PageResult
+    │   │   ├── dto/           # form/ (Form), view/ (View, PageResult), api/ (Request/Response/Result)
     │   │   ├── exception/     # GlobalExceptionHandler + exception nghiệp vụ
     │   │   └── util/          # HtmlSanitizer, LatexNormalizer, ScoreUtil, YoutubeUtil…
     │   ├── resources/         # application.properties, messages.properties, logback.xml

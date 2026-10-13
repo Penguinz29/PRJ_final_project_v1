@@ -78,7 +78,7 @@ edututor/
 ├── pom.xml
 ├── docs/                 SRS, FRS, SQL, rubric, báo cáo, ERD, kịch bản demo
 └── src/main
-    ├── java/com/edututor/   (package theo FRS mục 1.1)
+    ├── java/   (package theo FRS mục 1.1)
     │   ├── config/  interceptor/  controller/(api/)  service/  ai/  repository/(spec/)
     │   ├── model/  dto/  exception/  util/
     ├── resources/  application.properties, messages.properties (UTF-8), logback.xml
@@ -123,8 +123,8 @@ public class WebAppInitializer extends AbstractAnnotationConfigDispatcherServlet
 ### 3.2. `RootConfig` (Service, Repository, JPA, hạ tầng)
 
 - `@Configuration @EnableTransactionManagement @PropertySource("classpath:application.properties")`
-- `@EnableJpaRepositories(basePackages = "com.edututor.repository")`
-- `@ComponentScan({"com.edututor.service","com.edututor.ai","com.edututor.util"})`
+- `@EnableJpaRepositories(basePackages = "repository")`
+- `@ComponentScan({"service","ai","util"})`
 - Beans: `static PropertySourcesPlaceholderConfigurer`; `HikariDataSource` (driver `com.microsoft.sqlserver.jdbc.SQLServerDriver`, `db.url/db.username/db.password/db.pool.max-size`); **`LocalContainerEntityManagerFactoryBean`**; **`JpaTransactionManager`**; `BCryptPasswordEncoder`; `ObjectMapper` (`FAIL_ON_UNKNOWN_PROPERTIES=false`); `ThreadPoolTaskExecutor aiExecutor` (core/max/queue theo `app.ai.executor.*`, `RejectedExecutionHandler` → ném lỗi để trả 503).
 
 ```java
@@ -132,7 +132,7 @@ public class WebAppInitializer extends AbstractAnnotationConfigDispatcherServlet
 public LocalContainerEntityManagerFactoryBean entityManagerFactory(DataSource ds, Environment env) {
     LocalContainerEntityManagerFactoryBean emf = new LocalContainerEntityManagerFactoryBean();
     emf.setDataSource(ds);
-    emf.setPackagesToScan("com.edututor.model");              // không cần persistence.xml
+    emf.setPackagesToScan("model");              // không cần persistence.xml
     emf.setJpaVendorAdapter(new HibernateJpaVendorAdapter());
     Properties p = new Properties();
     for (String k : new String[]{ "hibernate.hbm2ddl.auto", "hibernate.show_sql", "hibernate.format_sql",
@@ -172,7 +172,7 @@ app.ai.executor.queue=50
 ### 3.3. `WebConfig` (MVC)
 
 - `@Configuration @EnableWebMvc implements WebMvcConfigurer`
-- `@ComponentScan({"com.edututor.controller","com.edututor.exception","com.edututor.interceptor"})`
+- `@ComponentScan({"controller","exception"})` + `@Import({AuthInterceptor.class, CsrfInterceptor.class})`
 - `configureViewResolvers`: `registry.jsp("/WEB-INF/views/", ".jsp")`
 - `addResourceHandlers`: `/static/**` → `/static/`
 - `addInterceptors`: **thứ tự** `AuthInterceptor` rồi `CsrfInterceptor`, áp dụng `/**`, loại trừ `/static/**`

@@ -213,7 +213,7 @@ Các khối SQL trong FRS là đặc tả logic theo tên logic ở trên; truy 
 
 ## 2. PHÂN QUYỀN — `AuthInterceptor` (FR-AUTH-06)
 
-Lớp: `com.edututor.interceptor.AuthInterceptor implements HandlerInterceptor`, đăng ký cho `/**`, thứ tự **trước** `CsrfInterceptor`.
+Lớp: `config.AuthInterceptor implements HandlerInterceptor`, đăng ký cho `/**`, thứ tự **trước** `CsrfInterceptor`.
 
 ### 2.1. Bảng quy tắc (kiểm tra từ trên xuống, khớp quy tắc đầu tiên thì dừng)
 
