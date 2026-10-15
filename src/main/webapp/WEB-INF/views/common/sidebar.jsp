@@ -35,6 +35,12 @@
                                 <i class="bi bi-patch-question"></i> Câu hỏi
                             </a>
 
+                            <div class="sidebar-group-label">Học tập</div>
+                            <a href="${pageContext.request.contextPath}/admin/results"
+                                class="sidebar-link ${param.active == 'admin-results' ? 'active' : ''}">
+                                <i class="bi bi-bar-chart-line"></i> Kết quả học sinh
+                            </a>
+
                             <div class="sidebar-group-label">Hệ thống</div>
                             <a href="${pageContext.request.contextPath}/admin/ai-config"
                                 class="sidebar-link ${param.active == 'admin-ai-config' ? 'active' : ''}">

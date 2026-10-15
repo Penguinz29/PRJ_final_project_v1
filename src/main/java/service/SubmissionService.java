@@ -165,6 +165,13 @@ public class SubmissionService {
         return PageResult.of(result, ViewMapper::toView);
     }
 
+    /** Bài làm của mọi học sinh thuộc một bài giảng, mới nhất trước (Admin xem kết quả). */
+    @Transactional(readOnly = true)
+    public PageResult<SubmissionView> getLessonSubmissions(int lessonId, int page, int size) {
+        return PageResult.of(submissionRepository.findByLesson_LessonId(lessonId,
+                Pager.pageRequest(page, size, NEWEST_FIRST)), ViewMapper::toView);
+    }
+
     /** Chi tiết một lần làm bài của chính học sinh: đề, phương án + đáp án đúng (trắc nghiệm), lời giải. */
     @Transactional(readOnly = true)
     public SubmissionView getStudentSubmissionDetail(int studentId, int submissionId) {

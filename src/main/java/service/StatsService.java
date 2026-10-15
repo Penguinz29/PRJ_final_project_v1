@@ -13,6 +13,7 @@ import repository.LessonRepository;
 import repository.ProgressRow;
 import repository.QuestionRepository;
 import repository.QuestionResultRow;
+import repository.ResultGroupRow;
 import repository.RoleStatusCount;
 import repository.SubmissionRepository;
 import repository.TopicRepository;
@@ -158,6 +159,16 @@ public class StatsService {
     /** Dòng tổng hợp cả bài học. */
     public QuestionResultView lessonResultSummary(int lessonId) {
         return toResultView(submissions.lessonResultSummary(lessonId));
+    }
+
+    /** Admin: thống kê bài làm theo từng chủ đề. */
+    public List<ResultGroupRow> topicResultGroups() {
+        return submissions.topicResultGroups();
+    }
+
+    /** Admin: thống kê bài làm theo từng bài giảng của một chủ đề. */
+    public List<ResultGroupRow> lessonResultGroups(int topicId) {
+        return submissions.lessonResultGroups(topicId);
     }
 
     private static QuestionResultView toResultView(QuestionResultRow r) {
