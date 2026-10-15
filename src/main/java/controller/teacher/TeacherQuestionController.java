@@ -13,6 +13,7 @@ import service.QuestionService;
 import service.TopicService;
 import jakarta.servlet.http.HttpServletRequest;
 import util.FormErrors;
+import util.WebUtil;
 import jakarta.validation.Valid;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -23,12 +24,17 @@ import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.SessionAttribute;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
-/** UC-TEA-04: ngân hàng câu hỏi (danh sách có lọc + phân trang ở CSDL, tạo, sửa, xóa). */
+/**
+ * UC-TEA-04: ngân hàng câu hỏi (danh sách có lọc + phân trang ở CSDL, tạo, sửa, xóa); dùng chung cho giáo viên
+ * (/teacher) và Admin (/admin).
+ */
 @Controller
+@RequestMapping({"/teacher", "/admin"})
 public class TeacherQuestionController {
 
     private static final int PAGE_SIZE = 10;
@@ -44,7 +50,7 @@ public class TeacherQuestionController {
         this.lessonService = lessonService;
     }
 
-    @GetMapping({"/teacher/questions", "/teacher/question/form"})
+    @GetMapping({"/questions", "/question/form"})
     public String list(@RequestParam(defaultValue = "") String action,
                        @RequestParam(defaultValue = "0") int id,
                        @RequestParam(defaultValue = "0") int topicId,
@@ -57,14 +63,14 @@ public class TeacherQuestionController {
         List<TopicView> topics = topicService.getAllTopics();
         model.addAttribute("topics", topics);
 
-        boolean formPage = request.getServletPath().equals("/teacher/question/form")
+        boolean formPage = request.getServletPath().endsWith("/question/form")
                 || "create".equals(action) || "edit".equals(action);
         if (formPage) {
             model.addAttribute("lessons", lessonService.getAllLessons());
             if ("edit".equals(action)) {
                 QuestionView q = questionService.getQuestionForEdit(id, user.getUserId(), user.isAdmin()); // BR-03
                 if (q == null) {
-                    return "redirect:/teacher/questions";
+                    return "redirect:" + WebUtil.contentBase(request) + "/questions";
                 }
                 Map<String, String> optionMap = new LinkedHashMap<>();
                 String correct = "";
@@ -98,14 +104,15 @@ public class TeacherQuestionController {
         return "teacher/questions";
     }
 
-    @PostMapping({"/teacher/questions", "/teacher/questions/create"})
+    @PostMapping({"/questions", "/questions/create"})
     public String save(@Valid @ModelAttribute QuestionForm form, BindingResult result,
                        @RequestParam(name = "opt_A", defaultValue = "") String optA,
                        @RequestParam(name = "opt_B", defaultValue = "") String optB,
                        @RequestParam(name = "opt_C", defaultValue = "") String optC,
                        @RequestParam(name = "opt_D", defaultValue = "") String optD,
                        @SessionAttribute(AuthInterceptor.SESSION_USER) SessionUser user,
-                       RedirectAttributes redirect) {
+                       RedirectAttributes redirect, HttpServletRequest request) {
+        String questions = "redirect:" + WebUtil.contentBase(request) + "/questions";
         form.setOptionTexts(List.of(optA, optB, optC, optD));
         String action = form.getAction();
         try {
@@ -124,20 +131,20 @@ public class TeacherQuestionController {
                     boolean hard = questionService.deleteQuestion(form.getId(), user.getUserId(), user.isAdmin());
                     redirect.addFlashAttribute("flash", hard ? "Xóa câu hỏi thành công."
                             : "Đã ẩn câu hỏi (xóa mềm) vì đã có bài làm của học sinh; lịch sử được giữ nguyên.");
-                    return "redirect:/teacher/questions";
+                    return questions;
                 }
                 default -> throw new IllegalArgumentException("Thao tác không hợp lệ.");
             }
         } catch (IllegalArgumentException | ConflictException e) {
             redirect.addFlashAttribute("errorFlash", e.getMessage());
             if ("delete".equals(action)) {
-                return "redirect:/teacher/questions";
+                return questions;
             }
             // Lỗi khi tạo/sửa: quay lại form để người dùng chỉnh tiếp
-            return "redirect:/teacher/questions" + ("update".equals(action) && form.getId() > 0
+            return questions + ("update".equals(action) && form.getId() > 0
                     ? "?action=edit&id=" + form.getId() : "?action=create");
         }
-        return "redirect:/teacher/questions?lessonId=" + form.getLessonId() + "&type=" + form.getType();
+        return questions + "?lessonId=" + form.getLessonId() + "&type=" + form.getType();
     }
 
 }

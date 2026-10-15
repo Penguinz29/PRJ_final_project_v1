@@ -21,7 +21,7 @@
                                 <h1><i class="bi bi-journal-text me-2 text-primary"></i>Bài giảng
                                     <span class="badge bg-secondary ms-2">${totalRecords}</span>
                                 </h1>
-                                <a href="${pageContext.request.contextPath}/teacher/lessons?action=create"
+                                <a href="${pageContext.request.contextPath}${base}/lessons?action=create"
                                     class="btn btn-primary btn-sm">
                                     <i class="bi bi-plus-lg me-1"></i>Thêm bài giảng
                                 </a>
@@ -30,7 +30,7 @@
                             <%-- Lọc theo chủ đề --%>
                                 <div class="card mb-3">
                                     <div class="card-body py-2">
-                                        <form action="${pageContext.request.contextPath}/teacher/lessons" method="get"
+                                        <form action="${pageContext.request.contextPath}${base}/lessons" method="get"
                                             class="d-flex gap-2 align-items-center">
                                             <label class="text-muted fw-semibold"
                                                 style="font-size:.85rem;white-space:nowrap">Lọc chủ đề:</label>
@@ -68,7 +68,7 @@
                                                                 <div class="empty-state">
                                                                     <i class="bi bi-journal empty-icon"></i>
                                                                     <p>Chưa có bài giảng nào.</p>
-                                                                    <a href="${pageContext.request.contextPath}/teacher/lessons?action=create"
+                                                                    <a href="${pageContext.request.contextPath}${base}/lessons?action=create"
                                                                         class="btn btn-primary btn-sm"><i
                                                                             class="bi bi-plus-lg me-1"></i>Tạo bài
                                                                         giảng</a>
@@ -94,23 +94,23 @@
                                                                         <c:out value="${l.topicName}" />
                                                                     </span></td>
                                                                 <td>
-                                                                    <a href="${pageContext.request.contextPath}/teacher/questions?lessonId=${l.lessonId}"
+                                                                    <a href="${pageContext.request.contextPath}${base}/questions?lessonId=${l.lessonId}"
                                                                         class="badge bg-primary-subtle text-primary text-decoration-none">
                                                                         ${l.questionCount} câu
                                                                     </a>
                                                                 </td>
                                                                 <td>
-                                                                    <a href="${pageContext.request.contextPath}/teacher/lessons/${l.lessonId}/materials"
+                                                                    <a href="${pageContext.request.contextPath}${base}/lessons/${l.lessonId}/materials"
                                                                         class="btn btn-sm btn-outline-secondary me-1"
                                                                         title="Quản lý bài giảng (video, link, văn bản)"><i
                                                                             class="bi bi-collection-play"></i></a>
-                                                                    <a href="${pageContext.request.contextPath}/teacher/lessons?action=edit&id=${l.lessonId}"
+                                                                    <a href="${pageContext.request.contextPath}${base}/lessons?action=edit&id=${l.lessonId}"
                                                                         class="btn btn-sm btn-outline-primary me-1"><i
                                                                             class="bi bi-pencil"></i></a>
                                                                     <%-- Mọi giáo viên được sửa bài học; chỉ người tạo hoặc Admin được xóa (xóa kéo theo câu hỏi của bài) --%>
                                                                     <c:if test="${sessionScope.LOGGED_IN_USER.admin or l.createdById == sessionScope.LOGGED_IN_USER.userId}">
                                                                     <form class="d-inline" id="delL${l.lessonId}"
-                                                                        action="${pageContext.request.contextPath}/teacher/lessons"
+                                                                        action="${pageContext.request.contextPath}${base}/lessons"
                                                                         method="post">
 <input type="hidden" name="_csrf" value="${sessionScope.CSRF_TOKEN}">
                                                                         <input type="hidden" name="action"
@@ -132,7 +132,7 @@
                                         </table>
                                     </div>
                                 </div>
-                                <ui:pagination baseUrl="${pageContext.request.contextPath}/teacher/lessons${not empty selectedTopicId ? '?topicId='.concat(selectedTopicId) : ''}" page="${page}" totalPages="${totalPages}" />
+                                <ui:pagination baseUrl="${pageContext.request.contextPath}${base}/lessons${not empty selectedTopicId ? '?topicId='.concat(selectedTopicId) : ''}" page="${page}" totalPages="${totalPages}" />
                         </main>
                     </div>
                     <jsp:include page="../common/confirm-modal.jsp" />

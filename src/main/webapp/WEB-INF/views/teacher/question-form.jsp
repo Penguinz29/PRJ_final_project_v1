@@ -24,14 +24,14 @@
                             <div class="page-header">
                                 <h1><i class="bi bi-patch-question me-2 text-primary"></i>
                                     ${isEdit ? 'Sửa câu hỏi' : 'Thêm câu hỏi mới'}</h1>
-                                <a href="${pageContext.request.contextPath}/teacher/questions"
+                                <a href="${pageContext.request.contextPath}${base}/questions"
                                     class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Quay
                                     lại</a>
                             </div>
 
                             <div class="row g-4">
                                 <div class="col-lg-8">
-                                    <form action="${pageContext.request.contextPath}/teacher/questions" method="post"
+                                    <form action="${pageContext.request.contextPath}${base}/questions" method="post"
                                         class="needs-validation" novalidate>
 <input type="hidden" name="_csrf" value="${sessionScope.CSRF_TOKEN}">
                                         <input type="hidden" name="action" value="${isEdit ? 'update' : 'create'}">
@@ -195,7 +195,7 @@
                                                         <i class="bi bi-check-lg me-1"></i>${isEdit ? 'Lưu thay đổi' :
                                                         'Tạo câu hỏi'}
                                                     </button>
-                                                    <a href="${pageContext.request.contextPath}/teacher/questions"
+                                                    <a href="${pageContext.request.contextPath}${base}/questions"
                                                         class="btn btn-outline-secondary">Hủy</a>
                                                 </div>
                                     </form>

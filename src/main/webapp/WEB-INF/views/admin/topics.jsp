@@ -45,7 +45,7 @@
                                                     <c:out value="${t.description}" />
                                                 </td>
                                                 <td>
-                                                    <a href="${pageContext.request.contextPath}/teacher/lessons?topicId=${t.topicId}"
+                                                    <a href="${pageContext.request.contextPath}${base}/lessons?topicId=${t.topicId}"
                                                         class="badge bg-primary-subtle text-primary text-decoration-none">
                                                         ${t.lessonCount} bài
                                                     </a>

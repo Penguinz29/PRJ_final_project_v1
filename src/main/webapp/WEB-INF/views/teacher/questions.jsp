@@ -27,7 +27,7 @@
                                         <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#aiGeneratorModal">
                                             <i class="bi bi-stars me-1 text-primary"></i>Sinh câu hỏi bằng AI
                                         </button>
-                                        <a href="${pageContext.request.contextPath}/teacher/questions?action=create"
+                                        <a href="${pageContext.request.contextPath}${base}/questions?action=create"
                                             class="btn btn-primary btn-sm">
                                             <i class="bi bi-plus-lg me-1"></i>Thêm câu hỏi
                                         </a>
@@ -38,7 +38,7 @@
                                     <div class="card mb-3">
                                         <div class="card-body py-2">
                                             <form class="row g-2"
-                                                action="${pageContext.request.contextPath}/teacher/questions"
+                                                action="${pageContext.request.contextPath}${base}/questions"
                                                 method="get">
                                                 <div class="col-sm-3">
                                                     <select class="form-select form-select-sm" name="topicId">
@@ -109,7 +109,7 @@
                                                                     <div class="empty-state">
                                                                         <i class="bi bi-patch-question empty-icon"></i>
                                                                         <p>Chưa có câu hỏi nào.</p>
-                                                                        <a href="${pageContext.request.contextPath}/teacher/questions?action=create"
+                                                                        <a href="${pageContext.request.contextPath}${base}/questions?action=create"
                                                                             class="btn btn-primary btn-sm">Thêm câu
                                                                             hỏi</a>
                                                                     </div>
@@ -170,11 +170,11 @@
                                                                         </c:choose>
                                                                     </td>
                                                                     <td>
-                                                                        <a href="${pageContext.request.contextPath}/teacher/questions?action=edit&id=${q.questionId}"
+                                                                        <a href="${pageContext.request.contextPath}${base}/questions?action=edit&id=${q.questionId}"
                                                                             class="btn btn-sm btn-outline-primary me-1"><i
                                                                                 class="bi bi-pencil"></i></a>
                                                                         <form class="d-inline" id="delQ${q.questionId}"
-                                                                            action="${pageContext.request.contextPath}/teacher/questions"
+                                                                            action="${pageContext.request.contextPath}${base}/questions"
                                                                             method="post">
 <input type="hidden" name="_csrf" value="${sessionScope.CSRF_TOKEN}">
                                                                             <input type="hidden" name="action"
@@ -194,7 +194,7 @@
                                             </table>
                                         </div>
                                     </div>
-                                    <ui:pagination baseUrl="${pageContext.request.contextPath}/teacher/questions?topicId=${selectedTopicId}&lessonId=${selectedLessonId}&type=${selectedType}&level=${selectedLevel}" page="${page}" totalPages="${totalPages}" />
+                                    <ui:pagination baseUrl="${pageContext.request.contextPath}${base}/questions?topicId=${selectedTopicId}&lessonId=${selectedLessonId}&type=${selectedType}&level=${selectedLevel}" page="${page}" totalPages="${totalPages}" />
                             </main>
                         </div>
                          <jsp:include page="../common/confirm-modal.jsp" />
@@ -501,7 +501,7 @@
                                         .then(res => res.json().catch(() => ({ success: false, message: 'Phản hồi không hợp lệ (HTTP ' + res.status + ').' })))
                                         .then(data => {
                                             if (data.success) {
-                                                window.location.href = ctx + '/teacher/questions?lessonId=' + lessonSelect.value;
+                                                window.location.href = ctx + '${base}/questions?lessonId=' + lessonSelect.value;
                                             } else {
                                                 btnSave.disabled = false;
                                                 btnSave.innerHTML = '<i class="bi bi-cloud-arrow-up me-1"></i> Lưu vào Ngân hàng câu hỏi';
