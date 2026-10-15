@@ -25,28 +25,6 @@
     <main class="app-main">
         <ui:flash />
 
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb">
-                <c:choose>
-                    <c:when test="${level == 'topics'}">
-                        <li class="breadcrumb-item active" aria-current="page">Kết quả học sinh</li>
-                    </c:when>
-                    <c:otherwise>
-                        <li class="breadcrumb-item"><a href="${pageContext.request.contextPath}/admin/results">Kết quả học sinh</a></li>
-                        <c:choose>
-                            <c:when test="${level == 'lessons'}">
-                                <li class="breadcrumb-item active" aria-current="page"><c:out value="${topicName}" /></li>
-                            </c:when>
-                            <c:otherwise>
-                                <li class="breadcrumb-item"><a href="${pageContext.request.contextPath}/admin/results?topicId=${topicId}"><c:out value="${topicName}" /></a></li>
-                                <li class="breadcrumb-item active" aria-current="page"><c:out value="${lesson.title}" /></li>
-                            </c:otherwise>
-                        </c:choose>
-                    </c:otherwise>
-                </c:choose>
-            </ol>
-        </nav>
-
         <div class="page-header">
             <h1><i class="bi bi-bar-chart-line me-2 text-primary"></i>
                 <c:choose>
@@ -55,6 +33,12 @@
                     <c:otherwise>Bài làm: <c:out value="${lesson.title}" /></c:otherwise>
                 </c:choose>
             </h1>
+            <c:if test="${level != 'topics'}">
+                <a href="${pageContext.request.contextPath}/admin/results${level == 'submissions' ? '?topicId=' : ''}${level == 'submissions' ? topicId : ''}"
+                   class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-arrow-left me-1"></i>Quay lại
+                </a>
+            </c:if>
         </div>
 
         <c:choose>
