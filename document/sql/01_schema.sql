@@ -1,7 +1,7 @@
 -- =====================================================================================================================
--- File: document/sql/01_schema.sql — EduTutor Math 12: tạo CSDL, 10 bảng và toàn bộ ràng buộc (cấu trúc cuối cùng)
--- Chạy TRƯỚC 02_data.sql. CẢNH BÁO: script XÓA CSDL MathTutorDB cũ (nếu có) rồi tạo lại từ đầu.
--- CSDL tạo theo cấu trúc cũ cũng tạo lại bằng script này (dữ liệu cũ bị xóa, thay bằng dữ liệu mẫu của 02_data.sql).
+-- File: document/sql/01_schema.sql — EduTutor Math 9: tạo CSDL, 10 bảng và toàn bộ ràng buộc (cấu trúc cuối cùng)
+-- Chạy TRƯỚC 02_data.sql (toàn bộ dữ liệu). CẢNH BÁO: script XÓA CSDL MathTutorDB cũ (nếu có) rồi tạo lại từ đầu.
+-- CSDL tạo theo cấu trúc cũ cũng tạo lại bằng script này (dữ liệu cũ bị xóa, thay bằng dữ liệu của 02_data.sql).
 --
 -- Quy ước: tài liệu SRS / FRS dùng snake_case (questions.is_active), CSDL dùng PascalCase (Questions.IsActive).
 -- 6 bảng lõi: Users, Topics, Lessons, Questions, Submissions, TutorSessions

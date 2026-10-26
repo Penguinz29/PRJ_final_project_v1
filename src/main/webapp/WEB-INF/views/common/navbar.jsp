@@ -12,7 +12,7 @@
 
                         <%-- Brand --%>
                             <a href="${pageContext.request.contextPath}/" class="brand text-decoration-none">
-                                <i class="bi bi-calculator-fill"></i> MathTutor 12
+                                <i class="bi bi-calculator-fill"></i> MathTutor 9
                             </a>
 
                             <%-- Right side --%>

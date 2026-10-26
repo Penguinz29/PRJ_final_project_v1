@@ -215,7 +215,7 @@
                                             <div class="card-body">
                                                 <div class="row g-3">
                                                     <div class="col-md-6">
-                                                        <label class="form-label fw-semibold">Chuyên đề Toán 12</label>
+                                                        <label class="form-label fw-semibold">Chuyên đề Toán 9</label>
                                                         <select class="form-select form-select-sm" id="aiTopicSelect">
                                                             <c:forEach var="t" items="${topics}">
                                                                 <option value="${t.topicId}"><c:out value="${t.topicName}" /></option>

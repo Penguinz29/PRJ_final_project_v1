@@ -8,7 +8,7 @@
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
-                <title>Đăng nhập - MathTutor 12</title>
+                <title>Đăng nhập - MathTutor 9</title>
                 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
                 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
                     rel="stylesheet">
@@ -428,9 +428,9 @@
                         <aside class="auth-aside" aria-hidden="true">
                             <div class="brand">
                                 <span class="brand-icon-wrap"><i class="bi bi-calculator-fill"></i></span>
-                                <span>MathTutor 12</span>
+                                <span>MathTutor 9</span>
                             </div>
-                            <p class="aside-title">Học Toán 12 cùng gia sư AI</p>
+                            <p class="aside-title">Học Toán 9 cùng gia sư AI</p>
                             <p class="aside-sub">Gợi ý từng bước, không đưa đáp án ngay.</p>
 
                             <div class="rubik-stage">

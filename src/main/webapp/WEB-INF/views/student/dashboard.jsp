@@ -42,7 +42,7 @@
                                                                     <c:out
                                                                         value="${sessionScope.LOGGED_IN_USER.fullName}" />!
                                                                 </h2>
-                                                                <p>Tiếp tục hành trình học Toán 12 của bạn ngay hôm nay.</p>
+                                                                <p>Tiếp tục hành trình học Toán 9 của bạn ngay hôm nay.</p>
                                                                 <div class="d-flex flex-wrap gap-2">
                                                                     <a href="${pageContext.request.contextPath}/student/topics"
                                                                         class="btn-hero-primary btn">
