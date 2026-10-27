@@ -37,6 +37,10 @@
                                 </div>
 
                                 <div class="d-flex gap-2">
+                                    <a href="${pageContext.request.contextPath}/student/topics"
+                                        class="btn btn-outline-secondary d-flex align-items-center">
+                                        <i class="bi bi-arrow-left me-2"></i>Quay lại
+                                    </a>
                                     <a href="${pageContext.request.contextPath}/student/quiz?lessonId=${lesson.lessonId}"
                                         class="btn btn-primary d-flex align-items-center">
                                         <i class="bi bi-joystick me-2"></i>Làm trắc nghiệm
