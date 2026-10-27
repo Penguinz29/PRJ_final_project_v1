@@ -33,11 +33,13 @@
 
                                         <%-- ── BLOCK 1: Hero + Stat Cards ── --%>
                                         <div class="hero-banner mb-4">
-                                            <div class="hero-label">Bảng điều khiển giảng dạy</div>
-                                            <h2>Xin chào,
-                                                <c:out value="${sessionScope.LOGGED_IN_USER.fullName}" />!
-                                            </h2>
-                                            <p>Quản lý nội dung, theo dõi học sinh và chấm bài tự luận tại đây.</p>
+                                            <div class="hero-banner-content">
+                                                <div class="hero-label">Bảng điều khiển giảng dạy</div>
+                                                <h2>Xin chào,
+                                                    <c:out value="${sessionScope.LOGGED_IN_USER.fullName}" />!
+                                                </h2>
+                                                <p>Quản lý nội dung, theo dõi học sinh và chấm bài tự luận tại đây.</p>
+                                            </div>
                                         </div>
 
                                         <div class="row g-3 mb-4">
