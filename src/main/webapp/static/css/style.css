@@ -2272,5 +2272,45 @@ h6 {
   padding: 0.25rem 0;
 }
 
+/* Bảng trong đề bài / lý thuyết (HTML thuần, đã bị sanitizer bỏ thuộc tính border) */
+.latex-content table {
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 1rem auto;
+  max-width: 100%;
+  font-size: 1rem;
+  line-height: 1.5;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.latex-content th,
+.latex-content td {
+  padding: .55rem .9rem;
+  text-align: center;
+  vertical-align: middle;
+  font-weight: 400;
+  border-right: 1px solid #cbd5e1;
+  border-bottom: 1px solid #cbd5e1;
+}
+
+.latex-content tr > :last-child { border-right: 0; }
+.latex-content tr:last-child > * { border-bottom: 0; }
+
+.latex-content th {
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-weight: 600;
+}
+
+.latex-content tbody tr:nth-child(even) td,
+.latex-content table > tr:nth-child(even) td { background: #f8fafc; }
+
+@media (max-width: 576px) {
+  .latex-content table { display: block; overflow-x: auto; }
+}
+
 /* Hình vẽ cắt từ SGK trong đề bài / lý thuyết */
 .sgk-figure { display: block; margin: .5rem auto; max-height: 360px; width: auto; max-width: 100%; }
