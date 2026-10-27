@@ -58,7 +58,7 @@
     </form>
 
     <div class="row g-4">
-        <div class="col-lg-8 col-xl-9">
+        <div class="col-lg-7 col-xl-8">
             <c:choose>
                 <c:when test="${empty questions}">
                     <div class="card border-0 shadow-sm text-center py-5">
@@ -124,44 +124,52 @@
                             </button>
                         </div>
                     </div>
-
-                    <%-- Tổng kết khi đã làm hết đề --%>
-                    <div id="quizSummary" class="card border-0 shadow-sm mt-4 d-none">
-                        <div class="card-body text-center py-4">
-                            <h4 class="fw-bold mb-1">Hoàn thành đề!</h4>
-                            <p class="fs-5 mb-3">Đúng <strong id="summaryCorrect">0</strong>/${fn:length(questions)} câu</p>
-                            <div class="d-flex flex-wrap justify-content-center gap-2">
-                                <a class="btn btn-primary" href="${pageContext.request.contextPath}/student/quiz?lessonId=${lesson.lessonId}&difficulty=${level == 0 ? '' : level}&limit=${limit}">
-                                    <i class="bi bi-shuffle me-1"></i>Làm đề mới</a>
-                                <a class="btn btn-outline-secondary" href="${pageContext.request.contextPath}/student/history?type=MCQ&lessonId=${lesson.lessonId}">
-                                    <i class="bi bi-clock-history me-1"></i>Lịch sử bài này</a>
-                                <a class="btn btn-outline-secondary" href="${pageContext.request.contextPath}/student/lesson?id=${lesson.lessonId}">
-                                    <i class="bi bi-book me-1"></i>Về bài học</a>
-                            </div>
-                        </div>
-                    </div>
                 </c:otherwise>
             </c:choose>
         </div>
 
-        <%-- Bảng câu hỏi --%>
-        <div class="col-lg-4 col-xl-3">
-            <div class="card shadow-sm border-0" style="position:sticky;top:calc(var(--navbar-h) + 1rem);">
-                <div class="card-header bg-white py-3"><h5 class="mb-0 fw-bold"><i class="bi bi-grid me-2"></i>Bảng câu hỏi</h5></div>
-                <div class="card-body">
-                    <div class="d-flex flex-wrap gap-2 mb-3">
-                        <c:forEach var="q" items="${questions}" varStatus="vs">
-                            <button type="button" class="btn btn-outline-secondary quiz-nav-btn" id="navBtn_${vs.count}"
-                                    data-slide-to="${vs.index}" aria-label="Câu ${vs.count}">${vs.count}</button>
-                        </c:forEach>
+        <%-- Bảng câu hỏi + Tổng kết lựa chọn sau khi làm xong --%>
+        <div class="col-lg-5 col-xl-4">
+            <div style="position:sticky;top:calc(var(--navbar-h) + 1rem);">
+                <div class="card shadow-sm border-0 mb-3">
+                    <div class="card-header bg-white py-3"><h5 class="mb-0 fw-bold"><i class="bi bi-grid me-2"></i>Bảng câu hỏi</h5></div>
+                    <div class="card-body">
+                        <div class="d-flex flex-wrap gap-2 mb-3">
+                            <c:forEach var="q" items="${questions}" varStatus="vs">
+                                <button type="button" class="btn btn-outline-secondary quiz-nav-btn" id="navBtn_${vs.count}"
+                                        data-slide-to="${vs.index}" aria-label="Câu ${vs.count}">${vs.count}</button>
+                            </c:forEach>
+                        </div>
+                        <div class="border-top pt-3 small text-muted">
+                            Đã làm: <strong id="doneCount" class="text-primary">0</strong>/${fn:length(questions)}
+                            · Đúng: <strong id="correctCount" class="text-success">0</strong>
+                        </div>
+                        <div class="small text-muted mt-2">
+                            <span class="badge bg-success">&nbsp;</span> đúng
+                            <span class="badge bg-danger ms-2">&nbsp;</span> sai
+                        </div>
                     </div>
-                    <div class="border-top pt-3 small text-muted">
-                        Đã làm: <strong id="doneCount" class="text-primary">0</strong>/${fn:length(questions)}
-                        · Đúng: <strong id="correctCount" class="text-success">0</strong>
-                    </div>
-                    <div class="small text-muted mt-2">
-                        <span class="badge bg-success">&nbsp;</span> đúng
-                        <span class="badge bg-danger ms-2">&nbsp;</span> sai
+                </div>
+
+                <%-- Tổng kết khi đã làm hết đề (hiển thị ngay dưới Bảng câu hỏi) --%>
+                <div id="quizSummary" class="card border-0 shadow-sm d-none">
+                    <div class="card-body text-center p-4">
+                        <div class="quiz-trophy-circle mb-3">
+                            <i class="bi bi-trophy-fill"></i>
+                        </div>
+                        <h5 class="fw-bold mb-1">Hoàn thành đề!</h5>
+                        <p class="text-muted mb-4 fs-6">Đúng <strong id="summaryCorrect" class="text-success fs-5">0</strong>/${fn:length(questions)} câu</p>
+                        <div class="d-grid gap-2">
+                            <a class="btn btn-primary py-2 fw-medium shadow-sm d-flex align-items-center justify-content-center" href="${pageContext.request.contextPath}/student/quiz?lessonId=${lesson.lessonId}&difficulty=${level == 0 ? '' : level}&limit=${limit}">
+                                <i class="bi bi-shuffle me-2"></i>Làm đề mới
+                            </a>
+                            <a class="btn btn-outline-secondary py-2 fw-medium d-flex align-items-center justify-content-center" href="${pageContext.request.contextPath}/student/history?type=MCQ&lessonId=${lesson.lessonId}">
+                                <i class="bi bi-clock-history me-2"></i>Lịch sử bài này
+                            </a>
+                            <a class="btn btn-outline-secondary py-2 fw-medium d-flex align-items-center justify-content-center" href="${pageContext.request.contextPath}/student/lesson?id=${lesson.lessonId}">
+                                <i class="bi bi-book me-2"></i>Về bài học
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -185,6 +193,10 @@
     .quiz-nav-btn { width: 40px; height: 40px; padding: 0; font-weight: 500; border-radius: 8px; }
     .quiz-nav-btn.answered-ok { background-color: var(--success, #16a34a); border-color: var(--success, #16a34a); color: #fff; }
     .quiz-nav-btn.answered-ko { background-color: var(--danger, #dc2626); border-color: var(--danger, #dc2626); color: #fff; }
+    .quiz-trophy-circle { width: 52px; height: 52px; background: #eef2ff; color: var(--primary, #6366f1); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 1.5rem; }
+    #quizSummary .btn { font-size: 0.95rem; border-radius: 10px; transition: all 0.2s ease; }
+    #quizSummary .btn-outline-secondary { border-color: #cbd5e1; color: #475569; }
+    #quizSummary .btn-outline-secondary:hover { background-color: #f8fafc; border-color: #94a3b8; color: #1e293b; }
 </style>
 
 <script>
