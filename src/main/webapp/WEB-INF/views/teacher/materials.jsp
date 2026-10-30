@@ -20,7 +20,7 @@
 
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb mb-1" style="font-size:.85rem;">
-                    <li class="breadcrumb-item"><a href="${pageContext.request.contextPath}/teacher/lessons"
+                    <li class="breadcrumb-item"><a href="${pageContext.request.contextPath}${base}/lessons"
                             class="text-decoration-none">Bài học</a></li>
                     <li class="breadcrumb-item active" aria-current="page">
                         <c:out value="${lesson.title}" />
@@ -32,7 +32,7 @@
                     <span class="badge bg-secondary ms-2">${fn:length(materials)}</span>
                 </h1>
                 <div class="d-flex gap-2">
-                    <a href="${pageContext.request.contextPath}/teacher/lessons" class="btn btn-outline-secondary btn-sm">
+                    <a href="${pageContext.request.contextPath}${base}/lessons" class="btn btn-outline-secondary btn-sm">
                         <i class="bi bi-arrow-left me-1"></i>Quay lại
                     </a>
                     <button class="btn btn-primary btn-sm" data-action="add-material" data-bs-toggle="modal"
@@ -109,7 +109,7 @@
                                                         <i class="bi bi-pencil"></i>
                                                     </button>
                                                     <form class="d-inline" id="delM${m.materialId}"
-                                                        action="${pageContext.request.contextPath}/teacher/materials/${m.materialId}/delete"
+                                                        action="${pageContext.request.contextPath}${base}/materials/${m.materialId}/delete"
                                                         method="post">
                                                         <input type="hidden" name="_csrf" value="${sessionScope.CSRF_TOKEN}">
                                                     </form>
@@ -139,7 +139,7 @@
                     <h5 class="modal-title" id="materialModalTitle">Thêm bài giảng</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <form id="materialForm" action="${pageContext.request.contextPath}/teacher/lessons/${lesson.lessonId}/materials"
+                <form id="materialForm" action="${pageContext.request.contextPath}${base}/lessons/${lesson.lessonId}/materials"
                     method="post" class="needs-validation" novalidate>
                     <input type="hidden" name="_csrf" value="${sessionScope.CSRF_TOKEN}">
                     <input type="hidden" name="lessonId" value="${lesson.lessonId}">
@@ -227,7 +227,7 @@
             });
             document.querySelectorAll('[data-action="edit-material"]').forEach(function (btn) {
                 btn.addEventListener('click', function () {
-                    form.setAttribute('action', ctx + '/teacher/materials/' + btn.dataset.materialId + '/update');
+                    form.setAttribute('action', ctx + '${base}/materials/' + btn.dataset.materialId + '/update');
                     title.textContent = 'Sửa bài giảng';
                     type.value = btn.dataset.type;
                     document.getElementById('materialTitle').value = btn.dataset.title || '';

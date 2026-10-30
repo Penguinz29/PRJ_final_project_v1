@@ -1,9 +1,12 @@
 package controller;
 
+import jakarta.servlet.http.HttpServletRequest;
 import java.beans.PropertyEditorSupport;
+import util.WebUtil;
 import org.springframework.web.bind.WebDataBinder;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.InitBinder;
+import org.springframework.web.bind.annotation.ModelAttribute;
 
 /**
  * Cấu hình binding dùng chung cho mọi controller: ô số nguyên (kiểu {@code int}) gửi lên rỗng — ví dụ trường ẩn
@@ -13,6 +16,12 @@ import org.springframework.web.bind.annotation.InitBinder;
  */
 @ControllerAdvice
 public class GlobalBindingAdvice {
+
+    /** {@code ${base}} trong JSP: "/admin" hoặc "/teacher" — link của các trang nội dung dùng chung theo vai trò. */
+    @ModelAttribute("base")
+    public String base(HttpServletRequest request) {
+        return WebUtil.contentBase(request);
+    }
 
     @InitBinder
     public void initBinder(WebDataBinder binder) {

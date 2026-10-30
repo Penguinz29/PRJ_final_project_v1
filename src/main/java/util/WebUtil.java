@@ -25,6 +25,15 @@ public final class WebUtil {
         return (path == null || path.isEmpty()) ? "/" : path;
     }
 
+    /**
+     * Vùng URL của trang nội dung dùng chung giữa Admin và giáo viên (bài giảng, câu hỏi, tài liệu):
+     * "/admin" khi request nằm dưới /admin, ngược lại "/teacher". Dùng để dựng link / redirect đúng vai trò.
+     */
+    public static String contentBase(HttpServletRequest request) {
+        String path = pathWithinApp(request);
+        return path.equals("/admin") || path.startsWith("/admin/") ? "/admin" : "/teacher";
+    }
+
     /** Request thuộc /api/** hoặc client yêu cầu JSON (AJAX) → trả JSON thay vì HTML. */
     public static boolean isApi(HttpServletRequest request) {
         String path = pathWithinApp(request);

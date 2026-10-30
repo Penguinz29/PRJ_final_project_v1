@@ -27,12 +27,18 @@
                                 <i class="bi bi-folder2"></i> Chủ đề
                             </a>
                             <a href="${pageContext.request.contextPath}/admin/lessons"
-                                class="sidebar-link ${param.active == 'admin-lessons' ? 'active' : ''}">
+                                class="sidebar-link ${param.active == 'admin-lessons' or param.active == 'teacher-lessons' ? 'active' : ''}">
                                 <i class="bi bi-journal-text"></i> Bài giảng
                             </a>
                             <a href="${pageContext.request.contextPath}/admin/questions"
-                                class="sidebar-link ${param.active == 'admin-questions' ? 'active' : ''}">
+                                class="sidebar-link ${param.active == 'admin-questions' or param.active == 'teacher-questions' ? 'active' : ''}">
                                 <i class="bi bi-patch-question"></i> Câu hỏi
+                            </a>
+
+                            <div class="sidebar-group-label">Học tập</div>
+                            <a href="${pageContext.request.contextPath}/admin/results"
+                                class="sidebar-link ${param.active == 'admin-results' ? 'active' : ''}">
+                                <i class="bi bi-bar-chart-line"></i> Kết quả học sinh
                             </a>
 
                             <div class="sidebar-group-label">Hệ thống</div>

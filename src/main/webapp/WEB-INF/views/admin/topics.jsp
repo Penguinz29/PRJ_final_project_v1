@@ -26,7 +26,8 @@
                                             <th>#</th>
                                             <th>Tên chủ đề</th>
                                             <th>Mô tả</th>
-                                            <th>Người tạo (Giáo viên)</th>
+                                            <th>Bài giảng</th>
+                                            <th>Người tạo</th>
                                             <th>Ngày tạo</th>
                                         </tr>
                                     </thead>
@@ -44,6 +45,12 @@
                                                     <c:out value="${t.description}" />
                                                 </td>
                                                 <td>
+                                                    <a href="${pageContext.request.contextPath}${base}/lessons?topicId=${t.topicId}"
+                                                        class="badge bg-primary-subtle text-primary text-decoration-none">
+                                                        ${t.lessonCount} bài
+                                                    </a>
+                                                </td>
+                                                <td>
                                                     <span class="badge bg-info text-dark"><i
                                                             class="bi bi-person me-1"></i>
                                                         <c:out value="${t.teacherName}" />
@@ -56,7 +63,7 @@
                                         </c:forEach>
                                         <c:if test="${empty topics}">
                                             <tr>
-                                                <td colspan="5" class="text-center py-4 text-muted">Chưa có chủ đề nào.
+                                                <td colspan="6" class="text-center py-4 text-muted">Chưa có chủ đề nào.
                                                 </td>
                                             </tr>
                                         </c:if>

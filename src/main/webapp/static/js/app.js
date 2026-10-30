@@ -1,5 +1,5 @@
 /**
- * MathTutor 12 – app.js
+ * MathTutor 9 – app.js
  * Vanilla JS, module pattern, khởi tạo trong DOMContentLoaded.
  * Mọi chuỗi từ server/AI chèn vào DOM qua textContent hoặc escapeHtml().
  */

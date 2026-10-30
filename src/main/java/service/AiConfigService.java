@@ -160,7 +160,7 @@ public class AiConfigService {
     /**
      * Prompt Admin cấu hình (TUTOR_SYSTEM_PROMPT / QUIZ_GEN_PROMPT / GRADING_PROMPT).
      *
-     * @throws AiConfigException khi prompt chưa có trong CSDL (chưa chạy document/sql/02_data.sql)
+     * @throws AiConfigException khi prompt chưa có trong CSDL (chưa chạy document/sql/MathTutorDB.sql)
      */
     public String getPrompt(String key) {
         String prompt = value(key);
@@ -236,7 +236,7 @@ public class AiConfigService {
         }
         for (Map.Entry<String, String> e : clean.entrySet()) {
             AiConfig cfg = repository.findByConfigKey(e.getKey()).orElseThrow(() -> new ConfigValidationException(
-                    Map.of(e.getKey(), "Khóa " + e.getKey() + " chưa có trong CSDL. Hãy chạy document/sql/02_data.sql.")));
+                    Map.of(e.getKey(), "Khóa " + e.getKey() + " chưa có trong CSDL. Hãy chạy document/sql/MathTutorDB.sql.")));
             cfg.setConfigValue(e.getValue());
             cfg.setUpdatedBy(userRepository.getReferenceById(updatedBy));
         }

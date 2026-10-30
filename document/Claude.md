@@ -1,4 +1,4 @@
-# AGENTS.md — Quy tắc cho AI khi code EduTutor Math 12
+# AGENTS.md — Quy tắc cho AI khi code EduTutor Math 9
 
 > Đặt file này ở **thư mục gốc dự án**. Nếu dùng Claude Code, đổi tên thành `CLAUDE.md` (nội dung giữ nguyên).
 > Tài liệu nguồn (đặt trong thư mục `docs/`): `EduTutor_SRS.md`, `EduTutor_FRS.md`, `EduTutor_Database.sql`, `PRJ30x_Project_Evaluation_Rubric.docx` (tiêu chí chấm 100 điểm — xem **mục 8**).
@@ -152,7 +152,7 @@ public JpaTransactionManager transactionManager(EntityManagerFactory emf) {
 
 `application.properties` (khóa `db.*` và `hibernate.*`; **không** dùng khóa `spring.datasource.*` vì không có Spring Boot):
 ```properties
-db.url=jdbc:sqlserver://localhost:1433;databaseName=EduTutorMath12;encrypt=true;trustServerCertificate=true
+db.url=jdbc:sqlserver://localhost:1433;databaseName=MathTutorDB;encrypt=true;trustServerCertificate=true
 db.username=...
 db.password=...
 db.pool.max-size=10

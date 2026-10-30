@@ -4,7 +4,7 @@ import java.io.Serializable;
 import java.util.Date;
 
 /**
- * DTO hiển thị cho bảng Users - EduTutor Math 12
+ * DTO hiển thị cho bảng Users - EduTutor Math 9
  */
 public class UserView implements Serializable {
     private static final long serialVersionUID = 1L;

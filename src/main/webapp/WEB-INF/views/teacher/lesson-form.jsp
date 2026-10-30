@@ -23,7 +23,7 @@
                                 <i class="bi bi-journal-plus me-2 text-primary"></i>
                                 ${isEdit ? 'Sửa bài giảng' : 'Thêm bài giảng mới'}
                             </h1>
-                            <a href="${pageContext.request.contextPath}/teacher/lessons"
+                            <a href="${pageContext.request.contextPath}${base}/lessons"
                                 class="btn btn-sm btn-outline-secondary">
                                 <i class="bi bi-arrow-left me-1"></i>Quay lại
                             </a>
@@ -31,7 +31,7 @@
 
                         <div class="row g-4">
                             <div class="col-lg-8">
-                                <form action="${pageContext.request.contextPath}/teacher/lessons" method="post"
+                                <form action="${pageContext.request.contextPath}${base}/lessons" method="post"
                                     class="needs-validation" novalidate id="lessonForm">
 <input type="hidden" name="_csrf" value="${sessionScope.CSRF_TOKEN}">
                                     <input type="hidden" name="action" value="${isEdit ? 'update' : 'create'}">
@@ -95,7 +95,7 @@
                                         Video YouTube, video tệp, liên kết website và bài giảng dạng văn bản được quản lý riêng:
                                         <c:choose>
                                             <c:when test="${isEdit}">
-                                                <a href="${pageContext.request.contextPath}/teacher/lessons/${lesson.lessonId}/materials"
+                                                <a href="${pageContext.request.contextPath}${base}/lessons/${lesson.lessonId}/materials"
                                                     class="alert-link">mở trang Bài giảng của bài học này</a>.
                                             </c:when>
                                             <c:otherwise>lưu bài học trước, rồi bấm nút <strong>Bài giảng</strong> ở danh sách bài học.</c:otherwise>
@@ -107,7 +107,7 @@
                                             <i class="bi bi-check-lg me-1"></i>${isEdit ? 'Lưu thay đổi' : 'Tạo bài
                                             giảng'}
                                         </button>
-                                        <a href="${pageContext.request.contextPath}/teacher/lessons"
+                                        <a href="${pageContext.request.contextPath}${base}/lessons"
                                             class="btn btn-outline-secondary">Hủy</a>
                                     </div>
                                 </form>

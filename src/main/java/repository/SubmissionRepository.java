@@ -171,6 +171,33 @@ public interface SubmissionRepository extends JpaRepository<Submission, Integer>
                         + "WHERE q.LessonId = :lessonId AND s.QuestionType = 'MCQ' AND q.IsActive = 1", nativeQuery = true)
         QuestionResultRow lessonResultSummary(@Param("lessonId") Integer lessonId);
 
+        // ---------- Admin: kết quả bài làm theo chủ đề → bài giảng → bài làm ----------
+
+        /** Mọi chủ đề đang hoạt động kèm số bài giảng, lượt làm, số học sinh, điểm TB. */
+        @Query(value = "SELECT t.TopicId AS id, t.TopicName AS name, "
+                        + "(SELECT COUNT(*) FROM Lessons l2 WHERE l2.TopicId = t.TopicId AND l2.IsActive = 1) AS lessons, "
+                        + "COALESCE(st.attempts, 0) AS attempts, COALESCE(st.students, 0) AS students, st.avgScore AS avgScore "
+                        + "FROM Topics t LEFT JOIN (SELECT l.TopicId AS topicId, COUNT(*) AS attempts, "
+                        + "     COUNT(DISTINCT s.StudentId) AS students, AVG(CAST(s.FinalScore AS FLOAT)) AS avgScore "
+                        + "     FROM Submissions s JOIN Lessons l ON l.LessonId = s.LessonId GROUP BY l.TopicId) st "
+                        + "ON st.topicId = t.TopicId WHERE t.IsActive = 1 "
+                        + "ORDER BY t.CreatedAt DESC, t.TopicId DESC", nativeQuery = true)
+        List<ResultGroupRow> topicResultGroups();
+
+        /** Các bài giảng đang hoạt động của một chủ đề kèm thống kê bài làm. */
+        @Query(value = "SELECT l.LessonId AS id, l.Title AS name, 0 AS lessons, "
+                        + "COALESCE(st.attempts, 0) AS attempts, COALESCE(st.students, 0) AS students, st.avgScore AS avgScore "
+                        + "FROM Lessons l LEFT JOIN (SELECT s.LessonId AS lessonId, COUNT(*) AS attempts, "
+                        + "     COUNT(DISTINCT s.StudentId) AS students, AVG(CAST(s.FinalScore AS FLOAT)) AS avgScore "
+                        + "     FROM Submissions s GROUP BY s.LessonId) st ON st.lessonId = l.LessonId "
+                        + "WHERE l.TopicId = :topicId AND l.IsActive = 1 "
+                        + "ORDER BY l.DisplayOrder ASC, l.LessonId ASC", nativeQuery = true)
+        List<ResultGroupRow> lessonResultGroups(@Param("topicId") Integer topicId);
+
+        /** Bài làm của học sinh thuộc một bài giảng (phân trang, mới nhất trước). */
+        @EntityGraph(attributePaths = { "student", "question", "lesson", "reviewedBy" })
+        Page<Submission> findByLesson_LessonId(Integer lessonId, Pageable pageable);
+
         /**
          * Các lần làm SAI một câu của học sinh, mới nhất trước (điều kiện mở gia sư chế
          * độ QUESTION, UC-TUT-01).

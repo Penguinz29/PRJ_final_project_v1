@@ -1,11 +1,11 @@
-# 🎓 EduTutor Math 12
+# 🎓 EduTutor Math 9
 
-**Nền tảng học tập và ôn thi Toán 12 tích hợp AI (Google Gemini)**
+**Nền tảng học tập và ôn thi Toán 9 tích hợp AI (Google Gemini)**
 
 > Đồ án môn **PRJ301 – Java Web Application**, FPT University
 > Phiên bản **2.1.0** · nhánh `project-v2`
 
-EduTutor Math 12 là website gia sư Toán lớp 12 (SGK Kết nối tri thức) cho 3 nhóm người dùng: **Admin, Giáo viên, Học sinh**. Hệ thống kết hợp quản lý học tập (bài giảng, ngân hàng câu hỏi, luyện trắc nghiệm) với 3 tính năng AI chạy thật:
+EduTutor Math 9 là website gia sư Toán lớp 9 (SGK Kết nối tri thức với cuộc sống, Tập 1 + Tập 2: 10 chương, 56 bài học, kèm video bài giảng VietJack) cho 3 nhóm người dùng: **Admin, Giáo viên, Học sinh**. Hệ thống kết hợp quản lý học tập (bài giảng, ngân hàng câu hỏi, luyện trắc nghiệm) với 3 tính năng AI chạy thật:
 
 | Tính năng AI | Mô tả |
 |---|---|
@@ -103,10 +103,7 @@ PRJ_final_project_v1/
 │   ├── SRS.md, FRS.md, Claude.md          # Đặc tả yêu cầu, đặc tả chức năng, quy tắc kỹ thuật
 │   ├── docs/                              # DATABASE.md, ERD.md, ERD + đặc tả ràng buộc (.docx)
 │   └── sql/
-│       ├── 01_schema.sql                  # Tạo CSDL MathTutorDB + 10 bảng (XÓA CSDL cũ cùng tên)
-│       ├── 02_data.sql                    # Dữ liệu mẫu: người dùng, cấu hình AI…
-│       ├── 04_data_sgk_toan12.sql         # Nội dung SGK Toán 12 KNTT (thay nội dung mẫu cũ)
-│       └── 06_insert_submissions_sgk.sql  # Lịch sử bài làm mẫu (trắc nghiệm + tự luận)
+│       └── MathTutorDB.sql                # Tạo CSDL MathTutorDB + 10 bảng (XÓA CSDL cũ cùng tên) và nạp toàn bộ dữ liệu mẫu
 └── src/
     ├── main/
     │   ├── java/
@@ -121,7 +118,7 @@ PRJ_final_project_v1/
     │   │   └── util/          # HtmlSanitizer, LatexNormalizer, ScoreUtil, YoutubeUtil…
     │   ├── resources/         # application.properties, messages.properties, logback.xml
     │   └── webapp/
-    │       ├── static/        # css, js, img (ảnh hình vẽ SGK ở img/sgk)
+    │       ├── static/        # css, js, img (ảnh hình vẽ SGK Toán 9 ở img/sgk9)
     │       └── WEB-INF/       # views/ (JSP), tags/ (tag file dùng lại)
     └── test/                  # UnitTests (không cần DB) + *IT (cần SQL Server)
 ```
@@ -134,15 +131,10 @@ PRJ_final_project_v1/
 JDK 17 · Maven 3.9+ (hoặc Maven đi kèm NetBeans) · Tomcat 10.1 · SQL Server (bật TCP/IP cổng 1433).
 
 ### Bước 1 – Tạo cơ sở dữ liệu
-Chạy trong SSMS, theo thứ tự, các file trong `document/sql/`:
-
-1. `01_schema.sql` – tạo `MathTutorDB` (**xóa và tạo lại** nếu đã tồn tại).
-2. `02_data.sql` – dữ liệu mẫu.
-3. `04_data_sgk_toan12.sql` – nội dung SGK Toán 12 (7 chủ đề, 26 bài, 63 câu MCQ, 182 câu tự luận). Chỉ chạy một lần; muốn chạy lại phải dựng lại DB.
-4. `06_insert_submissions_sgk.sql` – (tùy chọn) lịch sử bài làm mẫu.
+Chạy trong SSMS một file duy nhất `document/sql/MathTutorDB.sql`. Script **xóa và tạo lại** `MathTutorDB` nếu đã tồn tại, tạo 10 bảng rồi nạp toàn bộ dữ liệu: người dùng, cấu hình AI, nội dung SGK Toán 9 (10 chủ đề, 56 bài học, mỗi bài từ Bài 1 đến Bài 32 có 10 câu trắc nghiệm), video bài giảng VietJack và lịch sử bài làm mẫu. Muốn nạp lại dữ liệu sạch thì chạy lại chính file này.
 
 > Dùng `sqlcmd` thì thêm cờ `-x` vì dữ liệu chứa ký tự `$(`:
-> `sqlcmd -S localhost -U sa -P <mật khẩu> -C -x -f 65001 -i 02_data.sql`
+> `sqlcmd -S localhost -U sa -P <mật khẩu> -C -x -f 65001 -i MathTutorDB.sql`
 
 ### Bước 2 – Cấu hình kết nối
 Sửa `src/main/resources/application.properties` (`db.url`, `db.username`, `db.password`) hoặc đặt biến môi trường `DB_URL`, `DB_USER`, `DB_PASS` (ưu tiên cao hơn). Ảnh bài làm tự luận lưu ở `app.upload-dir` (mặc định `C:/edututor/uploads`, đổi bằng `UPLOAD_DIR`).
@@ -176,7 +168,7 @@ Mật khẩu chung: **`EduTutor@123`**
 | Vai trò | Tên đăng nhập | Mục đích |
 |---|---|---|
 | Admin | `admin` | Quản trị, cấu hình AI |
-| Giáo viên | `teacher1` | Sở hữu nội dung SGK, sinh đề AI, duyệt tự luận |
+| Giáo viên | `teacher1` | Sở hữu toàn bộ nội dung SGK Toán 9, sinh đề AI, duyệt tự luận |
 | Giáo viên | `teacher2` | Quản lý bài tập, theo dõi học sinh |
 | Học sinh | `student1`, `student2` | Làm bài trắc nghiệm, nộp tự luận, xem lịch sử |
 
@@ -188,7 +180,7 @@ Mật khẩu chung: **`EduTutor@123`**
 - **AI ngoài transaction:** lời gọi Gemini nằm ngoài transaction; các endpoint AI trả `CompletableFuture` chạy trên thread pool `aiExecutor`, không chặn luồng Tomcat.
 - **Phản hồi API thống nhất:** `/api/**` trả `{success, message, data, errors}`; `GlobalExceptionHandler` ánh xạ lỗi sang mã HTTP (400, 401, 403, 404, 409, 422, 502/503/504, 500 kèm mã tham chiếu).
 - **Độ bền của AI:** tự thử lại tối đa 3 lần, chuyển model dự phòng khi 503/504, tự vá dấu `\` của LaTeX trong JSON, chuẩn hóa LaTeX để KaTeX hiển thị được; lỗi 429 báo ngay.
-- **Hình trong đề:** ảnh SGK nhúng bằng `<img src="/static/img/sgk/...">`; bộ sanitize chỉ cho phép ảnh có `src` bắt đầu bằng `/static/img/`.
+- **Hình trong đề:** ảnh SGK nhúng bằng `<img src="/static/img/sgk9/...">`; bộ sanitize chỉ cho phép ảnh có `src` bắt đầu bằng `/static/img/`.
 - **Tiếng Việt:** mọi file lưu UTF-8; `CharacterEncodingFilter` được đăng ký trong `WebAppInitializer`.
 
 ---

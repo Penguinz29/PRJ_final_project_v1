@@ -1,4 +1,4 @@
-# ERD - CSDL MathTutorDB (EduTutor Math 12)
+# ERD - CSDL MathTutorDB (EduTutor Math 9)
 
 ## 1. Sơ đồ quan hệ thực thể
 

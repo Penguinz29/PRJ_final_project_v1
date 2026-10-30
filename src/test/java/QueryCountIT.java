@@ -28,7 +28,7 @@ import org.springframework.context.annotation.AnnotationConfigApplicationContext
 /**
  * TC-DB-02 / TC-DB-03: khởi động Root context với {@code hibernate.hbm2ddl.auto=none} (Hibernate nạp đủ Entity,
  * không lỗi mapping) và kiểm tra các màn hình danh sách KHÔNG bị N+1: số câu SQL cố định, không tăng theo số dòng.
- * Cần SQL Server đã nạp document/sql/01_schema.sql + 02_data.sql (xem EduTutorIT để biết cách chạy).
+ * Cần SQL Server đã nạp document/sql/MathTutorDB.sql (xem EduTutorIT để biết cách chạy).
  */
 @EnabledIfSystemProperty(named = "it.db.url", matches = ".+")
 class QueryCountIT {

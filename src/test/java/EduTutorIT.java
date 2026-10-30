@@ -44,7 +44,7 @@ import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 /**
  * Kiểm thử tích hợp end-to-end (tên *IT: không chạy trong {@code mvn package}): Tomcat nhúng + toàn bộ Spring MVC +
  * Spring Data JPA/Hibernate + SQL Server thật + Gemini giả (mock HTTP).
- * Cần một CSDL RIÊNG đã nạp document/sql/01_schema.sql + 02_data.sql (đổi tên MathTutorDB trong 2 file, vd.
+ * Cần một CSDL RIÊNG đã nạp document/sql/MathTutorDB.sql (đổi tên MathTutorDB trong file, vd.
  * thành MathTutorDB_verify);
  * chạy riêng:
  * <pre>
@@ -329,7 +329,7 @@ class EduTutorIT {
                     String sys = req.path("system_instruction").path("parts").path(0).path("text").asText("");
                     if (sys.isEmpty()) {
                         text = "Pong";
-                    } else if (sys.contains("giám khảo")) {
+                    } else if (sys.contains("chấm bài")) {
                         text = "{\"extractedText\":\"$y=x^2$\",\"score\":7.4,\"detailedFeedback\":\"Sai dấu ở dòng 2\","
                                 + "\"suggestedCorrection\":\"$x=1$\"}";
                     } else if (sys.contains("từng bước")) {
@@ -372,6 +372,51 @@ class EduTutorIT {
 
         // dọn dữ liệu của các lần chạy trước
         resetDatabase();
+        createFixture();
+    }
+
+    // Bài học riêng của test (tiêu đề tiền tố it_ nên resetDatabase dọn được): không phụ thuộc ID của dữ liệu seed
+    static int fxLesson;
+    /** MCQ mức 2, nội dung có "x^3 - 3x"; đáp án đúng A. */
+    static int fxCubic;
+    static int fxCubicA;
+    static int fxCubicB;
+    /** MCQ mức 1, nội dung có "e^x"; đáp án đúng A. */
+    static int fxExp;
+    static int fxExpA;
+    /** Câu tự luận mức 2. */
+    static int fxEssay;
+
+    static void createFixture() throws Exception {
+        int teacher = count("SELECT UserId FROM Users WHERE Username = 'teacher1'");
+        int topic = count("INSERT INTO Topics (TopicName, [Description], TeacherId, OrderIndex, IsActive) "
+                + "OUTPUT INSERTED.TopicId VALUES (N'it_Chủ đề kiểm thử', N'Dữ liệu kiểm thử', ?, 99, 1)", teacher);
+        fxLesson = count("INSERT INTO Lessons (TopicId, Title, Summary, Content, DisplayOrder, IsActive, CreatedBy) "
+                + "OUTPUT INSERTED.LessonId VALUES (?, N'it_Bài kiểm thử: Cực trị của hàm số', N'Dữ liệu kiểm thử', "
+                + "N'<p>Dữ liệu kiểm thử</p>', 1, 1, ?)", topic, teacher);
+        fxCubic = mcq(teacher, 2, "Đạo hàm của hàm số $y = x^3 - 3x$ là", "$3x^2 - 3$", "$3x^2$", "$x^2 - 3$", "$3x - 3$");
+        fxCubicA = option(fxCubic, "A");
+        fxCubicB = option(fxCubic, "B");
+        fxExp = mcq(teacher, 1, "Đạo hàm của hàm số $y = e^x$ là", "$e^x$", "$xe^{x-1}$", "$\\ln x$", "$0$");
+        fxExpA = option(fxExp, "A");
+        fxEssay = count("INSERT INTO Questions (LessonId, QuestionType, Content, [Level], IsAiGenerated, IsActive, TeacherId) "
+                + "OUTPUT INSERTED.QuestionId VALUES (?, 'ESSAY', N'Tìm giá trị lớn nhất của biểu thức $A = -x^2 + 4x$.', "
+                + "2, 0, 1, ?)", fxLesson, teacher);
+    }
+
+    /** Thêm câu trắc nghiệm vào bài học kiểm thử; phương án đầu tiên (A) là đáp án đúng. */
+    static int mcq(int teacher, int level, String content, String... options) throws Exception {
+        int qid = count("INSERT INTO Questions (LessonId, QuestionType, Content, [Level], IsAiGenerated, IsActive, TeacherId) "
+                + "OUTPUT INSERTED.QuestionId VALUES (?, 'MCQ', ?, ?, 0, 1, ?)", fxLesson, content, level, teacher);
+        for (int i = 0; i < options.length; i++) {
+            exec("INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES (?, ?, ?, ?)",
+                    qid, String.valueOf((char) ('A' + i)), options[i], i == 0 ? 1 : 0);
+        }
+        return qid;
+    }
+
+    static int option(int questionId, String letter) throws Exception {
+        return count("SELECT OptionId FROM QuestionOptions WHERE QuestionId = ? AND OptionLetter = ?", questionId, letter);
     }
 
     /** Đưa CSDL về trạng thái seed để chạy lại được nhiều lần. */
@@ -550,7 +595,7 @@ class EduTutorIT {
             Resp r = c.get(path);
             assertEquals(200, r.status(), path + " -> " + r.body());
         }
-        assertTrue(c.get("/student/quiz?lessonId=1").has("data-qid=\"1\""));
+        assertTrue(c.get("/student/quiz?lessonId=" + fxLesson).has("data-qid=\"" + fxCubic + "\""));
         assertTrue(c.get("/student/essay?lessonId=2").has("essayForm"));
         // trang không tồn tại / id sai chuyển về danh sách
         assertEquals(302, c.get("/student/lesson?id=9999").status());
@@ -567,18 +612,18 @@ class EduTutorIT {
     void quizPageFiltersAndShufflesQuestions() throws Exception {
         Client c = new Client();
         c.login("student2", "123456");
-        // Lọc mức độ: bài 1 có câu 1 (mức 2, x^3 - 3x) và câu 2 (mức 1, e^x)
-        Resp easy = c.get("/student/quiz?lessonId=1&difficulty=1");
+        // Lọc mức độ: bài kiểm thử có câu mức 2 (x^3 - 3x) và câu mức 1 (e^x), không có câu mức 3
+        Resp easy = c.get("/student/quiz?lessonId=" + fxLesson + "&difficulty=1");
         assertTrue(easy.has("e^x") && !easy.has("x^3 - 3x"), "chỉ còn câu mức Dễ");
-        Resp medium = c.get("/student/quiz?lessonId=1&difficulty=MEDIUM");
+        Resp medium = c.get("/student/quiz?lessonId=" + fxLesson + "&difficulty=MEDIUM");
         assertTrue(medium.has("x^3 - 3x") && !medium.has("e^x"));
-        assertTrue(c.get("/student/quiz?lessonId=1&difficulty=3").has("chưa có câu hỏi trắc nghiệm ở mức độ đã chọn"));
+        assertTrue(c.get("/student/quiz?lessonId=" + fxLesson + "&difficulty=3").has("chưa có câu hỏi trắc nghiệm ở mức độ đã chọn"));
 
         // Xáo trộn: thứ tự câu thay đổi giữa các lần tải (xác suất trùng 20 lần liên tiếp ~ 1/2^19)
         java.util.Set<String> orders = new java.util.HashSet<>();
         java.util.regex.Pattern qid = java.util.regex.Pattern.compile("data-qid=\"(\\d+)\"");
         for (int i = 0; i < 20 && orders.size() < 2; i++) {
-            java.util.regex.Matcher m = qid.matcher(c.get("/student/quiz?lessonId=1").body());
+            java.util.regex.Matcher m = qid.matcher(c.get("/student/quiz?lessonId=" + fxLesson).body());
             StringBuilder order = new StringBuilder();
             while (m.find()) {
                 order.append(m.group(1)).append(',');
@@ -588,54 +633,55 @@ class EduTutorIT {
         assertEquals(2, orders.size(), "thứ tự câu được xáo trộn: " + orders);
 
         // Số câu ép vào 5–30
-        assertTrue(c.get("/student/quiz?lessonId=1&limit=1").has("<option value=\"5\" selected"));
-        assertTrue(c.get("/student/quiz?lessonId=1&limit=99").has("<option value=\"30\" selected"));
+        assertTrue(c.get("/student/quiz?lessonId=" + fxLesson + "&limit=1").has("<option value=\"5\" selected"));
+        assertTrue(c.get("/student/quiz?lessonId=" + fxLesson + "&limit=99").has("<option value=\"30\" selected"));
 
         // Luồng nộp cả bài cũ đã gỡ (chấm từng câu qua API)
-        int old = c.form("/student/quizSubmit", Map.of("lessonId", "1", "question_1", "A")).status();
+        int old = c.form("/student/quizSubmit", Map.of("lessonId", "" + fxLesson, "question_" + fxCubic, "A")).status();
         assertTrue(old == 404 || old == 405, "không còn /student/quizSubmit: " + old);
 
         // Lịch sử vẫn ghi từng câu đã nộp qua API
-        assertEquals(200, c.json("/api/student/submit-quiz-answer", "{\"questionId\":2,\"selectedOptionId\":5}").status());
+        assertEquals(200, c.json("/api/student/submit-quiz-answer", "{\"questionId\":" + fxExp + ",\"selectedOptionId\":" + fxExpA + "}").status());
         assertTrue(c.get("/student/history?type=MCQ").has("e^x"));
     }
 
     @Test
     @Order(12)
     void quizAnswerApiReturnsExplanation() throws Exception {
-        exec("UPDATE Questions SET ExplanationLatex = N'Lời giải $y''=3x^2-3$' WHERE QuestionId = 1");
+        exec("UPDATE Questions SET ExplanationLatex = N'Lời giải $y''=3x^2-3$' WHERE QuestionId = ?", fxCubic);
         Client c = new Client();
         c.login("student3", "123456");
         // TC-SEC-08: trang làm bài không chứa lời giải / cờ đúng-sai (BR-11)
-        Resp quizPage = c.get("/student/quiz?lessonId=1");
+        Resp quizPage = c.get("/student/quiz?lessonId=" + fxLesson);
         assertFalse(quizPage.has("3x^2-3"), "chưa nộp thì không có nội dung lời giải (BR-11)");
         assertFalse(quizPage.has("correctOptionId\":"), "không có đáp án đúng nhúng sẵn trong trang");
         assertFalse(quizPage.has("IsCorrect"));
-        Resp wrong = c.json("/api/student/submit-quiz-answer", "{\"questionId\":1,\"selectedOptionId\":2}");
+        Resp wrong = c.json("/api/student/submit-quiz-answer", "{\"questionId\":" + fxCubic + ",\"selectedOptionId\":" + fxCubicB + "}");
         assertEquals(200, wrong.status(), wrong.body());
         JsonNode j = JSON.readTree(wrong.body());
         assertTrue(j.get("success").asBoolean());
         j = j.get("data");
         assertFalse(j.get("isCorrect").asBoolean());
         assertEquals("A", j.get("correctOptionLabel").asText());
-        assertEquals(1, j.get("correctOptionId").asInt(), "id phương án đúng để tô xanh");
+        assertEquals(fxCubicA, j.get("correctOptionId").asInt(), "id phương án đúng để tô xanh");
         assertTrue(j.get("explanationLatex").asText().contains("Lời giải"));
         assertEquals(0.0, j.get("score").asDouble());
         assertTrue(j.get("canAskTutor").asBoolean(), "sai → hiện nút Hỏi gia sư AI");
 
-        Resp right = c.json("/api/student/submit-quiz-answer", "{\"questionId\":1,\"selectedOptionId\":1}");
+        Resp right = c.json("/api/student/submit-quiz-answer", "{\"questionId\":" + fxCubic + ",\"selectedOptionId\":" + fxCubicA + "}");
         assertTrue(JSON.readTree(right.body()).get("data").get("isCorrect").asBoolean());
         assertFalse(JSON.readTree(right.body()).get("data").get("canAskTutor").asBoolean());
         assertEquals(10.0, JSON.readTree(right.body()).get("data").get("score").asDouble(), "đúng = 10 điểm (BR-07)");
-        assertEquals(2, count("SELECT COUNT(*) FROM Submissions WHERE StudentId = 6 AND QuestionId = 1"));
+        assertEquals(2, count("SELECT COUNT(*) FROM Submissions s JOIN Users u ON u.UserId = s.StudentId "
+                + "WHERE u.Username = 'student3' AND s.QuestionId = ?", fxCubic));
 
-        Resp mismatch = c.json("/api/student/submit-quiz-answer", "{\"questionId\":1,\"selectedOptionId\":5}");
+        Resp mismatch = c.json("/api/student/submit-quiz-answer", "{\"questionId\":" + fxCubic + ",\"selectedOptionId\":" + fxExpA + "}");
         assertEquals(400, mismatch.status());
         assertTrue(JSON.readTree(mismatch.body()).get("message").asText().contains("không thuộc"));
-        assertEquals(400, c.json("/api/student/submit-quiz-answer", "{\"questionId\":1}").status());
+        assertEquals(400, c.json("/api/student/submit-quiz-answer", "{\"questionId\":" + fxCubic + "}").status());
         assertEquals(400, c.json("/api/student/submit-quiz-answer", "{\"questionId\":999,\"selectedOptionId\":1}").status());
         // câu tự luận không chấm bằng API trắc nghiệm
-        assertEquals(400, c.json("/api/student/submit-quiz-answer", "{\"questionId\":3,\"selectedOptionId\":1}").status());
+        assertEquals(400, c.json("/api/student/submit-quiz-answer", "{\"questionId\":" + fxEssay + ",\"selectedOptionId\":" + fxCubicA + "}").status());
     }
 
     @Test
@@ -647,8 +693,8 @@ class EduTutorIT {
             c.login("student1", "123456");
             int before = geminiCalls;
             Resp r = c.json("/api/tutor/next-step", "{\"studentInput\":\"bài toán\"}");
-            assertEquals(502, r.status(), r.body());
-            assertTrue(JSON.readTree(r.body()).get("message").asText().contains("GEMINI_API_KEY"));
+            assertEquals(503, r.status(), r.body());
+            assertTrue(JSON.readTree(r.body()).get("message").asText().contains("quản trị viên"));
             assertEquals(before, geminiCalls, "không gọi Gemini khi chưa có key");
         } finally {
             exec("UPDATE AiConfigs SET ConfigValue = 'test-key-123' WHERE ConfigKey = 'GEMINI_API_KEY'");
@@ -806,26 +852,26 @@ class EduTutorIT {
         Client c = new Client();
         c.login("student2", "123456");
         int studentId = count("SELECT UserId FROM Users WHERE Username = 'student2'");
-        exec("DELETE FROM Submissions WHERE StudentId = ? AND QuestionId = 1", studentId);
-        exec("UPDATE Questions SET ExplanationLatex = N'Lời giải nội bộ it' WHERE QuestionId = 1");
+        exec("DELETE FROM Submissions WHERE StudentId = ? AND QuestionId = ?", studentId, fxCubic);
+        exec("UPDATE Questions SET ExplanationLatex = N'Lời giải nội bộ it' WHERE QuestionId = ?", fxCubic);
         script.clear();
         try {
-            assertEquals(403, c.json("/api/tutor/start", "{\"mode\":\"QUESTION\",\"questionId\":1}").status(),
+            assertEquals(403, c.json("/api/tutor/start", "{\"mode\":\"QUESTION\",\"questionId\":" + fxCubic + "}").status(),
                     "chưa có bài nộp sai câu này");
-            assertEquals(200, c.json("/api/student/submit-quiz-answer", "{\"questionId\":1,\"selectedOptionId\":2}").status());
+            assertEquals(200, c.json("/api/student/submit-quiz-answer", "{\"questionId\":" + fxCubic + ",\"selectedOptionId\":" + fxCubicB + "}").status());
             script.add(new String[]{"200", tutorJsonFull(null, 1, 4, false, false, null)});
-            Resp r = c.json("/api/tutor/start", "{\"mode\":\"QUESTION\",\"questionId\":1}");
+            Resp r = c.json("/api/tutor/start", "{\"mode\":\"QUESTION\",\"questionId\":" + fxCubic + "}");
             assertEquals(200, r.status(), r.body());
             int sid = JSON.readTree(r.body()).get("data").get("sessionId").asInt();
-            assertEquals(1, count("SELECT QuestionId FROM TutorSessions WHERE SessionId = ?", sid));
+            assertEquals(fxCubic, count("SELECT QuestionId FROM TutorSessions WHERE SessionId = ?", sid));
             assertTrue(((String) scalar("SELECT ProblemText FROM TutorSessions WHERE SessionId = ?", sid))
                     .contains("Học sinh đã chọn: B."), "đề kèm phương án học sinh đã chọn");
             String sys = JSON.readTree(lastRequestBody).path("system_instruction").path("parts").path(0).path("text").asText();
             assertTrue(sys.contains("Lời giải nội bộ it") && sys.contains("KHÔNG tiết lộ"), "lời giải là tài liệu nội bộ");
             // Trang kết quả có nút mở gia sư cho câu sai
-            assertTrue(c.get("/student/ai-tutor?mode=QUESTION&questionId=1").has("pendingStart = {"));
+            assertTrue(c.get("/student/ai-tutor?mode=QUESTION&questionId=" + fxCubic).has("pendingStart = {"));
         } finally {
-            exec("UPDATE Questions SET ExplanationLatex = NULL WHERE QuestionId = 1");
+            exec("UPDATE Questions SET ExplanationLatex = NULL WHERE QuestionId = ?", fxCubic);
             script.clear();
         }
     }
@@ -838,7 +884,7 @@ class EduTutorIT {
         c.login("student1", "123456");
         script.clear();
 
-        Resp r = c.multipart("/api/student/submit-essay-ocr", Map.of("questionId", "3"), "essayImage", "bai.png",
+        Resp r = c.multipart("/api/student/submit-essay-ocr", Map.of("questionId", "" + fxEssay), "essayImage", "bai.png",
                 "image/png", PNG);
         assertEquals(200, r.status(), r.body());
         JsonNode envelope = JSON.readTree(r.body());
@@ -891,7 +937,7 @@ class EduTutorIT {
         }
         script.add(new String[]{"200", "{\"legible\":false,\"extractedText\":\"\",\"score\":0,"
                 + "\"detailedFeedback\":\"Ảnh mờ\",\"errors\":[],\"suggestedCorrection\":\"\"}"});
-        Resp blurry = c.multipart("/api/student/submit-essay-ocr", Map.of("questionId", "3"), "essayImage", "mo.png",
+        Resp blurry = c.multipart("/api/student/submit-essay-ocr", Map.of("questionId", "" + fxEssay), "essayImage", "mo.png",
                 "image/png", PNG);
         assertEquals(422, blurry.status(), blurry.body());
         assertTrue(blurry.has("Không đọc được bài làm"), blurry.body());
@@ -901,7 +947,7 @@ class EduTutorIT {
         }
 
         // VAL-18: WebP được chấp nhận, lưu đuôi .webp, phục vụ đúng Content-Type
-        Resp webp = c.multipart("/api/student/submit-essay-ocr", Map.of("questionId", "3"), "essayImage", "bai.webp",
+        Resp webp = c.multipart("/api/student/submit-essay-ocr", Map.of("questionId", "" + fxEssay), "essayImage", "bai.webp",
                 "image/webp", webpLossless(800, 600));
         assertEquals(200, webp.status(), webp.body());
         String webpUrl = JSON.readTree(webp.body()).get("data").get("imageUrl").asText();
@@ -912,7 +958,7 @@ class EduTutorIT {
         assertTrue(webpImg.contentType().startsWith("image/webp"), webpImg.contentType());
         // VAL-18: ảnh vượt 4096×4096 bị từ chối trước khi gọi AI
         int callsBefore = geminiCalls;
-        Resp huge = c.multipart("/api/student/submit-essay-ocr", Map.of("questionId", "3"), "essayImage", "to.png",
+        Resp huge = c.multipart("/api/student/submit-essay-ocr", Map.of("questionId", "" + fxEssay), "essayImage", "to.png",
                 "image/png", image("png", 4097, 10));
         assertEquals(400, huge.status(), huge.body());
         assertTrue(huge.has("4096"), huge.body());
@@ -927,24 +973,24 @@ class EduTutorIT {
         assertEquals(404, c.get("/uploads/khong-co-anh.png").status());
 
         // Đầu vào không hợp lệ
-        assertEquals(400, c.multipart("/api/student/submit-essay-ocr", Map.of("questionId", "3"), "essayImage",
+        assertEquals(400, c.multipart("/api/student/submit-essay-ocr", Map.of("questionId", "" + fxEssay), "essayImage",
                 "a.png", "image/png", "day khong phai anh".getBytes(StandardCharsets.UTF_8)).status());
-        assertEquals(400, c.multipart("/api/student/submit-essay-ocr", Map.of("questionId", "3"), "x", "y", "z",
+        assertEquals(400, c.multipart("/api/student/submit-essay-ocr", Map.of("questionId", "" + fxEssay), "x", "y", "z",
                 null).status());
         byte[] big = new byte[5 * 1024 * 1024 + 10];
         System.arraycopy(PNG, 0, big, 0, PNG.length);
-        Resp tooBig = c.multipart("/api/student/submit-essay-ocr", Map.of("questionId", "3"), "essayImage", "b.png",
+        Resp tooBig = c.multipart("/api/student/submit-essay-ocr", Map.of("questionId", "" + fxEssay), "essayImage", "b.png",
                 "image/png", big);
         assertEquals(400, tooBig.status(), tooBig.body());
         assertTrue(tooBig.has("5MB"));
         // câu hỏi trắc nghiệm không dùng API tự luận
-        assertEquals(400, c.multipart("/api/student/submit-essay-ocr", Map.of("questionId", "1"), "essayImage", "a.png",
+        assertEquals(400, c.multipart("/api/student/submit-essay-ocr", Map.of("questionId", "" + fxCubic), "essayImage", "a.png",
                 "image/png", PNG).status());
 
         // Chỉ nhập văn bản (không ảnh) vẫn chấm được
         script.add(new String[]{"200", "{\"extractedText\":\"x\",\"score\":\"9\",\"detailedFeedback\":\"tốt\","
                 + "\"suggestedCorrection\":\"\"}"});
-        Resp t = c.multipart("/api/student/submit-essay-ocr", Map.of("questionId", "3", "studentAnswer", "Lời giải $x$"),
+        Resp t = c.multipart("/api/student/submit-essay-ocr", Map.of("questionId", "" + fxEssay, "studentAnswer", "Lời giải $x$"),
                 "x", "y", "z", null);
         assertEquals(200, t.status(), t.body());
         assertTrue(JSON.readTree(t.body()).get("data").get("imageUrl").isNull());
@@ -956,13 +1002,14 @@ class EduTutorIT {
     void aiHttpErrorsAreTranslatedAndTransientOnesRetried() throws Exception {
         Client c = new Client();
         c.login("student1", "123456");
-        // 400 từ Gemini: không retry
+        // 400 từ Gemini (khóa / model sai): không retry, báo quản trị viên, không lộ lỗi thô của Gemini
         script.clear();
         script.add(new String[]{"400", "API key not valid"});
         int before = geminiCalls;
         Resp bad = c.json("/api/tutor/next-step", "{\"studentInput\":\"x\"}");
-        assertEquals(502, bad.status());
-        assertTrue(bad.has("API key not valid"));
+        assertEquals(503, bad.status(), bad.body());
+        assertTrue(bad.has("quản trị viên"), bad.body());
+        assertFalse(bad.has("API key not valid"));
         assertEquals(1, geminiCalls - before);
         // 503 rồi thành công: retry
         script.clear();
@@ -1017,9 +1064,10 @@ class EduTutorIT {
         }
         // FR-ADM-08: dashboard có đủ các nhóm số liệu
         Resp dash = c.get("/admin/dashboard");
-        for (String label : new String[]{"Người dùng theo vai trò và trạng thái", "do AI sinh", "Phiên gia sư AI đã tạo",
+        String dashText = dash.body().replaceAll("\\s+", " ");
+        for (String label : new String[]{"Người dùng theo vai trò &amp; trạng thái", "do AI sinh", "Phiên gia sư AI đã tạo",
                 "Bài tự luận chấm qua AI", "chờ duyệt", "Lượt làm bài 7 ngày gần nhất"}) {
-            assertTrue(dash.has(label), "dashboard thiếu: " + label);
+            assertTrue(dashText.contains(label), "dashboard thiếu: " + label);
         }
         assertEquals(7, dash.body().split("class=\"week-col\"", -1).length - 1, "đủ 7 cột ngày");
 
@@ -1491,10 +1539,10 @@ class EduTutorIT {
             Resp r = c.get(p);
             assertTrue(r.status() == 200 || r.status() == 302, p + " -> " + r.status() + r.body());
         }
-        Resp filtered = c.get("/teacher/questions?lessonId=1&type=MCQ&level=1");
-        assertTrue(filtered.has("e^x"), "chỉ còn câu mức 1 của bài 1");
+        Resp filtered = c.get("/teacher/questions?lessonId=" + fxLesson + "&type=MCQ&level=1");
+        assertTrue(filtered.has("e^x"), "chỉ còn câu mức 1 của bài kiểm thử");
         assertFalse(filtered.has("x^3 - 3x"));
-        assertTrue(c.get("/teacher/questions?type=ESSAY").has("Tìm giá trị lớn nhất"));
+        assertTrue(c.get("/teacher/questions?lessonId=" + fxLesson + "&type=ESSAY").has("Tìm giá trị lớn nhất"));
 
         Map<String, String> q = new LinkedHashMap<>();
         q.put("action", "create");
@@ -1551,20 +1599,20 @@ class EduTutorIT {
         assertEquals(0, count("SELECT COUNT(*) FROM QuestionOptions WHERE QuestionId = ?", qid));
         // BR-05: câu đã có bài làm → xóa mềm (giữ bản ghi + lịch sử), ẩn khỏi trang quản lý của giáo viên
         c.get("/teacher/questions"); // đọc flash còn tồn đọng
-        c.form("/teacher/questions", Map.of("action", "delete", "id", "1"));
-        assertEquals(1, count("SELECT COUNT(*) FROM Questions WHERE QuestionId = 1"));
-        assertEquals(0, count("SELECT CAST(IsActive AS INT) FROM Questions WHERE QuestionId = 1"));
-        assertTrue(count("SELECT COUNT(*) FROM Submissions WHERE QuestionId = 1") > 0, "lịch sử còn nguyên");
+        c.form("/teacher/questions", Map.of("action", "delete", "id", "" + fxCubic));
+        assertEquals(1, count("SELECT COUNT(*) FROM Questions WHERE QuestionId = ?", fxCubic));
+        assertEquals(0, count("SELECT CAST(IsActive AS INT) FROM Questions WHERE QuestionId = ?", fxCubic));
+        assertTrue(count("SELECT COUNT(*) FROM Submissions WHERE QuestionId = ?", fxCubic) > 0, "lịch sử còn nguyên");
         assertTrue(c.get("/teacher/questions").has("xóa mềm"));
-        assertFalse(c.get("/teacher/questions?lessonId=1&type=MCQ").has("x^3 - 3x"), "câu đã xóa mềm bị ẩn");
-        Resp editDeleted = c.get("/teacher/questions?action=edit&id=1");
+        assertFalse(c.get("/teacher/questions?lessonId=" + fxLesson + "&type=MCQ").has("x^3 - 3x"), "câu đã xóa mềm bị ẩn");
+        Resp editDeleted = c.get("/teacher/questions?action=edit&id=" + fxCubic);
         assertFalse(editDeleted.status() == 200 && editDeleted.has("x^3 - 3x"), "không mở form sửa câu đã xóa mềm");
         Client st = new Client();
         st.login("student1", "123456");
-        assertEquals(200, st.json("/api/student/submit-quiz-answer", "{\"questionId\":1,\"selectedOptionId\":1}").status(),
+        assertEquals(200, st.json("/api/student/submit-quiz-answer", "{\"questionId\":" + fxCubic + ",\"selectedOptionId\":" + fxCubicA + "}").status(),
                 "học sinh vẫn ôn tập được câu đã xóa mềm");
-        assertTrue(st.get("/student/quiz?lessonId=1").has("x^3 - 3x"), "câu đã xóa mềm vẫn có trong đề ôn tập");
-        exec("UPDATE Questions SET IsActive = 1 WHERE QuestionId = 1");
+        assertTrue(st.get("/student/quiz?lessonId=" + fxLesson).has("x^3 - 3x"), "câu đã xóa mềm vẫn có trong đề ôn tập");
+        exec("UPDATE Questions SET IsActive = 1 WHERE QuestionId = ?", fxCubic);
 
         // phân trang: tạo thêm nhiều câu hỏi tự luận
         for (int i = 0; i < 11; i++) {
@@ -1715,7 +1763,7 @@ class EduTutorIT {
         assertEquals(400, c.json("/api/teacher/generate-questions", "{\"difficultyLevel\":9,\"lessonId\":1}").status());
         script.add(new String[]{"200", EXAM_JSON});
         Resp hard = c.json("/api/teacher/generate-questions",
-                "{\"lessonId\":2,\"difficultyLevel\":\"HARD\",\"count\":5}");
+                "{\"lessonId\":" + fxLesson + ",\"difficultyLevel\":\"HARD\",\"count\":5}");
         assertEquals(200, hard.status(), hard.body());
         assertTrue(lastRequestBody.contains("Vận dụng cao"), "HARD ứng với mức 3");
         assertTrue(lastRequestBody.contains("Cực trị"), "tên bài học tra từ lessonId trong CSDL");

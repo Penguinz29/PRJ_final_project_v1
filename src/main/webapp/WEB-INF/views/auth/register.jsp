@@ -9,7 +9,7 @@
                 <head>
                     <meta charset="UTF-8">
                     <meta name="viewport" content="width=device-width, initial-scale=1">
-                    <title>Đăng ký - MathTutor 12</title>
+                    <title>Đăng ký - MathTutor 9</title>
                     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
                         rel="stylesheet">
                     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
@@ -416,10 +416,10 @@
                             <aside class="auth-aside" aria-hidden="true">
                                 <div class="brand">
                                     <span class="brand-icon-wrap"><i class="bi bi-calculator-fill"></i></span>
-                                    <span>MathTutor 12</span>
+                                    <span>MathTutor 9</span>
                                 </div>
                                 <p class="aside-title">Tạo tài khoản<br>học sinh mới</p>
-                                <p class="aside-sub">Đăng ký miễn phí để luyện thi Toán 12 cùng AI.</p>
+                                <p class="aside-sub">Đăng ký miễn phí để học Toán 9 cùng AI.</p>
 
                                 <div class="rubik-stage">
                                     <img src="${pageContext.request.contextPath}/static/img/rubik-3d.png"

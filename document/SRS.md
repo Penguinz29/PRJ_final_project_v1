@@ -1,6 +1,6 @@
 # ĐẶC TẢ YÊU CẦU PHẦN MỀM (SRS)
 
-# HỆ THỐNG GIA SƯ & LUYỆN THI TOÁN 12 TÍCH HỢP TRÍ TUỆ NHÂN TẠO — EDUTUTOR MATH 12
+# HỆ THỐNG GIA SƯ TOÁN 9 TÍCH HỢP TRÍ TUỆ NHÂN TẠO — EDUTUTOR MATH 9
 
 | Thông tin | Nội dung |
 |---|---|
@@ -10,25 +10,25 @@
 | Giao diện | JSP + JSTL + **Bootstrap 5.3** (framework UI duy nhất) + KaTeX |
 | AI | Google Gemini REST API (model cấu hình được trong CSDL) |
 | Tài liệu đi kèm | `EduTutor_FRS.md` (đặc tả chức năng chi tiết), `EduTutor_Database.sql` (DDL + dữ liệu mẫu) |
-| Quy ước tham chiếu | Bộ tài liệu gốc đặt trong `docs/` (`EduTutor_SRS.md`, `EduTutor_FRS.md`, `EduTutor_Database.sql`). Trong repo hiện tại các tệp này nằm ở `document/SRS.md`, `document/FRS.md` và `document/sql/01_schema.sql` + `02_data.sql`; mọi dẫn chiếu `EduTutor_*` trong tài liệu được hiểu là các tệp tương ứng này. Tài khoản mẫu: `admin`, `teacher1`, `student1`…, mật khẩu **`EduTutor@123`** |
+| Quy ước tham chiếu | Bộ tài liệu gốc đặt trong `docs/` (`EduTutor_SRS.md`, `EduTutor_FRS.md`, `EduTutor_Database.sql`). Trong repo hiện tại các tệp này nằm ở `document/SRS.md`, `document/FRS.md` và `document/sql/MathTutorDB.sql`; mọi dẫn chiếu `EduTutor_*` trong tài liệu được hiểu là các tệp tương ứng này. Tài khoản mẫu: `admin`, `teacher1`, `student1`…, mật khẩu **`EduTutor@123`** |
 
 ---
 
 ## 1. GIỚI THIỆU
 
 ### 1.1. Mục đích
-Tài liệu mô tả đầy đủ yêu cầu chức năng, phi chức năng, dữ liệu, giao diện và tiêu chí nghiệm thu của EduTutor Math 12. Đây là chuẩn tham chiếu cho thiết kế, lập trình, kiểm thử và bảo vệ đồ án.
+Tài liệu mô tả đầy đủ yêu cầu chức năng, phi chức năng, dữ liệu, giao diện và tiêu chí nghiệm thu của EduTutor Math 9. Đây là chuẩn tham chiếu cho thiết kế, lập trình, kiểm thử và bảo vệ đồ án.
 
 ### 1.2. Phạm vi
-EduTutor Math 12 là website gia sư hỗ trợ học **Toán lớp 12** (Chương trình GDPT 2018) cho 3 nhóm người dùng: **Admin, Teacher, Student**. Hệ thống gồm:
+EduTutor Math 9 là website gia sư hỗ trợ học **Toán lớp 9** (Chương trình GDPT 2018, SGK Kết nối tri thức với cuộc sống) cho 3 nhóm người dùng: **Admin, Teacher, Student**. Hệ thống gồm:
 
-- Quản lý người dùng, chủ đề, bài học và **bài giảng** (video, YouTube, văn bản, liên kết). Hai cấp **Chủ đề → Bài học** đóng vai trò "chuyên đề / môn học" của Toán 12; giao diện hiển thị nhãn **"Chuyên đề / Môn học"**.
+- Quản lý người dùng, chủ đề, bài học và **bài giảng** (video, YouTube, văn bản, liên kết). Hai cấp **Chủ đề → Bài học** đóng vai trò "chuyên đề / môn học" của Toán 9 (mỗi chương SGK là một chủ đề, mỗi bài là một bài học); giao diện hiển thị nhãn **"Chuyên đề / Môn học"**.
 - Ngân hàng câu hỏi **trắc nghiệm và tự luận**; giáo viên có thể nhờ AI sinh đề.
 - Luyện tập trắc nghiệm, nhận phản hồi tức thì; khi làm sai, học sinh được **gia sư AI hướng dẫn từng bước**.
 - Luyện tập tự luận: học sinh **chụp/tải bài giải (ảnh viết tay, PDF hoặc Word .docx)**, AI nhận diện, chấm và nhận xét; giáo viên duyệt lại điểm.
 - Admin **cấu hình AI** (khóa API, model, tham số, prompt) từ giao diện, không cần sửa code.
 
-**Phạm vi nội dung:** Toán 12 với 4 chuyên đề mẫu (Đạo hàm – khảo sát hàm số; Nguyên hàm – tích phân; Oxyz; Xác suất có điều kiện). Thiết kế CSDL (`topics → lessons`) không gắn cứng với môn Toán 12, nên có thể mở rộng sang môn/lớp khác (Lý, Hóa, Sinh, Địa, Sử; lớp 6–12) bằng cách thêm bảng `subjects` và cột `grade` mà không đổi kiến trúc. Gia sư AI **không giới hạn trong 4 chuyên đề**: học sinh có thể hỏi bất kỳ bài toán phổ thông nào (xem FR-TUT-01).
+**Phạm vi nội dung:** Toán 9 theo SGK Kết nối tri thức với cuộc sống (Tập 1: Chương I–V — hệ phương trình bậc nhất hai ẩn, bất phương trình bậc nhất một ẩn, căn bậc hai và căn bậc ba, hệ thức lượng trong tam giác vuông, đường tròn; Tập 2: Chương VI–X — hàm số y = ax² và phương trình bậc hai, tần số và tần số tương đối, xác suất, đường tròn ngoại tiếp và nội tiếp, hình khối thực tiễn): 10 chủ đề, 56 bài học (gồm Luyện tập chung và Bài tập cuối chương), mỗi bài kèm video bài giảng VietJack; mục "Bài tập" của sách được số hóa thành 342 câu hỏi (44 trắc nghiệm, 298 tự luận). Chưa gồm Hoạt động thực hành trải nghiệm và Bài tập ôn tập cuối năm. Thiết kế CSDL (`topics → lessons`) không gắn cứng với môn Toán 9, nên có thể mở rộng sang môn/lớp khác (Lý, Hóa, Sinh, Địa, Sử; lớp 6–12) bằng cách thêm bảng `subjects` và cột `grade` mà không đổi kiến trúc. Gia sư AI **không giới hạn trong 10 chương của sách**: học sinh có thể hỏi bất kỳ bài toán phổ thông nào (xem FR-TUT-01).
 
 ### 1.3. Đối chiếu yêu cầu đề bài
 
@@ -41,7 +41,7 @@ EduTutor Math 12 là website gia sư hỗ trợ học **Toán lớp 12** (Chươ
 | R5 | AI giải được bất kỳ bài phổ thông khi được hỏi, khác biệt là cấu hình để tương tác | FR-TUT-01 (hỏi tự do), prompt cấu hình ở FR-ADM-06 |
 | R6 | Tương tác giải từng bước; AI dừng lại bắt học sinh nhập số liệu/dữ liệu mới rồi mới giải tiếp | FR-TUT-02, FR-TUT-04 |
 | R7 | Admin đủ quyền thêm giáo viên, học sinh… | FR-ADM-01 → FR-ADM-05 |
-| R8 | Giáo viên thêm bài giảng, câu hỏi, chủ đề, môn học | FR-TEA-01 → FR-TEA-06. Hệ thống tổ chức phân cấp **Chủ đề (`topics`) → Bài học (`lessons`)**; hai cấp này đóng vai trò các chuyên đề môn học của Toán 12 và được gắn nhãn **"Chuyên đề / Môn học"** trên giao diện. Thực thể `Subject` (môn học cấp cao, nhiều môn/nhiều lớp) là **hướng mở rộng (Future Scope)** nêu ở mục 1.2, chưa thuộc phạm vi hiện tại |
+| R8 | Giáo viên thêm bài giảng, câu hỏi, chủ đề, môn học | FR-TEA-01 → FR-TEA-06. Hệ thống tổ chức phân cấp **Chủ đề (`topics`) → Bài học (`lessons`)**; hai cấp này đóng vai trò các chuyên đề môn học của Toán 9 và được gắn nhãn **"Chuyên đề / Môn học"** trên giao diện. Thực thể `Subject` (môn học cấp cao, nhiều môn/nhiều lớp) là **hướng mở rộng (Future Scope)** nêu ở mục 1.2, chưa thuộc phạm vi hiện tại |
 | R9 | Học sinh chọn bài, chủ đề, bắt đầu luyện trắc nghiệm, nhận nhận xét AI cho câu sai | FR-STU-01, 03, 04, 05 |
 | R10 | Học sinh luyện tự luận, up ảnh chữ viết tay, nhận nhận xét AI cho câu sai | FR-STU-07, FR-OCR-01 → 04 |
 | R11 | Giao diện dùng 1 framework bất kỳ | Bootstrap 5.3 (mục 2.5) |
@@ -84,7 +84,7 @@ flowchart LR
         REP["Repository\n(Spring Data JPA\n+ Hibernate)"]
         FS[("Thư mục ảnh\n/uploads/essays")]
     end
-    DB[("SQL Server\nEduTutorMath12")]
+    DB[("SQL Server\nMathTutorDB")]
     G["Google Gemini API"]
     UI --> INT --> CTL --> SVC
     SVC --> REP --> DB
@@ -213,7 +213,7 @@ flowchart LR
     S([Student]):::actor
     G([Gemini API]):::ext
 
-    subgraph SYS["EduTutor Math 12"]
+    subgraph SYS["EduTutor Math 9"]
         direction TB
         U1(Đăng nhập / Đăng xuất / Hồ sơ)
         U2(Quản lý người dùng)
@@ -507,7 +507,7 @@ Ghi chú thiết kế:
 - Rubric nêu "5–6 bảng"; đồ án có **6 bảng lõi** (`users`, `topics`, `lessons`, `questions`, `submissions`, `tutor_sessions`) cộng **4 bảng phụ** xuất hiện *do chuẩn hóa*: `lesson_materials`, `question_options`, `tutor_messages` là thuộc tính đa trị (quan hệ 1–N) buộc phải tách để đạt 1NF/3NF; `ai_configs` lưu cấu hình AI để Admin đổi không cần sửa code. Có thể nhóm thành 4 cụm: *người dùng* (users) • *nội dung* (topics, lessons, lesson_materials, questions, question_options) • *kết quả* (submissions) • *AI* (ai_configs, tutor_sessions, tutor_messages).
 - Mỗi bảng ánh xạ **một Entity JPA** (10 Entity); `hbm2ddl.auto=none` — script SQL là nguồn sự thật, Hibernate không tự sửa cấu trúc.
 - Điểm trắc nghiệm quy ra thang 10 (đúng = 10, sai = 0) để thống nhất với tự luận; `is_correct` giữ kết quả đúng/sai.
-- Script đầy đủ (DDL, chỉ mục, dữ liệu mẫu) trong `EduTutor_Database.sql` — trong repo là **2 file**: `document/sql/01_schema.sql` (tạo CSDL, 10 bảng, mọi ràng buộc PK/FK/UNIQUE/CHECK/DEFAULT và chỉ mục; **xóa CSDL cũ cùng tên**) và `document/sql/02_data.sql` (dữ liệu mẫu). CSDL cũ (tạo theo cấu trúc trước đây) được tạo lại bằng 2 file này (chi tiết FRS 1.7). Mật khẩu mẫu của mọi tài khoản seed là **`EduTutor@123`** (đạt VAL-02), được lưu dạng BCrypt.
+- Script đầy đủ (DDL, chỉ mục, dữ liệu mẫu) trong `EduTutor_Database.sql` — trong repo là **1 file** `document/sql/MathTutorDB.sql`: tạo CSDL, 10 bảng, mọi ràng buộc PK/FK/UNIQUE/CHECK/DEFAULT và chỉ mục (**xóa CSDL cũ cùng tên**), rồi nạp toàn bộ dữ liệu mẫu ( người dùng, cấu hình AI, nội dung SGK Toán 9, video, bài làm mẫu). CSDL cũ (tạo theo cấu trúc trước đây) được tạo lại bằng file này (chi tiết FRS 1.7). Mật khẩu mẫu của mọi tài khoản seed là **`EduTutor@123`** (đạt VAL-02), được lưu dạng BCrypt.
 
 ### 6.3. Lưu trữ file
 Tệp bài tự luận (ảnh / PDF / Word) lưu ngoài thư mục web, tại `${app.upload-dir}/essays/{studentId}/{uuid}.{ext}`; CSDL chỉ lưu đường dẫn tương đối. Tệp chỉ được phục vụ qua controller có kiểm tra quyền (chủ bài, giáo viên, admin).
@@ -589,17 +589,17 @@ Tệp bài tự luận (ảnh / PDF / Word) lưu ngoài thư mục web, tại `$
 
 ### 9.1. Kịch bản demo (8 bước)
 
-Tài khoản demo (dữ liệu mẫu): `admin`, `teacher1`, `teacher2`, `student1`…`student5`; mật khẩu chung **`EduTutor@123`**.
+Tài khoản demo (dữ liệu mẫu): `admin`, `teacher1`…`teacher3`, `student1`…`student12` (`student9` bị khóa, `student10` xóa mềm); mật khẩu chung **`EduTutor@123`**. Toàn bộ nội dung SGK do `teacher1` sở hữu.
 
 | Bước | Vai trò | Nội dung | Kết quả mong đợi |
 |---|---|---|---|
 | 1 | Admin | Đăng nhập → Quản lý người dùng → tạo giáo viên mới; mở Cấu hình AI, đặt Temperature 0.3, dán khóa API, bấm **Test kết nối** | Tạo được tài khoản TEACHER; báo kết nối thành công |
 | 2 | Teacher | Đăng nhập → thêm chủ đề/bài học → thêm bài giảng YouTube và văn bản KaTeX | Học sinh sẽ thấy ở bước 3 |
-| 3 | Teacher | Sinh 5 câu trắc nghiệm mức Khó cho "Nguyên hàm – Tích phân" bằng AI → xem trước, sửa, lưu | Câu hỏi vào ngân hàng với `is_ai_generated = 1`, KaTeX hiển thị đúng |
+| 3 | Teacher | Sinh 5 câu trắc nghiệm mức Khó cho "Chương VI. Hàm số y = ax² và phương trình bậc hai" bằng AI → xem trước, sửa, lưu | Câu hỏi vào ngân hàng với `is_ai_generated = 1`, KaTeX hiển thị đúng |
 | 4 | Student | Đăng ký/đăng nhập → chọn bài → xem video và lý thuyết | Video nhúng, công thức hiển thị |
 | 5 | Student | Luyện trắc nghiệm, cố ý chọn sai | Hiện đáp án đúng + lời giải; có nút "Hỏi gia sư AI" |
-| 6 | Student | Bấm "Hỏi gia sư AI" → tương tác từng bước (nhập $y'$, nghiệm $y'=0$, trả lời sai một bước, rồi sửa); hỏi thêm một bài ngoài 4 chuyên đề | AI không giải ngay; sai thì gợi ý; bài mới cần dữ liệu thì AI dừng chờ học sinh nhập |
-| 7 | Student | Làm câu tự luận: tải ảnh bài giải viết tay có sai cận tích phân | AI chép lại bài, chỉ ra lỗi, chấm điểm; có nút hỏi gia sư |
+| 6 | Student | Bấm "Hỏi gia sư AI" → tương tác từng bước (tính $\Delta$, tìm nghiệm $x_1, x_2$ của $x^2-5x+6=0$, trả lời sai một bước, rồi sửa); hỏi thêm một bài ngoài 10 chương của sách | AI không giải ngay; sai thì gợi ý; bài mới cần dữ liệu thì AI dừng chờ học sinh nhập |
+| 7 | Student | Làm câu tự luận: tải ảnh bài giải viết tay có sai dấu khi giải hệ phương trình | AI chép lại bài, chỉ ra lỗi, chấm điểm; có nút hỏi gia sư |
 | 8 | Teacher | Mở bài chờ duyệt, xem ảnh + OCR + điểm AI, sửa điểm, lưu | `final_score` đổi, `ai_score` giữ nguyên, trạng thái `REVIEWED` |
 
 ### 9.2. Tiêu chí nghiệm thu chính

@@ -9,6 +9,7 @@ import service.LessonService;
 import service.TopicService;
 import jakarta.servlet.http.HttpServletRequest;
 import util.FormErrors;
+import util.WebUtil;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.stereotype.Controller;
@@ -17,12 +18,14 @@ import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.SessionAttribute;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
-/** UC-TEA-02: quản lý bài học (Lesson). */
+/** UC-TEA-02: quản lý bài học (Lesson); dùng chung cho giáo viên (/teacher) và Admin (/admin). */
 @Controller
+@RequestMapping({"/teacher", "/admin"})
 public class TeacherLessonController {
 
     private final LessonService lessonService;
@@ -33,7 +36,7 @@ public class TeacherLessonController {
         this.topicService = topicService;
     }
 
-    @GetMapping({"/teacher/lessons", "/teacher/lesson/form"})
+    @GetMapping({"/lessons", "/lesson/form"})
     public String list(@RequestParam(defaultValue = "") String action,
                        @RequestParam(defaultValue = "0") int id,
                        @RequestParam(defaultValue = "0") int topicId,
@@ -42,13 +45,13 @@ public class TeacherLessonController {
         // Mọi giáo viên thấy và thêm/sửa bài học ở mọi chủ đề (nội dung dùng chung).
         model.addAttribute("topics", topicService.getAllTopics());
 
-        boolean formPage = request.getServletPath().equals("/teacher/lesson/form")
+        boolean formPage = request.getServletPath().endsWith("/lesson/form")
                 || "create".equals(action) || "edit".equals(action);
         if (formPage) {
             if ("edit".equals(action)) {
                 LessonView lesson = lessonService.getLessonForEdit(id, user.getUserId(), user.isAdmin()); // BR-03
                 if (lesson == null) {
-                    return "redirect:/teacher/lessons";
+                    return "redirect:" + WebUtil.contentBase(request) + "/lessons";
                 }
                 model.addAttribute("isEdit", true);
                 model.addAttribute("lesson", lesson);
@@ -64,9 +67,10 @@ public class TeacherLessonController {
         return "teacher/lessons";
     }
 
-    @PostMapping("/teacher/lessons")
+    @PostMapping("/lessons")
     public String save(@Valid @ModelAttribute LessonForm form, BindingResult result,
-                       @SessionAttribute(AuthInterceptor.SESSION_USER) SessionUser user, RedirectAttributes redirect) {
+                       @SessionAttribute(AuthInterceptor.SESSION_USER) SessionUser user, RedirectAttributes redirect,
+                       HttpServletRequest request) {
         try {
             switch (form.getAction()) {
                 case "create" -> {
@@ -89,8 +93,9 @@ public class TeacherLessonController {
         } catch (IllegalArgumentException | ConflictException e) {
             redirect.addFlashAttribute("errorFlash", e.getMessage());
         }
+        String lessons = "redirect:" + WebUtil.contentBase(request) + "/lessons";
         return form.getTopicId() > 0 && !"delete".equals(form.getAction())
-                ? "redirect:/teacher/lessons?topicId=" + form.getTopicId() : "redirect:/teacher/lessons";
+                ? lessons + "?topicId=" + form.getTopicId() : lessons;
     }
 
 }

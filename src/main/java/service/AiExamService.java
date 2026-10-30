@@ -20,7 +20,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
- * UC-TEA-02 / FR-TEA-03: sinh đề trắc nghiệm bằng Gemini theo chương trình GDPT 2018 Toán 12.
+ * UC-TEA-02 / FR-TEA-03: sinh đề trắc nghiệm bằng Gemini theo chương trình GDPT 2018 Toán 9.
  * Cấu hình (API key, model...) đọc từ bảng AiConfigs qua GeminiService.
  */
 @Service
@@ -68,7 +68,7 @@ public class AiExamService {
 
         String system = PromptBuilder.system(config.getPrompt(AiConfigService.KEY_QUIZ_PROMPT), Map.of(
                 "COUNT", String.valueOf(count),
-                "TOPIC", isBlank(topicName) ? "Toán 12" : topicName.trim(),
+                "TOPIC", isBlank(topicName) ? "Toán 9" : topicName.trim(),
                 "LESSON", isBlank(lessonName) ? "Kiến thức trọng tâm" : lessonName.trim(),
                 "DIFFICULTY", describeLevel(level) + " (trường \"level\" = " + level + ")"), JSON_FORMAT);
         String request = "Hãy soạn đúng " + count + " câu hỏi trắc nghiệm theo yêu cầu.";

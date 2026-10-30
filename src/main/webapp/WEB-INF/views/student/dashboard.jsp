@@ -2,245 +2,130 @@
     totalTopics(int), topicProgress(List<ProgressView>), overall(ProgressView),
     essayAverage(Double), recentLesson(LessonView), recentVideo(MaterialView)
         --%>
-        <%@ page contentType="text/html;charset=UTF-8" pageEncoding="UTF-8" %>
-            <%@ taglib prefix="ui" tagdir="/WEB-INF/tags" %>
-                <%@ taglib prefix="c" uri="jakarta.tags.core" %>
-                    <%@ taglib prefix="fmt" uri="jakarta.tags.fmt" %>
+<%@ page contentType="text/html;charset=UTF-8" pageEncoding="UTF-8" %>
+<%@ taglib prefix="ui" tagdir="/WEB-INF/tags" %>
+<%@ taglib prefix="c" uri="jakarta.tags.core" %>
+<%@ taglib prefix="fmt" uri="jakarta.tags.fmt" %>
 
-                        <jsp:include page="../common/head.jsp">
-                            <jsp:param name="title" value="Tổng quan Học sinh" />
-                        </jsp:include>
+<jsp:include page="../common/head.jsp">
+    <jsp:param name="title" value="Tổng quan Học sinh" />
+</jsp:include>
 
-                        <body data-ctx="${pageContext.request.contextPath}">
+<body data-ctx="${pageContext.request.contextPath}">
 
-                            <jsp:include page="../common/navbar.jsp" />
+    <jsp:include page="../common/navbar.jsp" />
 
-                            <div class="app-shell">
-                                <jsp:include page="../common/sidebar.jsp">
-                                    <jsp:param name="active" value="student-dashboard" />
-                                </jsp:include>
+    <div class="app-shell">
+        <jsp:include page="../common/sidebar.jsp">
+            <jsp:param name="active" value="student-dashboard" />
+        </jsp:include>
 
-                                <main class="app-main">
-                                    <ui:flash />
+        <main class="app-main">
+            <ui:flash />
 
-                                    <%-- Page header --%>
-                                        <div class="page-header">
-                                            <h1><i class="bi bi-speedometer2 me-2 text-primary"></i>Tổng quan học tập
-                                            </h1>
-                                        </div>
+            <%-- Page header --%>
+            <div class="page-header mb-4">
+                <h1 class="d-flex align-items-center gap-2">
+                    <span class="ph-icon-circle"><i class="bi bi-speedometer2"></i></span>
+                    <span>Tổng quan học tập</span>
+                </h1>
+            </div>
 
-                                        <div class="row g-4">
+            <div class="row g-4">
 
-                                            <%-- ════ LEFT COL (col-lg-8) ════ --%>
-                                                <div class="col-lg-9">
+                <%-- ════ TOP LEFT: Hero Banner + 4 Stat Cards (col-lg-8) ════ --%>
+                <div class="col-12 col-dash-main">
 
-                                                    <%-- Hero banner --%>
-                                                        <div class="hero-banner mb-4">
-                                                            <div class="hero-banner-content">
-                                                                <div class="hero-label">Chào mừng trở lại</div>
-                                                                <h2>Xin chào,
-                                                                    <c:out
-                                                                        value="${sessionScope.LOGGED_IN_USER.fullName}" />!
-                                                                </h2>
-                                                                <p>Tiếp tục hành trình học Toán 12 của bạn ngay hôm nay.</p>
-                                                                <div class="d-flex flex-wrap gap-2">
-                                                                    <a href="${pageContext.request.contextPath}/student/topics"
-                                                                        class="btn-hero-primary btn">
-                                                                        <i class="bi bi-book me-1"></i>Học ngay
-                                                                    </a>
-                                                                    <a href="${pageContext.request.contextPath}/student/ai-tutor"
-                                                                        class="btn-hero-outline btn">
-                                                                        <i class="bi bi-chat-dots me-1"></i>Hỏi AI
-                                                                    </a>
-                                                                </div>
-                                                            </div>
-                                                            <img src="${pageContext.request.contextPath}/static/img/mascot.png" alt="Mascot" class="welcome-mascot-img" />
-                                                        </div>
-
-                                                        <%-- Stat cards 2×2 --%>
-                                                            <div class="row g-3 mb-4">
-                                                                <div class="col-6">
-                                                                    <div class="stat-card">
-                                                                        <div class="stat-icon blue"><i
-                                                                                class="bi bi-book"></i></div>
-                                                                        <div>
-                                                                            <div class="stat-number">${totalTopics}
-                                                                            </div>
-                                                                            <div class="stat-label">Chủ đề có thể học
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                                <div class="col-6">
-                                                                    <div class="stat-card">
-                                                                        <div class="stat-icon green"><i
-                                                                                class="bi bi-check2-circle"></i></div>
-                                                                        <div>
-                                                                            <div class="stat-number">
-                                                                                ${overall.answered}/${overall.total}
-                                                                            </div>
-                                                                            <div class="stat-label">Câu trắc nghiệm đã
-                                                                                làm</div>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                                <div class="col-6">
-                                                                    <div class="stat-card">
-                                                                        <div class="stat-icon orange"><i
-                                                                                class="bi bi-bullseye"></i></div>
-                                                                        <div>
-                                                                            <div class="stat-number">
-                                                                                <c:choose>
-                                                                                    <c:when
-                                                                                        test="${overall.correctPct != null}">
-                                                                                        <fmt:formatNumber
-                                                                                            value="${overall.correctPct}"
-                                                                                            maxFractionDigits="1" />%
-                                                                                    </c:when>
-                                                                                    <c:otherwise>--</c:otherwise>
-                                                                                </c:choose>
-                                                                            </div>
-                                                                            <div class="stat-label">Tỉ lệ đúng trắc
-                                                                                nghiệm</div>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                                <div class="col-6">
-                                                                    <div class="stat-card">
-                                                                        <div class="stat-icon purple"><i
-                                                                                class="bi bi-star-fill"></i></div>
-                                                                        <div>
-                                                                            <div class="stat-number">
-                                                                                <c:choose>
-                                                                                    <c:when
-                                                                                        test="${essayAverage != null}">
-                                                                                        <fmt:formatNumber
-                                                                                            value="${essayAverage}"
-                                                                                            maxFractionDigits="2" />/10
-                                                                                    </c:when>
-                                                                                    <c:otherwise>--</c:otherwise>
-                                                                                </c:choose>
-                                                                            </div>
-                                                                            <div class="stat-label">Điểm TB tự luận
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-
-                                                            <%-- Tiến độ theo chủ đề --%>
-                                                                <div class="card mb-4">
-                                                                    <div class="card-header">
-                                                                        <i
-                                                                            class="bi bi-graph-up-arrow text-primary"></i>
-                                                                        Tiến độ theo chủ đề
-                                                                        <span class="ms-auto text-muted fw-normal"
-                                                                            style="font-size:.78rem;">tính theo lần làm
-                                                                            gần nhất</span>
-                                                                    </div>
-                                                                    <div>
-                                                                        <c:forEach var="p" items="${topicProgress}">
-                                                                            <a class="topic-progress-item"
-                                                                                href="${pageContext.request.contextPath}/student/topics/${p.id}/progress">
-                                                                                <div
-                                                                                    class="d-flex justify-content-between align-items-center mb-2">
-                                                                                    <span class="fw-semibold"
-                                                                                        style="font-size:.9rem;">
-                                                                                        <c:out value="${p.name}" />
-                                                                                    </span>
-                                                                                    <span class="text-muted"
-                                                                                        style="font-size:.78rem;">
-                                                                                        ${p.answered}/${p.total} câu
-                                                                                        <c:if
-                                                                                            test="${p.correctPct != null}">
-                                                                                            · đúng ${p.correct}
-                                                                                            (
-                                                                                            <fmt:formatNumber
-                                                                                                value="${p.correctPct}"
-                                                                                                maxFractionDigits="1" />
-                                                                                            %)
-                                                                                        </c:if>
-                                                                                        <i
-                                                                                            class="bi bi-chevron-right ms-1"></i>
-                                                                                    </span>
-                                                                                </div>
-                                                                                <div class="progress"
-                                                                                    style="height:6px;">
-                                                                                    <div class="progress-bar-gradient"
-                                                                                        style="width:${p.answered == 0 ? 0 : p.correct * 100 / (p.total == 0 ? 1 : p.total)}%;display:block;height:100%;"
-                                                                                        title="Đúng ${p.correctPct}%">
-                                                                                    </div>
-                                                                                    <div class="progress-bar bg-danger"
-                                                                                        style="width:${p.answered == 0 ? 0 : (p.answered - p.correct) * 100 / (p.total == 0 ? 1 : p.total)}%;"
-                                                                                        title="Sai"></div>
-                                                                                </div>
-                                                                            </a>
-                                                                        </c:forEach>
-                                                                        <c:if test="${empty topicProgress}">
-                                                                            <div class="empty-state py-4">
-                                                                                <i class="bi bi-inbox empty-icon"></i>
-                                                                                <p class="mb-0">Chưa có chủ đề nào.</p>
-                                                                            </div>
-                                                                        </c:if>
-                                                                    </div>
-                                                                </div>
-
-<%-- Bài học gần đây + video gần nhất --%>
-<div class="card">
-    <div class="card-header">
-        <i class="bi bi-journal-bookmark text-primary"></i>
-        Bài học gần đây
-        <a href="${pageContext.request.contextPath}/student/history" class="btn btn-sm btn-outline-primary ms-auto">Lịch sử làm bài</a>
-    </div>
-    <div class="card-body">
-        <c:choose>
-            <c:when test="${empty recentLesson}">
-                <div class="text-center py-4">
-                    <i class="bi bi-inbox d-block fs-1 mb-2 opacity-25"></i>
-                    Bạn chưa học bài nào.
-                    <a href="${pageContext.request.contextPath}/student/topics">Bắt đầu học ngay!</a>
-                </div>
-            </c:when>
-            <c:otherwise>
-                <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-                    <div>
-                        <div class="fw-semibold fs-5"><c:out value="${recentLesson.title}" /></div>
-                        <div class="text-muted small"><c:out value="${recentLesson.topicName}" /></div>
-                    </div>
-                    <a href="${pageContext.request.contextPath}/student/lesson?id=${recentLesson.lessonId}"
-                        class="btn btn-primary btn-sm ms-auto"><i class="bi bi-play-circle me-1"></i>Tiếp tục học</a>
-                </div>
-                <c:choose>
-                    <c:when test="${not empty recentVideo and recentVideo.materialType == 'YOUTUBE' and not empty recentVideo.youtubeEmbedUrl}">
-                        <div class="fw-semibold small mb-2"><i class="bi bi-youtube text-danger me-1"></i><c:out value="${recentVideo.title}" /></div>
-                        <div class="ratio ratio-16x9 rounded-3 overflow-hidden border">
-                            <iframe src="${recentVideo.youtubeEmbedUrl}" title="<c:out value='${recentVideo.title}'/>"
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                                referrerpolicy="strict-origin-when-cross-origin" loading="lazy" allowfullscreen
-                                class="w-100 h-100 border-0"></iframe>
+                    <%-- Hero banner --%>
+                    <div class="hero-banner mb-4">
+                        <div class="hero-banner-content">
+                            <div class="hero-label">CHÀO MỪNG TRỞ LẠI</div>
+                            <h2>Xin chào, <c:out value="${sessionScope.LOGGED_IN_USER.fullName}" />!</h2>
+                            <p>Tiếp tục hành trình học Toán 9 của bạn ngay hôm nay.</p>
+                            <div class="d-flex flex-wrap gap-2">
+                                <a href="${pageContext.request.contextPath}/student/topics" class="btn-hero-primary btn">
+                                    <i class="bi bi-book me-1"></i>Học ngay
+                                </a>
+                                <a href="${pageContext.request.contextPath}/student/ai-tutor" class="btn-hero-outline btn">
+                                    <i class="bi bi-chat-dots me-1"></i>Hỏi AI
+                                </a>
+                            </div>
                         </div>
-                    </c:when>
-                    <c:when test="${not empty recentVideo and recentVideo.materialType == 'VIDEO'}">
-                        <div class="fw-semibold small mb-2"><i class="bi bi-camera-video me-1"></i><c:out value="${recentVideo.title}" /></div>
-                        <video controls preload="metadata" class="w-100 rounded-3 border" src="<c:out value='${recentVideo.url}'/>"></video>
-                    </c:when>
-                    <c:otherwise>
-                        <div class="text-muted small">Bài học này chưa có video.</div>
-                    </c:otherwise>
-                </c:choose>
-            </c:otherwise>
-        </c:choose>
-    </div>
-</div>
+                        <div class="hero-banner-art">
+                            <img src="${pageContext.request.contextPath}/static/img/student-hero-banner.jpg" alt="Student Mascot" class="hero-banner-art-img" />
+                        </div>
+                    </div>
 
-</div><%-- /col-lg-8 --%>
+                    <%-- Stat cards 2×2 --%>
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <div class="stat-card">
+                                <div class="stat-icon blue">
+                                    <i class="bi bi-journal-bookmark"></i>
+                                </div>
+                                <div>
+                                    <div class="stat-number">${totalTopics}</div>
+                                    <div class="stat-label">Chủ đề có thể học</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="stat-card">
+                                <div class="stat-icon green">
+                                    <i class="bi bi-check2-circle"></i>
+                                </div>
+                                <div class="flex-grow-1 min-w-0">
+                                    <div class="stat-number">${overall.answered}/${overall.total}</div>
+                                    <div class="stat-label">Câu trắc nghiệm đã làm</div>
+                                    <div class="stat-mini-progress">
+                                        <div class="stat-mini-bar" style="width: ${overall.total > 0 ? (overall.answered * 100 / overall.total) : 0}%;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="stat-card">
+                                <div class="stat-icon orange">
+                                    <i class="bi bi-bullseye"></i>
+                                </div>
+                                <div>
+                                    <div class="stat-number">
+                                        <c:choose>
+                                            <c:when test="${overall.correctPct != null}">
+                                                <fmt:formatNumber value="${overall.correctPct}" maxFractionDigits="1" />%
+                                            </c:when>
+                                            <c:otherwise>--</c:otherwise>
+                                        </c:choose>
+                                    </div>
+                                    <div class="stat-label">Tỉ lệ đúng trắc nghiệm</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="stat-card">
+                                <div class="stat-icon purple">
+                                    <i class="bi bi-star-fill"></i>
+                                </div>
+                                <div>
+                                    <div class="stat-number">
+                                        <c:choose>
+                                            <c:when test="${essayAverage != null}">
+                                                <fmt:formatNumber value="${essayAverage}" maxFractionDigits="2" />/10
+                                            </c:when>
+                                            <c:otherwise>--</c:otherwise>
+                                        </c:choose>
+                                    </div>
+                                    <div class="stat-label">Điểm TB tự luận</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
-                                                    <%-- ════ RIGHT COL (col-lg-4) ════ --%>
-                                                        <div class="col-lg-3">
+                </div><%-- /col-lg-8 --%>
 
-                                                            <%-- ── WIDGET: Mini Calendar Streak (Light Purple Theme) ──
-                                                                --%>
-                                                                <div class="streak-cal-card">
+                <%-- ════ TOP RIGHT: Chuỗi học tập (col-lg-4) ════ --%>
+                <div class="col-12 col-dash-streak">
+<div class="streak-cal-card">
                                                                     <%-- Header --%>
                                                                         <div class="streak-cal-header">
                                                                             <div class="streak-cal-top-row">
@@ -351,15 +236,123 @@
                                                                                     </div>
                                                                                 </div>
                                                                 </div><%-- /streak-cal-card --%>
+                </div><%-- /col-lg-4 --%>
 
-                                                        </div><%-- /col-lg-4 --%>
-
-
-                                        </div><%-- /row --%>
-                                </main>
+                <%-- ════ BOTTOM: Tiến độ theo chủ đề (FULL WIDTH col-12) ════ --%>
+                <div class="col-12">
+                    <div class="st-topic-progress-card card mb-4">
+                        <div class="tp-card-header d-flex align-items-center justify-content-between mb-2">
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="bi bi-graph-up text-info" style="font-size: 1.15rem;"></i>
+                                <span class="fw-bold" style="font-size: 1.05rem; color: var(--text);">Tiến độ theo chủ đề</span>
                             </div>
+                            <span class="text-muted" style="font-size: 0.78rem;">tính theo lần làm gần nhất</span>
+                        </div>
+                        <div class="tp-list">
+                            <c:forEach var="p" items="${topicProgress}">
+                                <a class="tp-item" href="${pageContext.request.contextPath}/student/topics/${p.id}/progress">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="tp-item-title">
+                                            <c:out value="${p.name}" />
+                                        </span>
+                                        <div class="d-flex align-items-center gap-1">
+                                            <c:choose>
+                                                <c:when test="${p.answered == 0}">
+                                                    <span class="tp-badge tp-badge-muted">${p.answered}/${p.total} câu</span>
+                                                </c:when>
+                                                <c:when test="${p.correctPct != null && p.correctPct > 0}">
+                                                    <span class="tp-badge tp-badge-success">
+                                                        ${p.answered}/${p.total} câu - Đúng <fmt:formatNumber value="${p.correctPct}" maxFractionDigits="0" />%
+                                                    </span>
+                                                </c:when>
+                                                <c:otherwise>
+                                                    <span class="tp-badge tp-badge-danger">
+                                                        ${p.answered}/${p.total} câu - Đúng 0%
+                                                    </span>
+                                                </c:otherwise>
+                                            </c:choose>
+                                            <i class="bi bi-chevron-right tp-chevron"></i>
+                                        </div>
+                                    </div>
+                                    <div class="tp-track">
+                                        <c:choose>
+                                            <c:when test="${p.answered == 0}">
+                                                <div class="tp-bar tp-bar-empty" style="width: 0%;"></div>
+                                            </c:when>
+                                            <c:when test="${p.correctPct != null && p.correctPct > 0}">
+                                                <div class="tp-bar tp-bar-gradient" style="width: ${p.correct * 100 / (p.total == 0 ? 1 : p.total)}%;"></div>
+                                            </c:when>
+                                            <c:otherwise>
+                                                <div class="tp-bar tp-bar-danger" style="width: ${p.answered * 100 / (p.total == 0 ? 1 : p.total)}%;"></div>
+                                            </c:otherwise>
+                                        </c:choose>
+                                    </div>
+                                </a>
+                            </c:forEach>
+                            <c:if test="${empty topicProgress}">
+                                <div class="empty-state py-4">
+                                    <i class="bi bi-inbox empty-icon"></i>
+                                    <p class="mb-0">Chưa có chủ đề nào.</p>
+                                </div>
+                            </c:if>
+                        </div>
+                    </div>
 
-                            <jsp:include page="../common/footer.jsp" />
-                        </body>
+<%-- Bài học gần đây + video gần nhất --%>
+<div class="card">
+    <div class="card-header">
+        <i class="bi bi-journal-bookmark text-primary"></i>
+        Bài học gần đây
+        <a href="${pageContext.request.contextPath}/student/history" class="btn btn-sm btn-outline-primary ms-auto">Lịch sử làm bài</a>
+    </div>
+    <div class="card-body">
+        <c:choose>
+            <c:when test="${empty recentLesson}">
+                <div class="text-center py-4">
+                    <i class="bi bi-inbox d-block fs-1 mb-2 opacity-25"></i>
+                    Bạn chưa học bài nào.
+                    <a href="${pageContext.request.contextPath}/student/topics">Bắt đầu học ngay!</a>
+                </div>
+            </c:when>
+            <c:otherwise>
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                    <div>
+                        <div class="fw-semibold fs-5"><c:out value="${recentLesson.title}" /></div>
+                        <div class="text-muted small"><c:out value="${recentLesson.topicName}" /></div>
+                    </div>
+                    <a href="${pageContext.request.contextPath}/student/lesson?id=${recentLesson.lessonId}"
+                        class="btn btn-primary btn-sm ms-auto"><i class="bi bi-play-circle me-1"></i>Tiếp tục học</a>
+                </div>
+                <c:choose>
+                    <c:when test="${not empty recentVideo and recentVideo.materialType == 'YOUTUBE' and not empty recentVideo.youtubeEmbedUrl}">
+                        <div class="fw-semibold small mb-2"><i class="bi bi-youtube text-danger me-1"></i><c:out value="${recentVideo.title}" /></div>
+                        <div class="ratio ratio-16x9 rounded-3 overflow-hidden border">
+                            <iframe src="${recentVideo.youtubeEmbedUrl}" title="<c:out value='${recentVideo.title}'/>"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                referrerpolicy="strict-origin-when-cross-origin" loading="lazy" allowfullscreen
+                                class="w-100 h-100 border-0"></iframe>
+                        </div>
+                    </c:when>
+                    <c:when test="${not empty recentVideo and recentVideo.materialType == 'VIDEO'}">
+                        <div class="fw-semibold small mb-2"><i class="bi bi-camera-video me-1"></i><c:out value="${recentVideo.title}" /></div>
+                        <video controls preload="metadata" class="w-100 rounded-3 border" src="<c:out value='${recentVideo.url}'/>"></video>
+                    </c:when>
+                    <c:otherwise>
+                        <div class="text-muted small">Bài học này chưa có video.</div>
+                    </c:otherwise>
+                </c:choose>
+            </c:otherwise>
+        </c:choose>
+    </div>
+</div>
 
-                        </html>
+                </div><%-- /col-12 --%>
+
+            </div><%-- /row --%>
+        </main>
+    </div>
+
+    <jsp:include page="../common/footer.jsp" />
+</body>
+
+</html>

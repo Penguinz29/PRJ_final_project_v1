@@ -1,13 +1,13 @@
 # ĐẶC TẢ CHỨC NĂNG CHI TIẾT (FRS)
 
-# EDUTUTOR MATH 12 — HƯỚNG DẪN TRIỂN KHAI MÃ NGUỒN
+# EDUTUTOR MATH 9 — HƯỚNG DẪN TRIỂN KHAI MÃ NGUỒN
 
 | Thông tin | Nội dung |
 |---|---|
 | Đồ án | PRJ301 — Spring MVC 6 + Spring Data JPA (Hibernate) + SQL Server + Gemini API |
 | Phiên bản | 2.2.0 (nhập câu hỏi từ tệp PDF / Word / ảnh với tệp đáp án tùy chọn — UC-TEA-04b, `POST /api/teacher/extract-question`; học sinh nộp tự luận bằng ảnh / PDF / Word — UC-OCR-01; hiển thị xuống dòng cho văn bản thuần). 2.1.4 (khớp FRS với mã nguồn sau đợt rà soát backend: upload (không kiểm MIME), quy tắc `/uploads/**`, mã lỗi AI 6.1, UC-STU-04, UC-ADM-08, tên lớp / DTO, 1.7 ánh xạ tên cột và kiểu dữ liệu, bổ sung mục 10; dữ liệu mẫu phong phú nằm trong `02_data.sql`). 2.1.3 (rà soát tài liệu so với mã nguồn: cập nhật 1.1, UC-ADM-04/08, UC-TEA-05, UC-STU-07, 4.3, 6.1 và viết lại mục 10 theo hiện trạng). 2.1.2 (đồng bộ với mã nguồn: script SQL `01_schema.sql` + `02_data.sql`, BR-03 bài học, OCR `legible`/WebP, BR-09 tách điểm, hồ sơ cá nhân, kết quả theo câu, tiến độ BR-10, dashboard Admin, trắc nghiệm ngẫu nhiên + chấm từng câu; thêm mục 10 "Hiện trạng triển khai"). 2.1.1: nút Xóa báo trước kết quả. (Sau 2.1.4: chủ đề / bài học đã xóa mềm ẩn cả với học sinh; chỉ người tạo hoặc Admin được xóa.) 2.1.0: chuyển tầng dữ liệu sang JPA; bổ sung Bean Validation, đối chiếu rubric |
 | Liên quan | `EduTutor_SRS.md` (yêu cầu), `EduTutor_Database.sql` (CSDL) |
-| Quy ước tham chiếu | Bộ tài liệu gốc đặt trong `docs/`. Trong repo hiện tại: `document/SRS.md` ≙ `EduTutor_SRS.md`, `document/FRS.md` ≙ `EduTutor_FRS.md`, `document/sql/01_schema.sql` + `02_data.sql` ≙ `EduTutor_Database.sql` (cấu trúc + dữ liệu mẫu, xem mục 1.7). Tài khoản mẫu `admin`, `teacher1`, `student1`…, mật khẩu **`EduTutor@123`** |
+| Quy ước tham chiếu | Bộ tài liệu gốc đặt trong `docs/`. Trong repo hiện tại: `document/SRS.md` ≙ `EduTutor_SRS.md`, `document/FRS.md` ≙ `EduTutor_FRS.md`, `document/sql/MathTutorDB.sql` ≙ `EduTutor_Database.sql` (cấu trúc + dữ liệu mẫu, xem mục 1.7). Tài khoản mẫu `admin`, `teacher1`, `student1`…, mật khẩu **`EduTutor@123`** |
 
 Mã FR trong ngoặc ở mỗi use case (UC) trỏ về SRS.
 
@@ -100,7 +100,7 @@ Với lỗi validation, `message` là "Dữ liệu không hợp lệ" nối thê
 ### 1.5. Cấu hình ứng dụng (`application.properties`)
 
 ```properties
-db.url=jdbc:sqlserver://localhost:1433;databaseName=EduTutorMath12;encrypt=true;trustServerCertificate=true
+db.url=jdbc:sqlserver://localhost:1433;databaseName=MathTutorDB;encrypt=true;trustServerCertificate=true
 db.username=...
 db.password=...
 db.pool.max-size=10
@@ -168,7 +168,7 @@ Thông báo lỗi đặt trong `messages.properties` (tiếng Việt, UTF-8) và
 
 Kiến trúc chuẩn gồm **10 bảng / 10 Entity**. Các thuộc tính sau là bắt buộc trong DDL và Entity (tên cột thực tế dùng PascalCase, vd. `questions.is_active` ≙ `Questions.IsActive`).
 
-**Script CSDL:** cài mới chỉ cần 2 file — `document/sql/01_schema.sql` (tạo CSDL `MathTutorDB`, 10 bảng với toàn bộ PK / FK (kèm `ON DELETE`) / UNIQUE / CHECK / DEFAULT và chỉ mục, ràng buộc đều được đặt tên; **xóa CSDL cũ cùng tên**) rồi `document/sql/02_data.sql` (dữ liệu mẫu gồm hai phần: phần tối thiểu có ID ổn định — admin = 1, teacher1 = 2, câu hỏi 1–3, phương án 1–8, kiểm thử tích hợp dựa vào đó — và phần demo phong phú để xem hết các màn hình: 3 giáo viên, 12 học sinh (1 bị khóa, 1 xóa mềm), 7 chủ đề / 15 bài học (có mục đã ẩn và bài học trống), bài giảng đủ 4 loại, 46 câu hỏi, ~150 bài trắc nghiệm trải 14 ngày, 12 bài tự luận chờ duyệt / đã duyệt, 6 phiên gia sư; ngày giờ tính theo lúc chạy script). CSDL tạo theo cấu trúc cũ (thiếu các cột ở bảng trên) phải tạo lại bằng 2 file này — nếu không, trang dùng cột còn thiếu sẽ báo lỗi 500 (`Invalid column name …`). Cấu trúc trong `01_schema.sql` tương đương chuỗi script tăng dần trước đây (đã đối chiếu tự động), trừ cột cũ `Lessons.YoutubeUrl` đã bỏ vì không còn dùng (link video nằm trong `LessonMaterials`).
+**Script CSDL:** cài mới chỉ cần 1 file `document/sql/MathTutorDB.sql`, gồm phần cấu trúc (tạo CSDL `MathTutorDB`, 10 bảng với toàn bộ PK / FK (kèm `ON DELETE`) / UNIQUE / CHECK / DEFAULT và chỉ mục, ràng buộc đều được đặt tên; **xóa CSDL cũ cùng tên**) rồi toàn bộ dữ liệu theo thứ tự: 3 giáo viên và 12 học sinh (1 bị khóa, 1 xóa mềm), cấu hình AI, nội dung SGK Toán 9 Kết nối tri thức — 10 chủ đề / 56 bài học / 662 câu hỏi (364 trắc nghiệm, 298 tự luận; Bài 1–32 mỗi bài 10 câu trắc nghiệm), video bài giảng VietJack cho từng bài, rồi lịch sử bài làm mẫu (tự luận chương I và trắc nghiệm các bài còn ít lượt làm, trải 14 ngày gần đây); ID chủ đề / bài học / câu hỏi không còn cố định như bản dữ liệu Toán 9 cũ nên kiểm thử tích hợp không được dựa vào ID cứng. CSDL tạo theo cấu trúc cũ (thiếu các cột ở bảng trên) phải tạo lại bằng file này — nếu không, trang dùng cột còn thiếu sẽ báo lỗi 500 (`Invalid column name …`). Phần cấu trúc trong `MathTutorDB.sql` tương đương chuỗi script tăng dần trước đây (đã đối chiếu tự động), trừ cột cũ `Lessons.YoutubeUrl` đã bỏ vì không còn dùng (link video nằm trong `LessonMaterials`).
 
 | Bảng | Cột bổ sung | Kiểu / mặc định | Dùng ở |
 |---|---|---|---|
@@ -447,7 +447,7 @@ Quyền: `TEACHER` và `ADMIN`. Quy tắc BR-03: chủ đề (`Topic`), bài h�
 
 #### UC-TEA-01 — Quản lý chủ đề / môn học (FR-TEA-01)
 
-Chủ đề (`topics`) cùng bài học (`lessons`) là hai cấp "chuyên đề / môn học" của Toán 12; giao diện gắn nhãn **"Chuyên đề / Môn học"** (thực thể `Subject` cấp cao hơn là hướng mở rộng, SRS 1.2).
+Chủ đề (`topics`) cùng bài học (`lessons`) là hai cấp "chuyên đề / môn học" của Toán 9 (mỗi chương SGK là một chủ đề, mỗi bài là một bài học); giao diện gắn nhãn **"Chuyên đề / Môn học"** (thực thể `Subject` cấp cao hơn là hướng mở rộng, SRS 1.2).
 
 | URL | Chức năng |
 |---|---|
@@ -574,15 +574,15 @@ OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
 `QuestionGenerationDTO` (tên trường thực tế trong mã nguồn)
 ```json
 {
-  "content": "Tính $\\int_0^1 (3x^2+1)\\,dx$.",
+  "content": "Giải phương trình $x^2-5x+6=0$. Tổng hai nghiệm bằng bao nhiêu?",
   "level": 3,
   "options": [
-    { "letter": "A", "content": "$1$",  "isCorrect": false },
-    { "letter": "B", "content": "$2$",  "isCorrect": true  },
-    { "letter": "C", "content": "$3$",  "isCorrect": false },
-    { "letter": "D", "content": "$4$",  "isCorrect": false }
+    { "letter": "A", "content": "$-5$", "isCorrect": false },
+    { "letter": "B", "content": "$5$",  "isCorrect": true  },
+    { "letter": "C", "content": "$6$",  "isCorrect": false },
+    { "letter": "D", "content": "$-6$", "isCorrect": false }
   ],
-  "explanation": "$\\int_0^1 (3x^2+1)dx=(x^3+x)\\big|_0^1=2$"
+  "explanation": "$\\Delta=(-5)^2-4\\cdot1\\cdot6=1$ nên $x_1=3$, $x_2=2$, tổng $x_1+x_2=5$."
 }
 ```
 
@@ -774,7 +774,7 @@ Controller: `TutorApiController` (`/api/tutor/**`) và `StudentTutorController` 
 
 | `mode` | Bắt buộc | `problem_text` được dựng như thế nào |
 |---|---|---|
-| `FREE` | `problemText` (VAL-19) | Đúng như học sinh nhập. **Không giới hạn trong 4 chuyên đề** (R5); `lessonId` tùy chọn |
+| `FREE` | `problemText` (VAL-19) | Đúng như học sinh nhập. **Không giới hạn trong 10 chương của sách** (R5); `lessonId` tùy chọn |
 | `LESSON` | `lessonId`, `problemText` | Đề do học sinh nhập + tên chủ đề/bài làm ngữ cảnh |
 | `QUESTION` | `questionId`, và học sinh **đã có bài nộp sai** câu đó | `question_text` + "Học sinh đã chọn: *nội dung phương án sai*". `explanation_latex` được đưa vào prompt như *tài liệu tham khảo nội bộ để AI dẫn dắt đúng*, kèm lệnh không tiết lộ kết quả cuối |
 | `SUBMISSION` | `submissionId` thuộc học sinh, loại `ESSAY` | `question_text` + `extracted_text` + `ai_feedback` (để AI tập trung vào bước sai của bài tự luận) |
@@ -827,8 +827,8 @@ VALUES (?, ?, ?, ?, ?, ?, 1, 'ACTIVE', ?, ?)
   "currentStep": 2,
   "totalSteps": 4,
   "isStepCorrect": true,
-  "feedbackToStudent": "Chính xác! $y'=3x^2-3$.",
-  "nextPromptOrQuestion": "Bước 2: Giải phương trình $y'=0$ và cho biết các nghiệm.",
+  "feedbackToStudent": "Chính xác! $\\Delta=b^2-4ac=25-24=1$.",
+  "nextPromptOrQuestion": "Bước 2: Vì $\\Delta>0$, áp dụng công thức nghiệm để tìm $x_1, x_2$.",
   "needsStudentInput": false,
   "inputRequestHint": null,
   "status": "ACTIVE",
@@ -899,11 +899,11 @@ OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
 ```json
 {
   "legible": true,
-  "extractedText": "y' = 3x^2 - 6x = 0 \\Rightarrow x = 0, x = 2 ...",
+  "extractedText": "\\Delta = 25 - 24 = 1 \\Rightarrow x_1 = 3, x_2 = 2 ...",
   "score": 8.8,
-  "detailedFeedback": "Đạo hàm và nghiệm đúng. Bước kết luận thiếu tọa độ cực trị.",
-  "errors": [ { "location": "Dòng 4", "description": "Thiếu giá trị cực trị y(2) = -2" } ],
-  "suggestedCorrection": "Điểm cực đại $(0;2)$, điểm cực tiểu $(2;-2)$."
+  "detailedFeedback": "Tính $\\Delta$ và nghiệm đúng. Bước kết luận thiếu tập nghiệm.",
+  "errors": [ { "location": "Dòng 4", "description": "Thiếu kết luận tập nghiệm $S=\\{2;3\\}$" } ],
+  "suggestedCorrection": "Phương trình có hai nghiệm $x_1=3$, $x_2=2$; tập nghiệm $S=\\{2;3\\}$."
 }
 ```
 4. Hậu xử lý: `score` ép về `[0,10]` và **làm tròn tới 0.25** (`ScoreUtil.roundQuarter(8.8) = 8.75`); sanitize mọi chuỗi.
@@ -1256,7 +1256,7 @@ Quy tắc: trang HTML → view lỗi; request `/api/**` hoặc `Accept: applicat
 - [ ] Khởi động ứng dụng: Hibernate không báo lỗi mapping; bật log SQL một lần, mở `/student/quiz` kiểm tra không có N+1 (TC-DB-03).
 - [ ] Chạy `EduTutor_Database.sql` trên SQL Server sạch; đăng nhập thử `admin / teacher1 / student1` (mật khẩu **`EduTutor@123`**, đạt VAL-02).
 - [ ] Dán khóa Gemini hợp lệ, **kiểm tra tên model còn được hỗ trợ** (trang deprecations của `ai.google.dev`), bấm *Test kết nối*.
-- [ ] Chuẩn bị 2 ảnh tự luận mẫu: một bài đúng, một bài sai cận tích phân; một ảnh không phải bài toán (kiểm tra `legible=false`).
+- [ ] Chuẩn bị 2 ảnh tự luận mẫu: một bài đúng, một bài sai dấu khi giải hệ phương trình; một ảnh không phải bài toán (kiểm tra `legible=false`).
 - [ ] Chạy hết bộ test ở SRS mục 9.2, đặc biệt TC-SEC-01, 08 và TC-AI-03, 05.
 - [ ] Chuẩn bị giải thích 3 sơ đồ tuần tự (5.4) và đoạn prompt gia sư (5.1) để trả lời câu hỏi về thuật toán AI.
 
@@ -1301,7 +1301,7 @@ Mục này ghi những chỗ mã nguồn **hiện tại** còn khác đặc tả
 | Giao diện (Claude.md 4.5) | Chưa có `layout.jsp` chung (các trang tự `include` `common/head|navbar|sidebar|footer`), `field-error.tag`, `math.tag`; chỉ `register`, `profile`, `user-form` dùng `<form:form>` / `<form:errors>`, các form khác hiện lỗi bằng khối `invalid-feedback` tĩnh; breadcrumb mới có ở 6 trang; chưa có nút "Quay lại" ở nhiều trang; `app.js` chưa ánh xạ lỗi theo mã HTTP và chưa xử lý `AbortError` (timeout hiện thông báo thô của trình duyệt); `setLoading` / `showToast` hầu như chưa dùng |
 | Thư viện giao diện | Bootstrap, Bootstrap Icons, KaTeX và font "Be Vietnam Pro" tải từ CDN (`common/head.jsp`, `footer.jsp`, `login.jsp`, `register.jsp`, `error.jsp`); chưa có `static/vendor/` nên demo cần mạng |
 | Hồ sơ nộp (Claude.md mục 8) | Chưa có `docs/ERD.png`, `BAO_CAO.md`, `DEMO_SCRIPT.md`, `QA_BAO_VE.md`, `HUONG_DAN_NETBEANS.md` (tài liệu hiện nằm ở `document/`) |
-| Cấu hình `application.properties` | `db.url` dùng CSDL `MathTutorDB` (không phải `EduTutorMath12` như 1.5); thiếu khóa `ai.config.cacheTtlSeconds` (mặc định trong code là 60); thêm các khóa `gemini.baseUrl`, `gemini.connectTimeoutSeconds`, `gemini.requestTimeoutSeconds`, `gemini.maxParseRetries`; `db.password` đặt mặc định cho môi trường dev (ghi đè bằng biến môi trường `DB_PASS`) |
+| Cấu hình `application.properties` | `db.url` dùng CSDL `MathTutorDB` (khớp ví dụ 1.5); thiếu khóa `ai.config.cacheTtlSeconds` (mặc định trong code là 60); thêm các khóa `gemini.baseUrl`, `gemini.connectTimeoutSeconds`, `gemini.requestTimeoutSeconds`, `gemini.maxParseRetries`; `db.password` đặt mặc định cho môi trường dev (ghi đè bằng biến môi trường `DB_PASS`) |
 | Ánh xạ dữ liệu | Một số cột có DB default nhưng entity ánh xạ kiểu nguyên thủy (`boolean`, `int`) nên nếu chèn NULL bằng tay Hibernate sẽ lỗi khi nạp; vài truy vấn native thống kê (`countLastSevenDays`, `findQuestionResults`, `lessonResultSummary`) nằm ngoài danh mục "NEWID / CTE" của Claude.md 4.3 nhưng vẫn dùng tham số có tên; chưa có chỉ mục duy nhất theo điều kiện cho `topic_name` (tên chủ đề chỉ được kiểm tra duy nhất ở tầng ứng dụng) |
 | Kiểm thử | `QueryCountIT` chưa phủ `getTopicsByTeacher`, `findQuestionResults`, `topicProgress` / `lessonProgress` và dashboard học sinh |
 | Phiên và CSRF (1.4, UC-AUTH-01) | Cookie session chưa đặt cờ `Secure` (cần cấu hình khi chạy HTTPS); token CSRF được sinh lại sau mỗi lần đăng nhập nên form đăng nhập mở sẵn ở tab khác sẽ bị 403 khi gửi; `login.jsp` chưa hiện `errorFlash` (lỗi 400 quay về `/login` không có thông báo) |

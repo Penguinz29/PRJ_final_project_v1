@@ -23,7 +23,7 @@ import org.springframework.stereotype.Service;
 public class QuestionImportService {
 
     private static final String BASE = String.join("\n",
-            "Bạn là trợ lý số hóa đề Toán THPT (chương trình GDPT 2018, lớp 12).",
+            "Bạn là trợ lý số hóa đề Toán THCS (chương trình GDPT 2018, lớp 9).",
             "Người dùng gửi TỆP ĐỀ BÀI (và có thể có TỆP ĐÁP ÁN). Nếu tệp chứa nhiều câu, chỉ lấy CÂU ĐẦU TIÊN.",
             "- Chép NGUYÊN VĂN đề bài, không tự sửa số liệu. Mọi công thức toán PHẢI nằm trong $...$ (LaTeX), "
                     + "ví dụ $\\frac{x+1}{x-2}$; không để lệnh LaTeX trần ngoài dấu $.",
