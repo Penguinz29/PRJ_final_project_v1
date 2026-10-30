@@ -103,8 +103,7 @@ PRJ_final_project_v1/
 │   ├── SRS.md, FRS.md, Claude.md          # Đặc tả yêu cầu, đặc tả chức năng, quy tắc kỹ thuật
 │   ├── docs/                              # DATABASE.md, ERD.md, ERD + đặc tả ràng buộc (.docx)
 │   └── sql/
-│       ├── 01_schema.sql                  # Tạo CSDL MathTutorDB + 10 bảng (XÓA CSDL cũ cùng tên)
-│       └── 02_data.sql                    # Toàn bộ dữ liệu: người dùng, cấu hình AI, nội dung SGK Toán 9, video, bài làm mẫu
+│       └── MathTutorDB.sql                # Tạo CSDL MathTutorDB + 10 bảng (XÓA CSDL cũ cùng tên) và nạp toàn bộ dữ liệu mẫu
 └── src/
     ├── main/
     │   ├── java/
@@ -132,13 +131,10 @@ PRJ_final_project_v1/
 JDK 17 · Maven 3.9+ (hoặc Maven đi kèm NetBeans) · Tomcat 10.1 · SQL Server (bật TCP/IP cổng 1433).
 
 ### Bước 1 – Tạo cơ sở dữ liệu
-Chạy trong SSMS, theo thứ tự, các file trong `document/sql/`:
-
-1. `01_schema.sql` – tạo `MathTutorDB` (**xóa và tạo lại** nếu đã tồn tại).
-2. `02_data.sql` – toàn bộ dữ liệu: người dùng, cấu hình AI, nội dung SGK Toán 9 (10 chủ đề, 56 bài học), video bài giảng VietJack và lịch sử bài làm mẫu. Chỉ chạy một lần; muốn nạp lại phải chạy lại `01_schema.sql` trước.
+Chạy trong SSMS một file duy nhất `document/sql/MathTutorDB.sql`. Script **xóa và tạo lại** `MathTutorDB` nếu đã tồn tại, tạo 10 bảng rồi nạp toàn bộ dữ liệu: người dùng, cấu hình AI, nội dung SGK Toán 9 (10 chủ đề, 56 bài học, mỗi bài từ Bài 1 đến Bài 32 có 10 câu trắc nghiệm), video bài giảng VietJack và lịch sử bài làm mẫu. Muốn nạp lại dữ liệu sạch thì chạy lại chính file này.
 
 > Dùng `sqlcmd` thì thêm cờ `-x` vì dữ liệu chứa ký tự `$(`:
-> `sqlcmd -S localhost -U sa -P <mật khẩu> -C -x -f 65001 -i 02_data.sql`
+> `sqlcmd -S localhost -U sa -P <mật khẩu> -C -x -f 65001 -i MathTutorDB.sql`
 
 ### Bước 2 – Cấu hình kết nối
 Sửa `src/main/resources/application.properties` (`db.url`, `db.username`, `db.password`) hoặc đặt biến môi trường `DB_URL`, `DB_USER`, `DB_PASS` (ưu tiên cao hơn). Ảnh bài làm tự luận lưu ở `app.upload-dir` (mặc định `C:/edututor/uploads`, đổi bằng `UPLOAD_DIR`).

@@ -44,7 +44,7 @@ import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 /**
  * Kiểm thử tích hợp end-to-end (tên *IT: không chạy trong {@code mvn package}): Tomcat nhúng + toàn bộ Spring MVC +
  * Spring Data JPA/Hibernate + SQL Server thật + Gemini giả (mock HTTP).
- * Cần một CSDL RIÊNG đã nạp document/sql/01_schema.sql + 02_data.sql (đổi tên MathTutorDB trong 2 file, vd.
+ * Cần một CSDL RIÊNG đã nạp document/sql/MathTutorDB.sql (đổi tên MathTutorDB trong file, vd.
  * thành MathTutorDB_verify);
  * chạy riêng:
  * <pre>

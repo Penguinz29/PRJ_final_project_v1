@@ -1,19 +1,290 @@
 -- =====================================================================================================================
--- File: document/sql/02_data.sql — EduTutor Math 9: toàn bộ dữ liệu (gộp từ 02, 04_toan9, 05, 06 cũ)
--- Chạy SAU 01_schema.sql (CSDL vừa tạo, chưa có dữ liệu). Chỉ chạy một lần; muốn nạp lại thì chạy lại 01_schema.sql trước.
--- Mật khẩu mặc định của mọi tài khoản mẫu: EduTutor@123 (BCrypt).
+-- File: document/sql/MathTutorDB.sql — EduTutor Math 9: tạo CSDL, 10 bảng, ràng buộc và toàn bộ dữ liệu (chạy một lần)
+-- CẢNH BÁO: script XÓA CSDL MathTutorDB cũ (nếu có) rồi tạo lại từ đầu; dữ liệu cũ bị thay bằng dữ liệu của file này.
+--
+-- Quy ước: tài liệu SRS / FRS dùng snake_case (questions.is_active), CSDL dùng PascalCase (Questions.IsActive).
+-- 6 bảng lõi: Users, Topics, Lessons, Questions, Submissions, TutorSessions
+-- 4 bảng phụ do chuẩn hóa: LessonMaterials, QuestionOptions, TutorMessages (thuộc tính đa trị 1-N), AiConfigs (cấu hình)
+-- Mỗi bảng ánh xạ một Entity JPA; Hibernate chạy với hbm2ddl.auto = none nên script này là nguồn sự thật về cấu trúc.
+--
 -- Nội dung theo thứ tự:
+--   0. Cấu trúc: CSDL MathTutorDB, 10 bảng, khóa, ràng buộc, chỉ mục.
 --   1. Users: 1 admin, 3 giáo viên (teacher1-3), 12 học sinh (student1-12; student9 bị khóa, student10 xóa mềm).
+--      Mật khẩu mặc định của mọi tài khoản mẫu: EduTutor@123 (BCrypt).
 --   2. AiConfigs: 15 khóa cấu hình AI (khóa API để trống cho tới khi Admin nhập).
 --   3. Nội dung SGK Toán 9 (Kết nối tri thức với cuộc sống, Tập 1 + 2): mỗi chương = 1 chủ đề (Chương I-X), mỗi bài / Luyện tập chung /
 --      Bài tập cuối chương = 1 bài học kèm tóm tắt lý thuyết; mục "Bài tập" của sách thành câu hỏi (MCQ có đáp án, còn lại TỰ LUẬN có lời giải).
 --      Đề có hình vẽ gắn ảnh <img src="/static/img/sgk9/..."> (thư mục src/main/webapp/static/img/sgk9; cần triển khai lại WAR kèm ảnh).
 --      Sách không in đáp án nên đáp án và lời giải do người số hóa tự giải (giáo viên nên xem lại khi dùng chính thức).
 --      Toàn bộ chủ đề / bài học / câu hỏi do teacher1 tạo. Chưa gồm Hoạt động thực hành trải nghiệm và Bài tập ôn tập cuối năm.
---   4. Video YouTube của VietJack: Bài 1-32 mỗi bài 1 video "Bài giảng"; Luyện tập chung / Bài tập cuối chương 1 video "Giải bài tập".
---   5. Lịch sử bài làm mẫu: tự luận chương I (33 bài làm) và trắc nghiệm cho các bài học còn ít lượt làm.
+--   4. Câu trắc nghiệm theo bài: Bài 1-32 mỗi bài 10 câu MCQ (4 Dễ, 4 Trung bình, 2 Khó) kèm lời giải.
+--   5. Video YouTube của VietJack: Bài 1-32 mỗi bài 1 video "Bài giảng"; Luyện tập chung / Bài tập cuối chương 1 video "Giải bài tập".
+--   6. Lịch sử bài làm mẫu: tự luận chương I (33 bài làm) và trắc nghiệm cho các bài học còn ít lượt làm.
 -- Chạy bằng SSMS. Nếu dùng sqlcmd phải thêm -x và -f 65001 (công thức LaTeX có "$(" bị hiểu nhầm là biến).
 -- =====================================================================================================================
+
+-- =====================================================================================================================
+-- 0. Cấu trúc CSDL
+-- =====================================================================================================================
+USE master;
+GO
+
+IF DB_ID(N'MathTutorDB') IS NOT NULL
+BEGIN
+    ALTER DATABASE MathTutorDB SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+    DROP DATABASE MathTutorDB;
+END
+GO
+
+CREATE DATABASE MathTutorDB;
+GO
+
+USE MathTutorDB;
+GO
+
+-- ---------------------------------------------------------------------------------------------------------------------
+-- Bảng 1. Users — tài khoản 3 vai trò (BR-01, BR-02, BR-06)
+--    Status: ACTIVE (hoạt động) | SUSPENDED (khóa tạm, mở khóa được) | INACTIVE (xóa mềm, Admin khôi phục được)
+--    IsActive: cột cũ, ứng dụng luôn giữ đồng bộ (IsActive = 1 khi và chỉ khi Status = 'ACTIVE')
+--    TeacherId: giáo viên phụ trách (chỉ có ý nghĩa với STUDENT)
+-- ---------------------------------------------------------------------------------------------------------------------
+CREATE TABLE Users (
+    UserId        INT IDENTITY(1,1) NOT NULL,
+    Username      VARCHAR(50)   NOT NULL,
+    PasswordHash  VARCHAR(64)   NOT NULL,                  -- BCrypt (60 ký tự); chỉ chấp nhận BCrypt
+    FullName      NVARCHAR(100) NOT NULL,
+    Email         VARCHAR(100)  NULL,
+    [Role]        VARCHAR(20)   NOT NULL,
+    [Status]      VARCHAR(20)   NOT NULL CONSTRAINT DF_Users_Status DEFAULT 'ACTIVE',
+    IsActive      BIT           NULL     CONSTRAINT DF_Users_IsActive DEFAULT 1,
+    TeacherId     INT           NULL,
+    CreatedAt     DATETIME      NULL     CONSTRAINT DF_Users_CreatedAt DEFAULT GETDATE(),
+    UpdatedAt     DATETIME      NULL,
+    CONSTRAINT PK_Users PRIMARY KEY (UserId),
+    CONSTRAINT UQ_Users_Username UNIQUE (Username),
+    CONSTRAINT UQ_Users_Email UNIQUE (Email),
+    CONSTRAINT CK_Users_Role CHECK ([Role] IN ('ADMIN', 'TEACHER', 'STUDENT')),
+    CONSTRAINT CK_Users_Status CHECK ([Status] IN ('ACTIVE', 'SUSPENDED', 'INACTIVE')),
+    CONSTRAINT FK_Student_Teacher FOREIGN KEY (TeacherId) REFERENCES Users(UserId)
+);
+GO
+
+-- ---------------------------------------------------------------------------------------------------------------------
+-- Bảng 2. Topics — chủ đề / chuyên đề (cấp trên của bài học). IsActive = 0: xóa mềm (BR-05, chỉ ẩn ở trang quản lý)
+-- ---------------------------------------------------------------------------------------------------------------------
+CREATE TABLE Topics (
+    TopicId       INT IDENTITY(1,1) NOT NULL,
+    TopicName     NVARCHAR(255) NOT NULL,
+    [Description] NVARCHAR(MAX) NULL,
+    TeacherId     INT           NOT NULL,                  -- người tạo (BR-03)
+    OrderIndex    INT           NOT NULL CONSTRAINT DF_Topics_OrderIndex DEFAULT 1,
+    IsActive      BIT           NOT NULL CONSTRAINT DF_Topics_IsActive DEFAULT 1,
+    CreatedAt     DATETIME      NULL     CONSTRAINT DF_Topics_CreatedAt DEFAULT GETDATE(),
+    UpdatedAt     DATETIME      NULL,
+    CONSTRAINT PK_Topics PRIMARY KEY (TopicId),
+    CONSTRAINT FK_Topic_Teacher FOREIGN KEY (TeacherId) REFERENCES Users(UserId)
+);
+GO
+
+-- ---------------------------------------------------------------------------------------------------------------------
+-- Bảng 3. Lessons — bài học. DisplayOrder ≙ lessons.order_index; CreatedBy: người tạo (BR-03)
+-- ---------------------------------------------------------------------------------------------------------------------
+CREATE TABLE Lessons (
+    LessonId      INT IDENTITY(1,1) NOT NULL,
+    TopicId       INT           NOT NULL,
+    Title         NVARCHAR(255) NOT NULL,
+    Summary       NVARCHAR(500) NULL,
+    Content       NVARCHAR(MAX) NULL,                      -- lý thuyết (LaTeX)
+    DisplayOrder  INT           NULL     CONSTRAINT DF_Lessons_DisplayOrder DEFAULT 0,
+    IsActive      BIT           NOT NULL CONSTRAINT DF_Lessons_IsActive DEFAULT 1,
+    CreatedBy     INT           NOT NULL,
+    CreatedAt     DATETIME      NULL     CONSTRAINT DF_Lessons_CreatedAt DEFAULT GETDATE(),
+    UpdatedAt     DATETIME      NULL,
+    CONSTRAINT PK_Lessons PRIMARY KEY (LessonId),
+    CONSTRAINT FK_Lesson_Topic FOREIGN KEY (TopicId) REFERENCES Topics(TopicId) ON DELETE CASCADE,
+    CONSTRAINT FK_Lesson_CreatedBy FOREIGN KEY (CreatedBy) REFERENCES Users(UserId)
+);
+GO
+
+-- ---------------------------------------------------------------------------------------------------------------------
+-- Bảng 4. LessonMaterials — bài giảng: VIDEO | YOUTUBE | LINK dùng Url; TEXT dùng ContentText (FR-TEA-03, VAL-08)
+-- ---------------------------------------------------------------------------------------------------------------------
+CREATE TABLE LessonMaterials (
+    MaterialId    INT IDENTITY(1,1) NOT NULL,
+    LessonId      INT           NOT NULL,
+    MaterialType  VARCHAR(10)   NOT NULL,
+    Title         NVARCHAR(200) NOT NULL,
+    Url           VARCHAR(500)  NULL,
+    ContentText   NVARCHAR(MAX) NULL,
+    OrderIndex    INT           NOT NULL CONSTRAINT DF_LessonMaterials_OrderIndex DEFAULT 1,
+    CreatedBy     INT           NOT NULL,
+    CreatedAt     DATETIME      NOT NULL CONSTRAINT DF_LessonMaterials_CreatedAt DEFAULT GETDATE(),
+    UpdatedAt     DATETIME      NULL,
+    CONSTRAINT PK_LessonMaterials PRIMARY KEY (MaterialId),
+    CONSTRAINT CK_Material_Type CHECK (MaterialType IN ('VIDEO', 'YOUTUBE', 'LINK', 'TEXT')),
+    -- TEXT bắt buộc có ContentText; các loại còn lại bắt buộc có Url
+    CONSTRAINT CK_Material_Content CHECK (
+        (MaterialType = 'TEXT' AND ContentText IS NOT NULL) OR (MaterialType <> 'TEXT' AND Url IS NOT NULL)),
+    CONSTRAINT FK_Material_Lesson FOREIGN KEY (LessonId) REFERENCES Lessons(LessonId) ON DELETE CASCADE,
+    CONSTRAINT FK_Material_User FOREIGN KEY (CreatedBy) REFERENCES Users(UserId)
+);
+GO
+CREATE INDEX IX_LessonMaterials_Lesson ON LessonMaterials(LessonId, OrderIndex);
+GO
+
+-- ---------------------------------------------------------------------------------------------------------------------
+-- Bảng 5. Questions — ngân hàng câu hỏi. Level: 1 Dễ, 2 Trung bình, 3 Khó. IsActive = 0: xóa mềm (BR-05)
+-- ---------------------------------------------------------------------------------------------------------------------
+CREATE TABLE Questions (
+    QuestionId       INT IDENTITY(1,1) NOT NULL,
+    LessonId         INT           NOT NULL,
+    QuestionType     VARCHAR(10)   NOT NULL,
+    Content          NVARCHAR(MAX) NOT NULL,               -- nội dung đề (LaTeX)
+    ExplanationLatex NVARCHAR(MAX) NULL,                   -- lời giải: chỉ gửi học sinh SAU khi nộp (BR-11)
+    [Level]          INT           NOT NULL CONSTRAINT DF_Questions_Level DEFAULT 1,
+    IsAiGenerated    BIT           NULL     CONSTRAINT DF_Questions_IsAiGenerated DEFAULT 0,
+    IsActive         BIT           NOT NULL CONSTRAINT DF_Questions_IsActive DEFAULT 1,
+    TeacherId        INT           NOT NULL,               -- người tạo (BR-03)
+    CreatedAt        DATETIME      NULL     CONSTRAINT DF_Questions_CreatedAt DEFAULT GETDATE(),
+    UpdatedAt        DATETIME      NULL,
+    CONSTRAINT PK_Questions PRIMARY KEY (QuestionId),
+    CONSTRAINT CK_Questions_Type CHECK (QuestionType IN ('MCQ', 'ESSAY')),
+    CONSTRAINT CK_Questions_Level CHECK ([Level] IN (1, 2, 3)),
+    CONSTRAINT FK_Question_Lesson FOREIGN KEY (LessonId) REFERENCES Lessons(LessonId) ON DELETE CASCADE,
+    CONSTRAINT FK_Question_Teacher FOREIGN KEY (TeacherId) REFERENCES Users(UserId)
+);
+GO
+CREATE INDEX IX_Questions_Lesson_Active ON Questions(LessonId, IsActive);
+GO
+
+-- ---------------------------------------------------------------------------------------------------------------------
+-- Bảng 6. QuestionOptions — phương án của câu trắc nghiệm (BR-04: đúng 4 phương án A-D, 1 đáp án đúng; kiểm tra ở Service)
+-- ---------------------------------------------------------------------------------------------------------------------
+CREATE TABLE QuestionOptions (
+    OptionId      INT IDENTITY(1,1) NOT NULL,
+    QuestionId    INT           NOT NULL,
+    OptionLetter  CHAR(1)       NOT NULL,
+    Content       NVARCHAR(MAX) NOT NULL,
+    IsCorrect     BIT           NULL     CONSTRAINT DF_QuestionOptions_IsCorrect DEFAULT 0,
+    CreatedAt     DATETIME      NOT NULL CONSTRAINT DF_QuestionOptions_CreatedAt DEFAULT GETDATE(),
+    UpdatedAt     DATETIME      NULL,
+    CONSTRAINT PK_QuestionOptions PRIMARY KEY (OptionId),
+    CONSTRAINT UQ_Question_OptionLetter UNIQUE (QuestionId, OptionLetter),
+    CONSTRAINT CK_QuestionOptions_Letter CHECK (OptionLetter IN ('A', 'B', 'C', 'D', 'E', 'F')),
+    CONSTRAINT FK_Option_Question FOREIGN KEY (QuestionId) REFERENCES Questions(QuestionId) ON DELETE CASCADE
+);
+GO
+
+-- ---------------------------------------------------------------------------------------------------------------------
+-- Bảng 7. Submissions — bài làm trắc nghiệm (MCQ) và tự luận (ESSAY), điểm thang 10 (BR-07, BR-09)
+--    Status: GRADED (trắc nghiệm tự chấm) | AI_GRADED (tự luận AI đã chấm, chờ duyệt) | REVIEWED (giáo viên đã duyệt)
+--    AiScore: điểm AI đề xuất, không bao giờ bị ghi đè; FinalScore: điểm chính thức (trắc nghiệm 10 / 0)
+--    IsReviewed: cột cũ, ứng dụng giữ đồng bộ (IsReviewed = 0 khi và chỉ khi Status = 'AI_GRADED')
+-- ---------------------------------------------------------------------------------------------------------------------
+CREATE TABLE Submissions (
+    SubmissionId        INT IDENTITY(1,1) NOT NULL,
+    StudentId           INT           NOT NULL,
+    LessonId            INT           NULL,
+    QuestionId          INT           NOT NULL,
+    QuestionType        VARCHAR(10)   NOT NULL,
+    StudentAnswer       NVARCHAR(MAX) NULL,                -- MCQ: chữ cái đã chọn; ESSAY: nội dung nhận diện / gõ tay
+    EssayImagePath      VARCHAR(255)  NULL,                -- /uploads/essays/{studentId}/{uuid}.{ext}
+    IsCorrect           BIT           NULL,
+    AiScore             DECIMAL(4,2)  NULL,
+    FinalScore          DECIMAL(4,2)  NULL,
+    AiFeedback          NVARCHAR(MAX) NULL,
+    SuggestedCorrection NVARCHAR(MAX) NULL,
+    TeacherFeedback     NVARCHAR(MAX) NULL,                -- ≙ teacher_comment
+    [Status]            VARCHAR(20)   NOT NULL CONSTRAINT DF_Submissions_Status DEFAULT 'GRADED',
+    IsReviewed          BIT           NULL     CONSTRAINT DF_Submissions_IsReviewed DEFAULT 0,
+    ReviewedBy          INT           NULL,
+    ReviewedAt          DATETIME      NULL,
+    SubmittedAt         DATETIME      NULL     CONSTRAINT DF_Submissions_SubmittedAt DEFAULT GETDATE(),
+    UpdatedAt           DATETIME      NULL,
+    CONSTRAINT PK_Submissions PRIMARY KEY (SubmissionId),
+    CONSTRAINT CK_Submissions_QuestionType CHECK (QuestionType IN ('MCQ', 'ESSAY')),
+    CONSTRAINT CK_Submissions_Status CHECK ([Status] IN ('GRADED', 'AI_GRADED', 'REVIEWED')),
+    CONSTRAINT CK_Submissions_AiScore CHECK (AiScore IS NULL OR (AiScore >= 0 AND AiScore <= 10)),
+    CONSTRAINT CK_Submissions_FinalScore CHECK (FinalScore IS NULL OR (FinalScore >= 0 AND FinalScore <= 10)),
+    CONSTRAINT FK_Submission_Student FOREIGN KEY (StudentId) REFERENCES Users(UserId),
+    CONSTRAINT FK_Submission_Lesson FOREIGN KEY (LessonId) REFERENCES Lessons(LessonId),
+    CONSTRAINT FK_Submission_Question FOREIGN KEY (QuestionId) REFERENCES Questions(QuestionId),
+    CONSTRAINT FK_Submission_Reviewer FOREIGN KEY (ReviewedBy) REFERENCES Users(UserId)
+);
+GO
+CREATE INDEX IX_Submissions_Student ON Submissions(StudentId, SubmittedAt DESC);
+GO
+
+-- ---------------------------------------------------------------------------------------------------------------------
+-- Bảng 8. AiConfigs — cấu hình AI do Admin sửa trên giao diện (FR-ADM-06). IsSecret = 1: chỉ hiển thị dạng che
+-- ---------------------------------------------------------------------------------------------------------------------
+CREATE TABLE AiConfigs (
+    ConfigId      INT IDENTITY(1,1) NOT NULL,
+    ConfigKey     VARCHAR(50)   NOT NULL,
+    ConfigValue   NVARCHAR(MAX) NOT NULL,                  -- prompt tới 8.000 ký tự (VAL-17)
+    [Description] NVARCHAR(255) NULL,
+    IsSecret      BIT           NOT NULL CONSTRAINT DF_AiConfigs_IsSecret DEFAULT 0,
+    UpdatedBy     INT           NULL,
+    CreatedAt     DATETIME      NOT NULL CONSTRAINT DF_AiConfigs_CreatedAt DEFAULT GETDATE(),
+    UpdatedAt     DATETIME      NULL     CONSTRAINT DF_AiConfigs_UpdatedAt DEFAULT GETDATE(),
+    CONSTRAINT PK_AiConfigs PRIMARY KEY (ConfigId),
+    CONSTRAINT UQ_AiConfigs_ConfigKey UNIQUE (ConfigKey),
+    CONSTRAINT FK_AiConfig_User FOREIGN KEY (UpdatedBy) REFERENCES Users(UserId)
+);
+GO
+
+-- ---------------------------------------------------------------------------------------------------------------------
+-- Bảng 9. TutorSessions — phiên gia sư AI từng bước (FR-TUT-01..05, BR-14, BR-15)
+--    CurrentStep / TotalSteps: server là nguồn sự thật về bước (TotalSteps = 0: chưa xác định)
+--    AwaitingInput = 1: AI đang dừng chờ học sinh nhập số liệu (InputHint mô tả cần nhập gì)
+--    QuestionId: phiên mở từ câu trắc nghiệm làm sai / bài tự luận vừa chấm. NO ACTION để tránh nhiều đường
+--    cascade (Lessons → Questions → TutorSessions và Lessons → TutorSessions); câu đã có bài nộp không bị xóa cứng.
+-- ---------------------------------------------------------------------------------------------------------------------
+CREATE TABLE TutorSessions (
+    SessionId     INT IDENTITY(1,1) NOT NULL,
+    StudentId     INT           NOT NULL,
+    LessonId      INT           NULL,
+    QuestionId    INT           NULL,
+    Title         NVARCHAR(255) NOT NULL,
+    ProblemText   NVARCHAR(MAX) NULL,
+    CurrentStep   INT           NOT NULL CONSTRAINT DF_TutorSessions_CurrentStep DEFAULT 1,
+    TotalSteps    INT           NOT NULL CONSTRAINT DF_TutorSessions_TotalSteps DEFAULT 0,
+    [Status]      VARCHAR(20)   NOT NULL CONSTRAINT DF_TutorSessions_Status DEFAULT 'ACTIVE',
+    AwaitingInput BIT           NOT NULL CONSTRAINT DF_TutorSessions_AwaitingInput DEFAULT 0,
+    InputHint     NVARCHAR(255) NULL,
+    CreatedAt     DATETIME      NULL     CONSTRAINT DF_TutorSessions_CreatedAt DEFAULT GETDATE(),
+    UpdatedAt     DATETIME      NULL,
+    CONSTRAINT PK_TutorSessions PRIMARY KEY (SessionId),
+    CONSTRAINT CK_TutorSessions_Status CHECK ([Status] IN ('ACTIVE', 'COMPLETED', 'ABANDONED')),
+    CONSTRAINT CK_TutorSessions_Steps CHECK (CurrentStep >= 1 AND TotalSteps >= 0),
+    CONSTRAINT FK_TutorSession_Student FOREIGN KEY (StudentId) REFERENCES Users(UserId),
+    CONSTRAINT FK_TutorSession_Lesson FOREIGN KEY (LessonId) REFERENCES Lessons(LessonId) ON DELETE SET NULL,
+    CONSTRAINT FK_TutorSession_Question FOREIGN KEY (QuestionId) REFERENCES Questions(QuestionId)
+);
+GO
+CREATE INDEX IX_TutorSessions_Student ON TutorSessions(StudentId, CreatedAt DESC);
+GO
+
+-- ---------------------------------------------------------------------------------------------------------------------
+-- Bảng 10. TutorMessages — hội thoại trong phiên gia sư (USER = học sinh, AI = gia sư)
+-- ---------------------------------------------------------------------------------------------------------------------
+CREATE TABLE TutorMessages (
+    MessageId       INT IDENTITY(1,1) NOT NULL,
+    SessionId       INT           NOT NULL,
+    SenderType      VARCHAR(10)   NOT NULL,
+    StepNumber      INT           NOT NULL CONSTRAINT DF_TutorMessages_StepNumber DEFAULT 1,
+    ContentText     NVARCHAR(MAX) NOT NULL,
+    IsStepCompleted BIT           NOT NULL CONSTRAINT DF_TutorMessages_IsStepCompleted DEFAULT 0,
+    CreatedAt       DATETIME      NULL     CONSTRAINT DF_TutorMessages_CreatedAt DEFAULT GETDATE(),
+    UpdatedAt       DATETIME      NULL,
+    CONSTRAINT PK_TutorMessages PRIMARY KEY (MessageId),
+    CONSTRAINT CK_TutorMessages_Sender CHECK (SenderType IN ('USER', 'AI')),
+    CONSTRAINT FK_TutorMessage_Session FOREIGN KEY (SessionId) REFERENCES TutorSessions(SessionId) ON DELETE CASCADE
+);
+GO
+CREATE INDEX IX_TutorMessages_Session ON TutorMessages(SessionId, MessageId);
+GO
+
 USE MathTutorDB;
 GO
 
@@ -3176,7 +3447,2472 @@ GROUP BY t.TopicId, t.TopicName, t.OrderIndex ORDER BY t.OrderIndex;
 GO
 
 -- =====================================================================================================================
--- 4. Video bài giảng VietJack
+-- 4. Câu trắc nghiệm theo bài (Bài 1-32, mỗi bài 10 câu). Bài đã có câu MCQ thì bỏ qua.
+-- =====================================================================================================================
+SET NOCOUNT ON;
+BEGIN TRANSACTION;
+
+DECLARE @t1 INT = (SELECT UserId FROM Users WHERE Username = 'teacher1');
+DECLARE @l INT, @q INT;
+
+-- Bài 1. Khái niệm phương trình và hệ hai phương trình bậc nhất hai ẩn
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 1. Khái niệm phương trình và hệ hai phương trình bậc nhất hai ẩn' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Phương trình nào sau đây là phương trình bậc nhất hai ẩn?</p>', N'<p>Phương trình $ax+by=c$ là bậc nhất hai ẩn khi $a\neq0$ hoặc $b\neq0$. Phương trình $2x-0y=7$ có $a=2\neq0$ nên là phương trình bậc nhất hai ẩn. $0x+0y=5$ có $a=b=0$; $x^2+y=3$ và $xy+x=1$ chứa $x^2$, $xy$ nên không phải.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$0x+0y=5$.', 0),
+(@q, 'B', N'$x^2+y=3$.', 0),
+(@q, 'C', N'$2x-0y=7$.', 1),
+(@q, 'D', N'$xy+x=1$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cặp số nào sau đây là một nghiệm của phương trình $3x-2y=4$?</p>', N'<p>Thay $(2;1)$: $3\cdot2-2\cdot1=4$, đúng. Các cặp còn lại: $(1;2)\to3-4=-1$; $(0;2)\to-4$; $(2;-1)\to6+2=8$, đều khác $4$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$(2;1)$.', 1),
+(@q, 'B', N'$(1;2)$.', 0),
+(@q, 'C', N'$(0;2)$.', 0),
+(@q, 'D', N'$(2;-1)$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một phương trình bậc nhất hai ẩn $ax+by=c$ ($a\neq0$ hoặc $b\neq0$) có bao nhiêu nghiệm?</p>', N'<p>Mỗi phương trình bậc nhất hai ẩn đều có vô số nghiệm: với mỗi giá trị tùy ý của một ẩn ta luôn tìm được giá trị tương ứng của ẩn kia. Tập nghiệm được biểu diễn bởi một đường thẳng.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'Có một nghiệm duy nhất.', 0),
+(@q, 'B', N'Có đúng hai nghiệm.', 0),
+(@q, 'C', N'Vô nghiệm.', 0),
+(@q, 'D', N'Có vô số nghiệm.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Trong mặt phẳng tọa độ $Oxy$, tập nghiệm của phương trình $0x+3y=-6$ được biểu diễn bởi</p>', N'<p>Phương trình viết gọn thành $y=-2$, nghiệm $(x;-2)$ với $x\in\mathbb{R}$. Tập nghiệm là đường thẳng $y=-2$, song song với trục hoành, cắt trục tung tại điểm $(0;-2)$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'đường thẳng $x=-2$, song song với trục tung.', 0),
+(@q, 'B', N'đường thẳng $y=-2$, song song với trục hoành.', 1),
+(@q, 'C', N'đường thẳng $y=-2$, song song với trục tung.', 0),
+(@q, 'D', N'đường thẳng đi qua gốc tọa độ $O$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Nghiệm tổng quát của phương trình $2x+y=5$ là</p>', N'<p>Từ $2x+y=5$ suy ra $y=5-2x$. Vậy nghiệm tổng quát là $(x;5-2x)$ với $x\in\mathbb{R}$ tùy ý. Các phương án khác sai do chuyển vế sai dấu hoặc chia sai hệ số.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$(x;2x-5)$ với $x\in\mathbb{R}$.', 0),
+(@q, 'B', N'$\left(x;\dfrac{5-x}{2}\right)$ với $x\in\mathbb{R}$.', 0),
+(@q, 'C', N'$(x;5-2x)$ với $x\in\mathbb{R}$.', 1),
+(@q, 'D', N'$(5-2y;y)$ với $y\in\mathbb{R}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cặp số nào sau đây là nghiệm của hệ phương trình $\begin{cases}x+y=3\\ 2x-y=0\end{cases}$ ?</p>', N'<p>Thay $(1;2)$: $1+2=3$ và $2\cdot1-2=0$, đều đúng. Các cặp còn lại: $(2;1)$ cho $2x-y=3\neq0$; $(3;0)$ cho $2x-y=6\neq0$; $(0;3)$ cho $2x-y=-3\neq0$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$(2;1)$.', 0),
+(@q, 'B', N'$(1;2)$.', 1),
+(@q, 'C', N'$(3;0)$.', 0),
+(@q, 'D', N'$(0;3)$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Giá trị của $m$ để cặp số $(2;-1)$ là một nghiệm của phương trình $mx+3y=5$ là</p>', N'<p>Thay $x=2,\ y=-1$: $2m+3\cdot(-1)=5$ hay $2m=8$, suy ra $m=4$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$m=4$.', 1),
+(@q, 'B', N'$m=1$.', 0),
+(@q, 'C', N'$m=-4$.', 0),
+(@q, 'D', N'$m=3$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Đường thẳng $x-2y=4$ cắt trục tung tại điểm nào?</p>', N'<p>Điểm trên trục tung có hoành độ $x=0$. Thay vào: $-2y=4$, $y=-2$. Vậy giao điểm là $(0;-2)$. Điểm $(4;0)$ là giao điểm với trục hoành.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$(4;0)$.', 0),
+(@q, 'B', N'$(0;2)$.', 0),
+(@q, 'C', N'$(-2;0)$.', 0),
+(@q, 'D', N'$(0;-2)$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Tìm $a$ và $b$ để hệ phương trình $\begin{cases}ax+y=b\\ x-by=a\end{cases}$ có nghiệm là $(1;2)$.</p>', N'<p>Thay $x=1,\ y=2$: $\begin{cases}a+2=b\\ 1-2b=a.\end{cases}$ Thế $a=1-2b$ vào phương trình thứ nhất: $3-2b=b$, suy ra $b=1$, $a=-1$. Kiểm tra: $-1+2=1=b$ và $1-2=-1=a$, đúng.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$a=1,\ b=-1$.', 0),
+(@q, 'B', N'$a=-1,\ b=1$.', 1),
+(@q, 'C', N'$a=-1,\ b=-1$.', 0),
+(@q, 'D', N'$a=1,\ b=3$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Phương trình $2x+3y=14$ có bao nhiêu nghiệm $(x;y)$ với $x,\ y$ là các số nguyên dương?</p>', N'<p>Ta có $2x=14-3y$ nên $3y$ chẵn, tức $y$ chẵn; lại cần $14-3y\gt0$ nên $y\lt\dfrac{14}{3}$. Với $y$ nguyên dương chẵn: $y=2\Rightarrow x=4$; $y=4\Rightarrow x=1$. Vậy có 2 nghiệm $(4;2)$ và $(1;4)$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'1 nghiệm.', 0),
+(@q, 'B', N'3 nghiệm.', 0),
+(@q, 'C', N'2 nghiệm.', 1),
+(@q, 'D', N'Vô số nghiệm.', 0);
+END
+
+-- Bài 2. Giải hệ hai phương trình bậc nhất hai ẩn
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 2. Giải hệ hai phương trình bậc nhất hai ẩn' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Nghiệm của hệ phương trình $\begin{cases}x+y=5\\ x-y=1\end{cases}$ là</p>', N'<p>Cộng từng vế: $2x=6$, $x=3$; thế vào $x+y=5$ được $y=2$. Nghiệm $(3;2)$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$(2;3)$.', 0),
+(@q, 'B', N'$(3;2)$.', 1),
+(@q, 'C', N'$(4;1)$.', 0),
+(@q, 'D', N'$(3;-2)$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Giải hệ phương trình $\begin{cases}y=2x\\ x+y=6\end{cases}$ bằng phương pháp thế, ta được nghiệm</p>', N'<p>Thế $y=2x$ vào phương trình thứ hai: $x+2x=6$, $3x=6$, $x=2$; $y=4$. Nghiệm $(2;4)$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$(4;2)$.', 0),
+(@q, 'B', N'$(1;2)$.', 0),
+(@q, 'C', N'$(2;4)$.', 1),
+(@q, 'D', N'$(3;6)$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Khi giải hệ phương trình $\begin{cases}3x+2y=7\\ 5x-2y=1\end{cases}$ bằng phương pháp cộng đại số, cộng từng vế hai phương trình ta được phương trình nào?</p>', N'<p>Hệ số của $y$ là $2$ và $-2$ (đối nhau) nên cộng từng vế: $(3x+5x)+(2y-2y)=7+1$, tức $8x=8$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$8x=6$.', 0),
+(@q, 'B', N'$8x+4y=8$.', 0),
+(@q, 'C', N'$-2x+4y=6$.', 0),
+(@q, 'D', N'$8x=8$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Khi dùng máy tính cầm tay giải hệ hai phương trình bậc nhất hai ẩn, nếu máy báo "No-Solution" thì hệ</p>', N'<p>Theo quy ước của máy tính cầm tay: "No-Solution" nghĩa là hệ vô nghiệm; "Infinite Sol" nghĩa là hệ có vô số nghiệm.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'vô nghiệm.', 1),
+(@q, 'B', N'có vô số nghiệm.', 0),
+(@q, 'C', N'có nghiệm $(0;0)$.', 0),
+(@q, 'D', N'có nghiệm duy nhất.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Nghiệm của hệ phương trình $\begin{cases}2x+3y=8\\ 3x-y=1\end{cases}$ là</p>', N'<p>Từ phương trình thứ hai $y=3x-1$. Thế vào phương trình thứ nhất: $2x+3(3x-1)=8$ hay $11x=11$, $x=1$, $y=2$. Lưu ý $(4;0)$ chỉ thỏa mãn phương trình thứ nhất ($3\cdot4-0=12\neq1$).</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$(2;1)$.', 0),
+(@q, 'B', N'$(4;0)$.', 0),
+(@q, 'C', N'$(-1;-4)$.', 0),
+(@q, 'D', N'$(1;2)$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Hệ phương trình $\begin{cases}x-2y=3\\ -2x+4y=-6\end{cases}$</p>', N'<p>Nhân hai vế phương trình thứ nhất với $-2$ được $-2x+4y=-6$, trùng với phương trình thứ hai. Hai đường thẳng trùng nhau nên hệ có vô số nghiệm $\left(x;\dfrac{x-3}{2}\right)$ với $x\in\mathbb{R}$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'có nghiệm duy nhất $(3;0)$.', 0),
+(@q, 'B', N'vô nghiệm.', 0),
+(@q, 'C', N'có vô số nghiệm.', 1),
+(@q, 'D', N'có đúng hai nghiệm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Nghiệm của hệ phương trình $\begin{cases}0{,}2x+0{,}3y=1{,}3\\ x-y=-1\end{cases}$ là</p>', N'<p>Nhân hai vế phương trình thứ nhất với 10: $2x+3y=13$. Từ $x=y-1$ thế vào: $2(y-1)+3y=13$, $5y=15$, $y=3$, $x=2$. Cặp $(5;1)$ chỉ thỏa mãn phương trình thứ nhất vì $5-1=4\neq-1$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$(2;3)$.', 1),
+(@q, 'B', N'$(3;2)$.', 0),
+(@q, 'C', N'$(5;1)$.', 0),
+(@q, 'D', N'$(-1;0)$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Hệ phương trình nào sau đây vô nghiệm?</p>', N'<p>Hệ $\begin{cases}x+y=2\\ 3x+3y=5\end{cases}$: nhân phương trình thứ nhất với 3 được $3x+3y=6$, mâu thuẫn với $3x+3y=5$ nên vô nghiệm. Hệ có $2x+2y=4$ và hệ có $4x-2y=2$ đều có hai phương trình tương đương nên vô số nghiệm; hệ $\begin{cases}x+y=2\\ x-y=0\end{cases}$ có nghiệm duy nhất $(1;1)$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\begin{cases}x+y=2\\ 2x+2y=4\end{cases}$.', 0),
+(@q, 'B', N'$\begin{cases}x+y=2\\ 3x+3y=5\end{cases}$.', 1),
+(@q, 'C', N'$\begin{cases}x+y=2\\ x-y=0\end{cases}$.', 0),
+(@q, 'D', N'$\begin{cases}2x-y=1\\ 4x-2y=2\end{cases}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Với giá trị nào của $m$ thì hệ phương trình $\begin{cases}x+y=3\\ mx+2y=4\end{cases}$ vô nghiệm?</p>', N'<p>Từ phương trình thứ nhất $y=3-x$. Thế vào phương trình thứ hai: $mx+2(3-x)=4$ hay $(m-2)x=-2$. Hệ vô nghiệm khi phương trình này vô nghiệm, tức $m-2=0$, $m=2$ (khi đó $0x=-2$ vô lí). Với $m\neq2$ hệ có nghiệm duy nhất.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$m=-2$.', 0),
+(@q, 'B', N'$m=0$.', 0),
+(@q, 'C', N'$m=4$.', 0),
+(@q, 'D', N'$m=2$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Biết hệ phương trình $\begin{cases}\dfrac{x}{2}+\dfrac{y}{3}=2\\ \dfrac{x}{4}-\dfrac{y}{6}=0\end{cases}$ có nghiệm $(x_0;y_0)$. Giá trị của $x_0+y_0$ là</p>', N'<p>Nhân phương trình thứ nhất với 6: $3x+2y=12$; nhân phương trình thứ hai với 12: $3x-2y=0$. Cộng từng vế: $6x=12$, $x=2$; suy ra $2y=6$, $y=3$. Vậy $x_0+y_0=5$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$5$.', 1),
+(@q, 'B', N'$1$.', 0),
+(@q, 'C', N'$6$.', 0),
+(@q, 'D', N'$4$.', 0);
+END
+
+-- Bài 3. Giải bài toán bằng cách lập hệ phương trình
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 3. Giải bài toán bằng cách lập hệ phương trình' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Khi giải bài toán bằng cách lập hệ phương trình, sau khi giải được hệ phương trình ta cần làm gì?</p>', N'<p>Bước 3 (trả lời): kiểm tra xem trong các nghiệm tìm được của hệ, nghiệm nào thỏa mãn, nghiệm nào không thỏa mãn điều kiện của ẩn rồi kết luận. Chọn ẩn, đặt điều kiện và biểu diễn các đại lượng thuộc Bước 1.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'Đối chiếu nghiệm với điều kiện của ẩn rồi trả lời.', 1),
+(@q, 'B', N'Chọn ẩn và đặt điều kiện cho ẩn.', 0),
+(@q, 'C', N'Biểu diễn các đại lượng chưa biết theo ẩn.', 0),
+(@q, 'D', N'Lập thêm một phương trình thứ ba.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Hai số có tổng bằng 50 và hiệu bằng 10. Gọi $x$ là số lớn, $y$ là số nhỏ. Hệ phương trình biểu thị đề bài là</p>', N'<p>Tổng hai số bằng 50: $x+y=50$. Số lớn trừ số nhỏ bằng 10: $x-y=10$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\begin{cases}x+y=10\\ x-y=50\end{cases}$.', 0),
+(@q, 'B', N'$\begin{cases}x+y=50\\ y-x=10\end{cases}$.', 0),
+(@q, 'C', N'$\begin{cases}x+y=50\\ x-y=10\end{cases}$.', 1),
+(@q, 'D', N'$\begin{cases}x+y=50\\ x=10y\end{cases}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Tìm hai số biết tổng của chúng bằng 20 và số thứ nhất gấp 3 lần số thứ hai.</p>', N'<p>Gọi hai số là $x,\ y$. Ta có $\begin{cases}x+y=20\\ x=3y.\end{cases}$ Thế: $4y=20$, $y=5$, $x=15$. Vậy hai số là 15 và 5.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'12 và 8.', 0),
+(@q, 'B', N'15 và 5.', 1),
+(@q, 'C', N'14 và 6.', 0),
+(@q, 'D', N'16 và 4.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Vừa gà vừa chó có tất cả 36 con và 100 chân. Gọi $x$ là số gà, $y$ là số chó ($x,y\in\mathbb{N}$). Hệ phương trình biểu thị đề bài là</p>', N'<p>Tổng số con: $x+y=36$. Mỗi con gà có 2 chân, mỗi con chó có 4 chân nên tổng số chân: $2x+4y=100$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\begin{cases}x+y=36\\ 4x+2y=100\end{cases}$.', 0),
+(@q, 'B', N'$\begin{cases}x+y=100\\ 2x+4y=36\end{cases}$.', 0),
+(@q, 'C', N'$\begin{cases}x+y=36\\ 2x+2y=100\end{cases}$.', 0),
+(@q, 'D', N'$\begin{cases}x+y=36\\ 2x+4y=100\end{cases}$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Vừa gà vừa chó có tất cả 36 con và 100 chân. Số gà và số chó lần lượt là</p>', N'<p>Gọi $x$ là số gà, $y$ là số chó: $\begin{cases}x+y=36\\ 2x+4y=100.\end{cases}$ Chia phương trình thứ hai cho 2: $x+2y=50$. Trừ từng vế cho $x+y=36$: $y=14$, $x=22$. Kiểm tra: $2\cdot22+4\cdot14=44+56=100$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'14 con gà và 22 con chó.', 0),
+(@q, 'B', N'22 con gà và 14 con chó.', 1),
+(@q, 'C', N'20 con gà và 16 con chó.', 0),
+(@q, 'D', N'18 con gà và 18 con chó.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Tìm số tự nhiên có hai chữ số, biết tổng hai chữ số của nó bằng 9 và nếu đổi chỗ hai chữ số thì được số mới nhỏ hơn số ban đầu 27 đơn vị.</p>', N'<p>Gọi chữ số hàng chục là $a$, hàng đơn vị là $b$. Ta có $a+b=9$ và $(10a+b)-(10b+a)=27$ hay $a-b=3$. Giải hệ: $a=6$, $b=3$. Số cần tìm là 63 (kiểm tra: $63-36=27$).</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'63.', 1),
+(@q, 'B', N'36.', 0),
+(@q, 'C', N'54.', 0),
+(@q, 'D', N'72.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Mua 3 chiếc bút và 2 quyển vở hết 34 nghìn đồng; mua 2 chiếc bút và 3 quyển vở hết 36 nghìn đồng. Giá một quyển vở là</p>', N'<p>Gọi giá một bút là $x$, một vở là $y$ (nghìn đồng, $x,y\gt0$): $\begin{cases}3x+2y=34\\ 2x+3y=36.\end{cases}$ Cộng từng vế: $5(x+y)=70$, $x+y=14$. Trừ từng vế: $y-x=2$. Suy ra $y=8$, $x=6$. Giá một quyển vở là 8 nghìn đồng.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'6 nghìn đồng.', 0),
+(@q, 'B', N'7 nghìn đồng.', 0),
+(@q, 'C', N'10 nghìn đồng.', 0),
+(@q, 'D', N'8 nghìn đồng.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Hai ô tô khởi hành cùng lúc từ hai địa điểm $A$ và $B$ cách nhau 200 km, đi ngược chiều nhau và gặp nhau sau 2 giờ. Biết vận tốc ô tô đi từ $A$ lớn hơn vận tốc ô tô đi từ $B$ là 10 km/h. Vận tốc của ô tô đi từ $A$ là</p>', N'<p>Gọi $x,\ y$ (km/h) là vận tốc ô tô đi từ $A$, từ $B$ ($x\gt y\gt0$). Sau 2 giờ tổng quãng đường bằng 200 km: $2(x+y)=200$ hay $x+y=100$. Lại có $x-y=10$. Suy ra $x=55$, $y=45$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'45 km/h.', 0),
+(@q, 'B', N'50 km/h.', 0),
+(@q, 'C', N'55 km/h.', 1),
+(@q, 'D', N'60 km/h.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Hai vòi nước cùng chảy vào một bể cạn thì sau 6 giờ đầy bể. Nếu vòi thứ nhất chảy trong 2 giờ và vòi thứ hai chảy trong 3 giờ thì được $\dfrac{2}{5}$ bể. Nếu chảy một mình thì vòi thứ nhất chảy đầy bể trong bao lâu?</p>', N'<p>Gọi $x,\ y$ (giờ) là thời gian vòi I, vòi II chảy một mình đầy bể ($x,y\gt0$); đặt $u=\dfrac{1}{x},\ v=\dfrac{1}{y}$: $\begin{cases}u+v=\dfrac{1}{6}\\ 2u+3v=\dfrac{2}{5}.\end{cases}$ Nhân phương trình thứ nhất với 2 rồi trừ: $v=\dfrac{2}{5}-\dfrac{1}{3}=\dfrac{1}{15}$, $u=\dfrac{1}{6}-\dfrac{1}{15}=\dfrac{1}{10}$. Vậy $x=10$ giờ ($y=15$ giờ).</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'10 giờ.', 1),
+(@q, 'B', N'15 giờ.', 0),
+(@q, 'C', N'12 giờ.', 0),
+(@q, 'D', N'9 giờ.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Năm ngoái hai xưởng sản xuất được tổng cộng 600 sản phẩm. Năm nay xưởng thứ nhất vượt mức 10%, xưởng thứ hai vượt mức 20% so với năm ngoái nên cả hai xưởng sản xuất được 680 sản phẩm. Năm nay xưởng thứ nhất sản xuất được bao nhiêu sản phẩm?</p>', N'<p>Gọi $x,\ y$ là số sản phẩm năm ngoái của xưởng I, xưởng II ($x,y\gt0$): $\begin{cases}x+y=600\\ 1{,}1x+1{,}2y=680.\end{cases}$ Thế $y=600-x$: $1{,}1x+720-1{,}2x=680$, $0{,}1x=40$, $x=400$, $y=200$. Năm nay xưởng I sản xuất $1{,}1\cdot400=440$ sản phẩm (400 là số năm ngoái, 240 là số năm nay của xưởng II).</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'400 sản phẩm.', 0),
+(@q, 'B', N'240 sản phẩm.', 0),
+(@q, 'C', N'460 sản phẩm.', 0),
+(@q, 'D', N'440 sản phẩm.', 1);
+END
+
+-- Bài 4. Phương trình quy về phương trình bậc nhất một ẩn
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 4. Phương trình quy về phương trình bậc nhất một ẩn' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Nghiệm của phương trình $(x-3)(2x+4)=0$ là</p>', N'<p>Giải hai phương trình: $x-3=0$ suy ra $x=3$; $2x+4=0$ suy ra $x=-2$. Phương trình có hai nghiệm $x=3$ và $x=-2$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x=-3$ và $x=2$.', 0),
+(@q, 'B', N'$x=3$ và $x=2$.', 0),
+(@q, 'C', N'$x=3$ và $x=-4$.', 0),
+(@q, 'D', N'$x=3$ và $x=-2$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Điều kiện xác định của phương trình $\dfrac{x+1}{x-4}=\dfrac{2}{x+3}$ là</p>', N'<p>Các mẫu phải khác 0: $x-4\neq0$ và $x+3\neq0$, tức $x\neq4$ và $x\neq-3$. Tử thức $x+1$ không ảnh hưởng đến ĐKXĐ.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x\neq4$ và $x\neq-3$.', 1),
+(@q, 'B', N'$x\neq-4$ và $x\neq3$.', 0),
+(@q, 'C', N'$x\neq4$.', 0),
+(@q, 'D', N'$x\neq-1$, $x\neq4$ và $x\neq-3$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Tập nghiệm của phương trình $x(x+5)=0$ gồm</p>', N'<p>$x(x+5)=0$ khi $x=0$ hoặc $x+5=0$, tức $x=-5$. Không được bỏ nghiệm $x=0$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'chỉ $x=-5$.', 0),
+(@q, 'B', N'$x=0$ và $x=-5$.', 1),
+(@q, 'C', N'$x=0$ và $x=5$.', 0),
+(@q, 'D', N'chỉ $x=5$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Giá trị nào sau đây <b>không thể</b> là nghiệm của phương trình $\dfrac{3}{x-2}+\dfrac{x}{x+1}=1$?</p>', N'<p>ĐKXĐ: $x\neq2$ và $x\neq-1$. Trong các giá trị đã cho chỉ $x=2$ vi phạm ĐKXĐ (làm mẫu $x-2$ bằng 0) nên không thể là nghiệm.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x=0$.', 0),
+(@q, 'B', N'$x=1$.', 0),
+(@q, 'C', N'$x=2$.', 1),
+(@q, 'D', N'$x=-2$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Nghiệm của phương trình $(x-3)(x+3)=(x-3)(2x+1)$ là</p>', N'<p>Chuyển vế: $(x-3)(x+3)-(x-3)(2x+1)=0$ hay $(x-3)(2-x)=0$. Suy ra $x=3$ hoặc $x=2$. Nếu chia hai vế cho $x-3$ sẽ làm mất nghiệm $x=3$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x=3$ và $x=2$.', 1),
+(@q, 'B', N'chỉ $x=2$.', 0),
+(@q, 'C', N'$x=3$ và $x=-2$.', 0),
+(@q, 'D', N'$x=-3$ và $x=2$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Nghiệm của phương trình $\dfrac{2x-1}{x+2}=1$ là</p>', N'<p>ĐKXĐ: $x\neq-2$. Khử mẫu: $2x-1=x+2$, suy ra $x=3$ (thỏa mãn ĐKXĐ). Kiểm tra: $\dfrac{5}{5}=1$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x=1$.', 0),
+(@q, 'B', N'$x=-3$.', 0),
+(@q, 'C', N'Phương trình vô nghiệm.', 0),
+(@q, 'D', N'$x=3$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Phương trình $\dfrac{x+3}{x-1}=\dfrac{4}{x-1}$</p>', N'<p>ĐKXĐ: $x\neq1$. Khử mẫu: $x+3=4$, $x=1$. Giá trị $x=1$ không thỏa mãn ĐKXĐ nên phương trình vô nghiệm.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'có nghiệm $x=1$.', 0),
+(@q, 'B', N'vô nghiệm.', 1),
+(@q, 'C', N'có nghiệm $x=-1$.', 0),
+(@q, 'D', N'có nghiệm $x=7$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Nghiệm của phương trình $2x^2+6x=x+3$ là</p>', N'<p>Biến đổi: $2x(x+3)-(x+3)=0$, $(x+3)(2x-1)=0$. Suy ra $x=-3$ hoặc $x=\dfrac{1}{2}$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x=3$ và $x=-\dfrac{1}{2}$.', 0),
+(@q, 'B', N'chỉ $x=-3$.', 0),
+(@q, 'C', N'$x=-3$ và $x=\dfrac{1}{2}$.', 1),
+(@q, 'D', N'$x=-3$ và $x=2$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Nghiệm của phương trình $\dfrac{x}{x-2}-\dfrac{1}{x+2}=\dfrac{8}{x^2-4}$ là</p>', N'<p>ĐKXĐ: $x\neq2$ và $x\neq-2$. Quy đồng mẫu $x^2-4=(x-2)(x+2)$ và khử mẫu: $x(x+2)-(x-2)=8$ hay $x^2+x-6=0$, $(x+3)(x-2)=0$. Suy ra $x=-3$ (thỏa mãn) hoặc $x=2$ (không thỏa mãn ĐKXĐ). Phương trình có nghiệm $x=-3$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x=-3$.', 1),
+(@q, 'B', N'$x=2$.', 0),
+(@q, 'C', N'$x=-3$ và $x=2$.', 0),
+(@q, 'D', N'Phương trình vô nghiệm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Với giá trị nào của $m$ thì phương trình $\dfrac{x+m}{x-1}=2$ (ẩn $x$) vô nghiệm?</p>', N'<p>ĐKXĐ: $x\neq1$. Khử mẫu: $x+m=2x-2$, suy ra $x=m+2$. Phương trình vô nghiệm khi giá trị này vi phạm ĐKXĐ: $m+2=1$, tức $m=-1$. Với $m\neq-1$ phương trình có nghiệm $x=m+2$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$m=1$.', 0),
+(@q, 'B', N'$m=-2$.', 0),
+(@q, 'C', N'$m=2$.', 0),
+(@q, 'D', N'$m=-1$.', 1);
+END
+
+-- Bài 5. Bất đẳng thức và tính chất
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 5. Bất đẳng thức và tính chất' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Bất đẳng thức biểu thị "$x$ không nhỏ hơn 5" là</p>', N'<p>"$x$ không nhỏ hơn 5" nghĩa là $x$ lớn hơn hoặc bằng 5, viết $x\ge5$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x\gt5$.', 0),
+(@q, 'B', N'$x\le5$.', 0),
+(@q, 'C', N'$x\ge5$.', 1),
+(@q, 'D', N'$x\lt5$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho $a\lt b$. Khẳng định nào sau đây đúng?</p>', N'<p>Cộng cùng một số vào hai vế được bất đẳng thức cùng chiều: $a+3\lt b+3$. Tương tự $a-2\lt b-2$; nhân với $-1$ phải đổi chiều: $-a\gt-b$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$a+3\lt b+3$.', 1),
+(@q, 'B', N'$a-2\gt b-2$.', 0),
+(@q, 'C', N'$a+3\gt b+3$.', 0),
+(@q, 'D', N'$-a\lt-b$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho $a\gt b$. Khẳng định nào sau đây đúng?</p>', N'<p>Nhân hai vế với số âm $-2$ thì đổi chiều: $-2a\lt-2b$. Nhân với số dương 2 thì giữ chiều: $2a\gt2b$; nhân với $-\dfrac{1}{3}$ thì đổi chiều: $-\dfrac{a}{3}\lt-\dfrac{b}{3}$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$-2a\gt-2b$.', 0),
+(@q, 'B', N'$2a\lt2b$.', 0),
+(@q, 'C', N'$-\dfrac{a}{3}\gt-\dfrac{b}{3}$.', 0),
+(@q, 'D', N'$-2a\lt-2b$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cặp bất đẳng thức nào sau đây là hai bất đẳng thức <b>cùng chiều</b>?</p>', N'<p>Hai bất đẳng thức cùng chiều khi cùng dùng dấu $\gt$ (hoặc cùng dùng dấu $\lt$). $3\gt1$ và $5\gt2$ cùng dấu $\gt$ nên cùng chiều; các cặp còn lại một dấu $\gt$, một dấu $\lt$ nên ngược chiều.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$3\gt1$ và $2\lt5$.', 0),
+(@q, 'B', N'$3\gt1$ và $5\gt2$.', 1),
+(@q, 'C', N'$-1\lt0$ và $4\gt3$.', 0),
+(@q, 'D', N'$2\lt3$ và $-2\gt-3$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho $a\lt b$. So sánh $3a-1$ và $3b-1$.</p>', N'<p>Vì $a\lt b$ và $3\gt0$ nên $3a\lt3b$; cộng $-1$ vào hai vế: $3a-1\lt3b-1$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$3a-1\lt3b-1$.', 1),
+(@q, 'B', N'$3a-1\gt3b-1$.', 0),
+(@q, 'C', N'$3a-1=3b-1$.', 0),
+(@q, 'D', N'Không so sánh được.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho $a\ge b$. Khẳng định nào sau đây luôn đúng?</p>', N'<p>Nhân hai vế của $a\ge b$ với số âm $-5$ thì đổi chiều: $-5a\le-5b$; cộng 2 vào hai vế: $-5a+2\le-5b+2$. Dấu $\lt$ không luôn đúng vì khi $a=b$ hai vế bằng nhau.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$-5a+2\ge-5b+2$.', 0),
+(@q, 'B', N'$-5a+2\gt-5b+2$.', 0),
+(@q, 'C', N'$-5a+2\le-5b+2$.', 1),
+(@q, 'D', N'$-5a+2\lt-5b+2$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Biết $-3m+1\lt-3n+1$. Khẳng định nào sau đây đúng?</p>', N'<p>Cộng $-1$ vào hai vế: $-3m\lt-3n$. Nhân hai vế với $-\dfrac{1}{3}\lt0$ và đổi chiều: $m\gt n$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$m\lt n$.', 0),
+(@q, 'B', N'$m=n$.', 0),
+(@q, 'C', N'$m\le n$.', 0),
+(@q, 'D', N'$m\gt n$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Khẳng định nào sau đây đúng?</p>', N'<p>Ta có $\dfrac{2023}{2024}=1-\dfrac{1}{2024}\lt1$ và $\dfrac{2024}{2023}=1+\dfrac{1}{2023}\gt1$. Theo tính chất bắc cầu: $\dfrac{2023}{2024}\lt\dfrac{2024}{2023}$. Các khẳng định còn lại đều sai.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\dfrac{2023}{2024}\gt1$.', 0),
+(@q, 'B', N'$\dfrac{2025}{2024}\lt1$.', 0),
+(@q, 'C', N'$\dfrac{2023}{2024}\lt\dfrac{2024}{2023}$.', 1),
+(@q, 'D', N'$\dfrac{2024}{2023}\lt\dfrac{2023}{2024}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho $a\lt b$. Khẳng định nào sau đây <b>luôn</b> đúng?</p>', N'<p>Từ $a\lt b$ có $2a\lt2b$ nên $2a+1\lt2b+1$ (1); vì $1\lt3$ nên $2b+1\lt2b+3$ (2). Bắc cầu: $2a+1\lt2b+3$. Các khẳng định khác không luôn đúng: $-3a+1\gt-3b+1$ (nhân số âm đổi chiều); với $a=0,\ b=\dfrac{1}{2}$ thì $2a+3=3\gt2=2b+1$; với $a=0,\ b=10$ thì $a-5=-5\lt4=b-6$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$-3a+1\lt-3b+1$.', 0),
+(@q, 'B', N'$2a+1\lt2b+3$.', 1),
+(@q, 'C', N'$2a+3\lt2b+1$.', 0),
+(@q, 'D', N'$a-5\gt b-6$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho $a\gt b$ và $c\gt d$. Khẳng định nào sau đây <b>luôn</b> đúng?</p>', N'<p>Cộng $c$ vào hai vế của $a\gt b$: $a+c\gt b+c$; cộng $b$ vào hai vế của $c\gt d$: $b+c\gt b+d$. Bắc cầu: $a+c\gt b+d$. Phản ví dụ cho các phương án khác với $a=2,\ b=1,\ c=10,\ d=0$: $a-c=-8\lt1=b-d$; $a+d=2\lt11=b+c$. Với $a=-1,\ b=-2,\ c=-1,\ d=-2$: $ac=1\lt4=bd$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$a+c\gt b+d$.', 1),
+(@q, 'B', N'$a-c\gt b-d$.', 0),
+(@q, 'C', N'$ac\gt bd$.', 0),
+(@q, 'D', N'$a+d\gt b+c$.', 0);
+END
+
+-- Bài 6. Bất phương trình bậc nhất một ẩn
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 6. Bất phương trình bậc nhất một ẩn' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Bất phương trình nào sau đây là bất phương trình bậc nhất một ẩn?</p>', N'<p>Bất phương trình bậc nhất một ẩn có dạng $ax+b\gt0$ (hoặc $\lt,\ \le,\ \ge$) với $a\neq0$. $2x-5\gt0$ có $a=2\neq0$. $x^2+1\lt0$ là bậc hai; $0x+3\ge0$ có $a=0$; $\dfrac{1}{x}-2\le0$ có ẩn ở mẫu.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x^2+1\lt0$.', 0),
+(@q, 'B', N'$2x-5\gt0$.', 1),
+(@q, 'C', N'$0x+3\ge0$.', 0),
+(@q, 'D', N'$\dfrac{1}{x}-2\le0$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Số $x=2$ là nghiệm của bất phương trình nào sau đây?</p>', N'<p>Thay $x=2$: $3\cdot2-4=2\gt0$, đúng. Các bất phương trình còn lại: $2\cdot2-5=-1\gt0$ sai; $-2+1=-1\gt0$ sai; $2+3=5\lt5$ sai.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$2x-5\gt0$.', 0),
+(@q, 'B', N'$-x+1\gt0$.', 0),
+(@q, 'C', N'$x+3\lt5$.', 0),
+(@q, 'D', N'$3x-4\gt0$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Nghiệm của bất phương trình $2x-6\gt0$ là</p>', N'<p>$2x-6\gt0$ hay $2x\gt6$. Nhân hai vế với $\dfrac{1}{2}\gt0$ (giữ chiều): $x\gt3$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x\gt3$.', 1),
+(@q, 'B', N'$x\lt3$.', 0),
+(@q, 'C', N'$x\gt-3$.', 0),
+(@q, 'D', N'$x\gt6$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Nghiệm của bất phương trình $-3x+9\ge0$ là</p>', N'<p>$-3x\ge-9$. Nhân hai vế với $-\dfrac{1}{3}\lt0$ và đổi chiều: $x\le3$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x\ge3$.', 0),
+(@q, 'B', N'$x\le-3$.', 0),
+(@q, 'C', N'$x\le3$.', 1),
+(@q, 'D', N'$x\ge-3$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Nghiệm của bất phương trình $5x-2\le3x+6$ là</p>', N'<p>Chuyển vế: $5x-3x\le6+2$, tức $2x\le8$, suy ra $x\le4$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x\ge4$.', 0),
+(@q, 'B', N'$x\le4$.', 1),
+(@q, 'C', N'$x\le2$.', 0),
+(@q, 'D', N'$x\ge-4$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Số nguyên lớn nhất thỏa mãn bất phương trình $3x+8\lt20$ là</p>', N'<p>$3x\lt12$, suy ra $x\lt4$. Vì dấu bất đẳng thức là $\lt$ nên $x=4$ không thỏa mãn; số nguyên lớn nhất là $3$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$3$.', 1),
+(@q, 'B', N'$4$.', 0),
+(@q, 'C', N'$5$.', 0),
+(@q, 'D', N'$12$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Nghiệm của bất phương trình $\dfrac{x-1}{2}\gt\dfrac{x+1}{3}$ là</p>', N'<p>Nhân hai vế với $6\gt0$: $3(x-1)\gt2(x+1)$ hay $3x-3\gt2x+2$, suy ra $x\gt5$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x\lt5$.', 0),
+(@q, 'B', N'$x\gt1$.', 0),
+(@q, 'C', N'$x\gt-5$.', 0),
+(@q, 'D', N'$x\gt5$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Bạn An có 120 nghìn đồng, mua một hộp bút giá 25 nghìn đồng và $x$ quyển vở giá 8 nghìn đồng/quyển. Bạn An mua được nhiều nhất bao nhiêu quyển vở?</p>', N'<p>Ta có $8x+25\le120$, suy ra $8x\le95$, $x\le\dfrac{95}{8}=11{,}875$. Vì $x$ là số tự nhiên nên An mua được nhiều nhất 11 quyển vở.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'12 quyển.', 0),
+(@q, 'B', N'15 quyển.', 0),
+(@q, 'C', N'11 quyển.', 1),
+(@q, 'D', N'14 quyển.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Nghiệm của bất phương trình $(x+2)^2-x(x-3)\lt2x+9$ là</p>', N'<p>Khai triển: $x^2+4x+4-x^2+3x\lt2x+9$ hay $7x+4\lt2x+9$, suy ra $5x\lt5$, $x\lt1$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x\lt1$.', 1),
+(@q, 'B', N'$x\gt1$.', 0),
+(@q, 'C', N'$x\lt5$.', 0),
+(@q, 'D', N'$x\lt-1$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Số tự nhiên $n$ lớn nhất thỏa mãn $\dfrac{2n-1}{3}-\dfrac{n+1}{2}\le1$ là</p>', N'<p>Nhân hai vế với $6\gt0$: $2(2n-1)-3(n+1)\le6$ hay $n-5\le6$, suy ra $n\le11$. Số tự nhiên lớn nhất là $11$. (Nếu quên nhân vế phải với 6 sẽ được sai $n\le6$.)</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$6$.', 0),
+(@q, 'B', N'$11$.', 1),
+(@q, 'C', N'$12$.', 0),
+(@q, 'D', N'$10$.', 0);
+END
+
+-- Bài 7. Căn bậc hai và căn thức bậc hai
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 7. Căn bậc hai và căn thức bậc hai' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Căn bậc hai của $49$ là</p>', N'<p>Vì $7^2=49$ và $(-7)^2=49$ nên số dương $49$ có đúng hai căn bậc hai đối nhau là $7$ và $-7$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$7$.', 0),
+(@q, 'B', N'$-7$.', 0),
+(@q, 'C', N'$7$ và $-7$.', 1),
+(@q, 'D', N'$49$ và $-49$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Căn bậc hai số học của $0{,}36$ là</p>', N'<p>$0{,}6^2=0{,}36$ và $0{,}6\gt0$ nên $\sqrt{0{,}36}=0{,}6$. Căn bậc hai số học là số không âm nên không phải $-0{,}6$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$0{,}06$.', 0),
+(@q, 'B', N'$0{,}6$.', 1),
+(@q, 'C', N'$-0{,}6$.', 0),
+(@q, 'D', N'$0{,}18$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Khẳng định nào sau đây là đúng?</p>', N'<p>Số dương $16$ có hai căn bậc hai đối nhau là $4$ và $-4$. Số âm $-9$ không có căn bậc hai; số $0$ có một căn bậc hai là $0$; còn $\sqrt{25}=5$ (căn bậc hai số học luôn không âm).</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'Số $16$ có hai căn bậc hai là $4$ và $-4$.', 1),
+(@q, 'B', N'Số $-9$ có căn bậc hai là $-3$.', 0),
+(@q, 'C', N'Số $0$ không có căn bậc hai.', 0),
+(@q, 'D', N'$\sqrt{25}=\pm5$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Điều kiện xác định của căn thức $\sqrt{x-3}$ là</p>', N'<p>$\sqrt{x-3}$ xác định khi $x-3\ge0$, tức là $x\ge3$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x\gt3$.', 0),
+(@q, 'B', N'$x\le3$.', 0),
+(@q, 'C', N'$x\ge-3$.', 0),
+(@q, 'D', N'$x\ge3$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Giá trị của biểu thức $\sqrt{(3-\sqrt{10})^2}$ bằng</p>', N'<p>$\sqrt{(3-\sqrt{10})^2}=|3-\sqrt{10}|$. Vì $\sqrt{10}\gt\sqrt{9}=3$ nên $3-\sqrt{10}\lt0$, do đó $|3-\sqrt{10}|=\sqrt{10}-3$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$3-\sqrt{10}$.', 0),
+(@q, 'B', N'$\sqrt{10}-3$.', 1),
+(@q, 'C', N'$3+\sqrt{10}$.', 0),
+(@q, 'D', N'$-3-\sqrt{10}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Điều kiện xác định của căn thức $\sqrt{4-2x}$ là</p>', N'<p>$\sqrt{4-2x}$ xác định khi $4-2x\ge0$, tức là $2x\le4$ hay $x\le2$. Chú ý dấu bằng được phép vì $\sqrt{0}=0$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x\ge2$.', 0),
+(@q, 'B', N'$x\lt2$.', 0),
+(@q, 'C', N'$x\le2$.', 1),
+(@q, 'D', N'$x\ge-2$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Với $x\lt3$, biểu thức $\sqrt{x^2-6x+9}$ được rút gọn thành</p>', N'<p>$\sqrt{x^2-6x+9}=\sqrt{(x-3)^2}=|x-3|$. Với $x\lt3$ thì $x-3\lt0$ nên $|x-3|=3-x$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x-3$.', 0),
+(@q, 'B', N'$x+3$.', 0),
+(@q, 'C', N'$-x-3$.', 0),
+(@q, 'D', N'$3-x$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Giá trị của căn thức $\sqrt{3x+1}$ tại $x=5$ là</p>', N'<p>Tại $x=5$: $3\cdot5+1=16\ge0$ nên $\sqrt{3x+1}=\sqrt{16}=4$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$4$.', 1),
+(@q, 'B', N'$\pm4$.', 0),
+(@q, 'C', N'$16$.', 0),
+(@q, 'D', N'$2$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Không dùng máy tính cầm tay, giá trị của biểu thức $A=\sqrt{(2-\sqrt{3})^2}+\sqrt{(1-\sqrt{3})^2}$ là</p>', N'<p>Vì $\sqrt{3}\lt2$ nên $\sqrt{(2-\sqrt{3})^2}=2-\sqrt{3}$; vì $\sqrt{3}\gt1$ nên $\sqrt{(1-\sqrt{3})^2}=\sqrt{3}-1$. Do đó $A=2-\sqrt{3}+\sqrt{3}-1=1$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$3-2\sqrt{3}$.', 0),
+(@q, 'B', N'$2\sqrt{3}-3$.', 0),
+(@q, 'C', N'$1$.', 1),
+(@q, 'D', N'$3$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Với $x\lt0$, biểu thức $2\sqrt{x^2}+3x$ được rút gọn thành</p>', N'<p>$\sqrt{x^2}=|x|$. Với $x\lt0$ thì $|x|=-x$, nên $2\sqrt{x^2}+3x=-2x+3x=x$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$5x$.', 0),
+(@q, 'B', N'$x$.', 1),
+(@q, 'C', N'$-x$.', 0),
+(@q, 'D', N'$-5x$.', 0);
+END
+
+-- Bài 8. Khai căn bậc hai với phép nhân và phép chia
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 8. Khai căn bậc hai với phép nhân và phép chia' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Kết quả của phép tính $\sqrt{2}\cdot\sqrt{8}$ là</p>', N'<p>$\sqrt{2}\cdot\sqrt{8}=\sqrt{2\cdot8}=\sqrt{16}=4$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$4$.', 1),
+(@q, 'B', N'$16$.', 0),
+(@q, 'C', N'$2\sqrt{2}$.', 0),
+(@q, 'D', N'$\sqrt{10}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Kết quả của phép tính $\sqrt{75}:\sqrt{3}$ là</p>', N'<p>$\sqrt{75}:\sqrt{3}=\sqrt{75:3}=\sqrt{25}=5$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$25$.', 0),
+(@q, 'B', N'$\sqrt{72}$.', 0),
+(@q, 'C', N'$5$.', 1),
+(@q, 'D', N'$15$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Giá trị của $\sqrt{\dfrac{16}{81}}$ là</p>', N'<p>$\sqrt{\dfrac{16}{81}}=\dfrac{\sqrt{16}}{\sqrt{81}}=\dfrac{4}{9}$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\dfrac{16}{81}$.', 0),
+(@q, 'B', N'$\dfrac{4}{81}$.', 0),
+(@q, 'C', N'$\dfrac{8}{9}$.', 0),
+(@q, 'D', N'$\dfrac{4}{9}$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Với $A,B$ là các biểu thức không âm, đẳng thức nào sau đây luôn đúng?</p>', N'<p>Theo quy tắc khai căn bậc hai và phép nhân: $\sqrt{A}\cdot\sqrt{B}=\sqrt{AB}$ với $A,B\ge0$. Các đẳng thức còn lại sai, chẳng hạn $\sqrt{9}+\sqrt{16}=7\neq\sqrt{25}=5$; $\sqrt{4}\cdot\sqrt{9}=6\neq4\cdot9$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\sqrt{A}+\sqrt{B}=\sqrt{A+B}$.', 0),
+(@q, 'B', N'$\sqrt{A}\cdot\sqrt{B}=\sqrt{AB}$.', 1),
+(@q, 'C', N'$\sqrt{A}-\sqrt{B}=\sqrt{A-B}$.', 0),
+(@q, 'D', N'$\sqrt{A}\cdot\sqrt{B}=AB$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Kết quả của phép tính $\sqrt{3}\,(\sqrt{27}-\sqrt{3})$ là</p>', N'<p>$\sqrt{3}\cdot\sqrt{27}-\sqrt{3}\cdot\sqrt{3}=\sqrt{81}-3=9-3=6$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$9$.', 0),
+(@q, 'B', N'$\sqrt{72}$.', 0),
+(@q, 'C', N'$3$.', 0),
+(@q, 'D', N'$6$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Với $x\ge0$, biểu thức $\sqrt{3x}\cdot\sqrt{12x}$ được rút gọn thành</p>', N'<p>$\sqrt{3x}\cdot\sqrt{12x}=\sqrt{36x^2}=\sqrt{(6x)^2}=|6x|=6x$ (vì $x\ge0$).</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$6x$.', 1),
+(@q, 'B', N'$36x$.', 0),
+(@q, 'C', N'$-6x$.', 0),
+(@q, 'D', N'$6x^2$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Giá trị của $\sqrt{1{,}44}$ là</p>', N'<p>$1{,}44=\dfrac{144}{100}=\dfrac{12^2}{10^2}$ nên $\sqrt{1{,}44}=\dfrac{12}{10}=1{,}2$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$0{,}12$.', 0),
+(@q, 'B', N'$1{,}2$.', 1),
+(@q, 'C', N'$12$.', 0),
+(@q, 'D', N'$0{,}72$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Với $a\lt0$ và $b\gt0$, biểu thức $\sqrt{9a^2b^2}$ được rút gọn thành</p>', N'<p>$\sqrt{9a^2b^2}=\sqrt{9}\cdot\sqrt{a^2}\cdot\sqrt{b^2}=3|a|\cdot|b|$. Vì $a\lt0$ nên $|a|=-a$; vì $b\gt0$ nên $|b|=b$. Do đó kết quả là $-3ab$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$3ab$.', 0),
+(@q, 'B', N'$-9ab$.', 0),
+(@q, 'C', N'$-3ab$.', 1),
+(@q, 'D', N'$9ab$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Với $a\gt0$, biểu thức $\sqrt{45a^3}:\sqrt{5a}$ được rút gọn thành</p>', N'<p>$\sqrt{45a^3}:\sqrt{5a}=\sqrt{\dfrac{45a^3}{5a}}=\sqrt{9a^2}=|3a|=3a$ (vì $a\gt0$).</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$3a$.', 1),
+(@q, 'B', N'$9a$.', 0),
+(@q, 'C', N'$3a^2$.', 0),
+(@q, 'D', N'$-3a$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Hiệu điện thế $U$ (V) của một đoạn mạch liên hệ với công suất $P$ (W) và điện trở $R$ ($\Omega$) theo công thức $U=\sqrt{PR}$. Nếu công suất tăng $2$ lần và điện trở tăng $8$ lần thì hiệu điện thế</p>', N'<p>Hiệu điện thế mới $U''=\sqrt{2P\cdot8R}=\sqrt{16PR}=\sqrt{16}\cdot\sqrt{PR}=4U$. Vậy hiệu điện thế tăng $4$ lần.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'tăng $16$ lần.', 0),
+(@q, 'B', N'tăng $10$ lần.', 0),
+(@q, 'C', N'tăng $8$ lần.', 0),
+(@q, 'D', N'tăng $4$ lần.', 1);
+END
+
+-- Bài 9. Biến đổi đơn giản và rút gọn biểu thức chứa căn thức bậc hai
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 9. Biến đổi đơn giản và rút gọn biểu thức chứa căn thức bậc hai' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Đưa thừa số ra ngoài dấu căn, $\sqrt{50}$ bằng</p>', N'<p>$\sqrt{50}=\sqrt{5^2\cdot2}=5\sqrt{2}$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$2\sqrt{5}$.', 0),
+(@q, 'B', N'$5\sqrt{2}$.', 1),
+(@q, 'C', N'$25\sqrt{2}$.', 0),
+(@q, 'D', N'$10\sqrt{5}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Đưa thừa số vào trong dấu căn, $3\sqrt{5}$ bằng</p>', N'<p>Vì $3\ge0$ nên $3\sqrt{5}=\sqrt{3^2\cdot5}=\sqrt{45}$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\sqrt{15}$.', 0),
+(@q, 'B', N'$\sqrt{75}$.', 0),
+(@q, 'C', N'$\sqrt{45}$.', 1),
+(@q, 'D', N'$-\sqrt{45}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Trục căn thức ở mẫu, biểu thức $\dfrac{6}{\sqrt{3}}$ bằng</p>', N'<p>$\dfrac{6}{\sqrt{3}}=\dfrac{6\sqrt{3}}{3}=2\sqrt{3}$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$2\sqrt{3}$.', 1),
+(@q, 'B', N'$6\sqrt{3}$.', 0),
+(@q, 'C', N'$\sqrt{2}$.', 0),
+(@q, 'D', N'$2$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Đưa thừa số vào trong dấu căn, $-2\sqrt{3}$ bằng</p>', N'<p>Vì $-2\lt0$ nên $-2\sqrt{3}=-\sqrt{2^2\cdot3}=-\sqrt{12}$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\sqrt{12}$.', 0),
+(@q, 'B', N'$-\sqrt{6}$.', 0),
+(@q, 'C', N'$-\sqrt{18}$.', 0),
+(@q, 'D', N'$-\sqrt{12}$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Khử mẫu của biểu thức lấy căn, $\sqrt{\dfrac{2}{5}}$ bằng</p>', N'<p>$\sqrt{\dfrac{2}{5}}=\sqrt{\dfrac{2\cdot5}{5^2}}=\dfrac{\sqrt{10}}{5}$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\dfrac{\sqrt{2}}{5}$.', 0),
+(@q, 'B', N'$\dfrac{\sqrt{10}}{5}$.', 1),
+(@q, 'C', N'$\dfrac{\sqrt{10}}{25}$.', 0),
+(@q, 'D', N'$\sqrt{10}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Trục căn thức ở mẫu, biểu thức $\dfrac{2}{\sqrt{5}-\sqrt{3}}$ bằng</p>', N'<p>Nhân cả tử và mẫu với biểu thức liên hợp $\sqrt{5}+\sqrt{3}$: $\dfrac{2(\sqrt{5}+\sqrt{3})}{5-3}=\sqrt{5}+\sqrt{3}$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\sqrt{5}-\sqrt{3}$.', 0),
+(@q, 'B', N'$2(\sqrt{5}+\sqrt{3})$.', 0),
+(@q, 'C', N'$\sqrt{5}+\sqrt{3}$.', 1),
+(@q, 'D', N'$\dfrac{\sqrt{5}+\sqrt{3}}{2}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Khẳng định nào sau đây là đúng?</p>', N'<p>Đưa thừa số vào trong dấu căn: $4\sqrt{2}=\sqrt{32}$, $3\sqrt{3}=\sqrt{27}$, $2\sqrt{7}=\sqrt{28}$. Vì $\sqrt{32}\gt\sqrt{27}$ nên $4\sqrt{2}\gt3\sqrt{3}$; còn $\sqrt{28}\lt\sqrt{32}$ nên $2\sqrt{7}\lt4\sqrt{2}$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$4\sqrt{2}\lt3\sqrt{3}$.', 0),
+(@q, 'B', N'$4\sqrt{2}=3\sqrt{3}$.', 0),
+(@q, 'C', N'$2\sqrt{7}\gt4\sqrt{2}$.', 0),
+(@q, 'D', N'$4\sqrt{2}\gt3\sqrt{3}$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Kết quả rút gọn biểu thức $\sqrt{12}+\sqrt{27}-\sqrt{75}$ là</p>', N'<p>$\sqrt{12}=2\sqrt{3}$, $\sqrt{27}=3\sqrt{3}$, $\sqrt{75}=5\sqrt{3}$. Do đó biểu thức bằng $2\sqrt{3}+3\sqrt{3}-5\sqrt{3}=0$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$0$.', 1),
+(@q, 'B', N'$10\sqrt{3}$.', 0),
+(@q, 'C', N'$-\sqrt{36}$.', 0),
+(@q, 'D', N'$2\sqrt{3}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Giá trị của biểu thức $\dfrac{1}{2+\sqrt{3}}+\dfrac{1}{2-\sqrt{3}}$ là</p>', N'<p>$\dfrac{1}{2+\sqrt{3}}=\dfrac{2-\sqrt{3}}{4-3}=2-\sqrt{3}$ và $\dfrac{1}{2-\sqrt{3}}=\dfrac{2+\sqrt{3}}{4-3}=2+\sqrt{3}$. Tổng bằng $(2-\sqrt{3})+(2+\sqrt{3})=4$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$2\sqrt{3}$.', 0),
+(@q, 'B', N'$4$.', 1),
+(@q, 'C', N'$1$.', 0),
+(@q, 'D', N'$-2\sqrt{3}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Với $x\ge0,\ x\neq4$, biểu thức $\dfrac{x-4}{\sqrt{x}-2}-\sqrt{x}$ được rút gọn thành</p>', N'<p>Với $x\ge0$ ta có $x-4=(\sqrt{x}-2)(\sqrt{x}+2)$ nên $\dfrac{x-4}{\sqrt{x}-2}=\sqrt{x}+2$ (vì $x\neq4$). Do đó biểu thức bằng $\sqrt{x}+2-\sqrt{x}=2$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$2\sqrt{x}+2$.', 0),
+(@q, 'B', N'$-2$.', 0),
+(@q, 'C', N'$2$.', 1),
+(@q, 'D', N'$\sqrt{x}-2$.', 0);
+END
+
+-- Bài 10. Căn bậc ba và căn thức bậc ba
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 10. Căn bậc ba và căn thức bậc ba' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Giá trị của $\sqrt[3]{-125}$ là</p>', N'<p>Vì $(-5)^3=-125$ nên $\sqrt[3]{-125}=-5$. Căn bậc ba của số âm vẫn xác định và là một số âm.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$5$.', 0),
+(@q, 'B', N'$\pm5$.', 0),
+(@q, 'C', N'Không xác định.', 0),
+(@q, 'D', N'$-5$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Khẳng định nào sau đây là đúng?</p>', N'<p>Mỗi số thực $a$ đều có duy nhất một căn bậc ba $\sqrt[3]{a}$. Số âm vẫn có căn bậc ba (ví dụ $\sqrt[3]{-8}=-2$); số $8$ chỉ có một căn bậc ba là $2$ vì $(-2)^3=-8\neq8$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'Mỗi số thực $a$ có duy nhất một căn bậc ba.', 1),
+(@q, 'B', N'Số âm không có căn bậc ba.', 0),
+(@q, 'C', N'Số $8$ có hai căn bậc ba là $2$ và $-2$.', 0),
+(@q, 'D', N'$\sqrt[3]{a}$ chỉ xác định khi $a\ge0$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Giá trị của $\sqrt[3]{0{,}008}$ là</p>', N'<p>Vì $0{,}2^3=0{,}008$ nên $\sqrt[3]{0{,}008}=0{,}2$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$0{,}02$.', 0),
+(@q, 'B', N'$0{,}2$.', 1),
+(@q, 'C', N'$0{,}004$.', 0),
+(@q, 'D', N'$0{,}08$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Giá trị của $(\sqrt[3]{7})^3$ là</p>', N'<p>Với mọi số thực $a$ ta có $(\sqrt[3]{a})^3=a$, nên $(\sqrt[3]{7})^3=7$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$21$.', 0),
+(@q, 'B', N'$343$.', 0),
+(@q, 'C', N'$7$.', 1),
+(@q, 'D', N'$\sqrt[3]{21}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Giá trị của căn thức $\sqrt[3]{3x-1}$ tại $x=-21$ là</p>', N'<p>Tại $x=-21$: $3\cdot(-21)-1=-64$. Vì $(-4)^3=-64$ nên $\sqrt[3]{-64}=-4$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$-4$.', 1),
+(@q, 'B', N'$4$.', 0),
+(@q, 'C', N'$-8$.', 0),
+(@q, 'D', N'Không xác định.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Biểu thức $\sqrt[3]{(1-\sqrt{3})^3}$ bằng</p>', N'<p>Với mọi biểu thức $A$ ta có $\sqrt[3]{A^3}=A$ (không cần lấy giá trị tuyệt đối như căn bậc hai). Do đó $\sqrt[3]{(1-\sqrt{3})^3}=1-\sqrt{3}$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\sqrt{3}-1$.', 0),
+(@q, 'B', N'$|1-\sqrt{3}|$.', 0),
+(@q, 'C', N'$1+\sqrt{3}$.', 0),
+(@q, 'D', N'$1-\sqrt{3}$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Giá trị của biểu thức $\sqrt[3]{27}-\sqrt[3]{-8}+\sqrt[3]{1}$ là</p>', N'<p>$\sqrt[3]{27}=3$, $\sqrt[3]{-8}=-2$, $\sqrt[3]{1}=1$. Biểu thức bằng $3-(-2)+1=6$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$2$.', 0),
+(@q, 'B', N'$0$.', 0),
+(@q, 'C', N'$6$.', 1),
+(@q, 'D', N'$4$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một chiếc hộp hình lập phương có thể tích $343\ \text{cm}^3$. Độ dài cạnh của hộp là</p>', N'<p>Gọi $x$ (cm) là độ dài cạnh ($x\gt0$). Ta có $x^3=343$ nên $x=\sqrt[3]{343}=7$ (vì $7^3=343$).</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$49$ cm.', 0),
+(@q, 'B', N'$7$ cm.', 1),
+(@q, 'C', N'khoảng $18{,}5$ cm.', 0),
+(@q, 'D', N'$21$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Biểu thức $\sqrt[3]{x^3-3x^2+3x-1}-x$ được rút gọn thành</p>', N'<p>$x^3-3x^2+3x-1=(x-1)^3$ nên $\sqrt[3]{x^3-3x^2+3x-1}=x-1$. Do đó biểu thức bằng $(x-1)-x=-1$ với mọi $x$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$1$.', 0),
+(@q, 'B', N'$2x-1$.', 0),
+(@q, 'C', N'$x-1$.', 0),
+(@q, 'D', N'$-1$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Giá trị của $x$ thỏa mãn $\sqrt[3]{2x-1}=-3$ là</p>', N'<p>Lập phương hai vế: $2x-1=(-3)^3=-27$, suy ra $2x=-26$, $x=-13$. Thử lại: $\sqrt[3]{2\cdot(-13)-1}=\sqrt[3]{-27}=-3$, đúng.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x=-13$.', 1),
+(@q, 'B', N'$x=-4$.', 0),
+(@q, 'C', N'$x=14$.', 0),
+(@q, 'D', N'Không có giá trị nào của $x$.', 0);
+END
+
+-- Bài 11. Tỉ số lượng giác của góc nhọn
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 11. Tỉ số lượng giác của góc nhọn' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho tam giác $ABC$ vuông tại $A$. Khi đó $\sin B$ bằng</p>', N'<p>Với góc $B$: cạnh đối là $AC$, cạnh huyền là $BC$. Do đó $\sin B=\dfrac{\text{cạnh đối}}{\text{cạnh huyền}}=\dfrac{AC}{BC}$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\dfrac{AB}{BC}$.', 0),
+(@q, 'B', N'$\dfrac{AC}{AB}$.', 0),
+(@q, 'C', N'$\dfrac{AC}{BC}$.', 1),
+(@q, 'D', N'$\dfrac{AB}{AC}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Giá trị của $\cos60^\circ$ là</p>', N'<p>Theo bảng giá trị lượng giác của các góc đặc biệt, $\cos60^\circ=\dfrac{1}{2}$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\dfrac{\sqrt3}{2}$.', 0),
+(@q, 'B', N'$\dfrac{1}{2}$.', 1),
+(@q, 'C', N'$\dfrac{\sqrt2}{2}$.', 0),
+(@q, 'D', N'$\sqrt3$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Giá trị của $\tan30^\circ$ là</p>', N'<p>Theo bảng giá trị lượng giác của các góc đặc biệt, $\tan30^\circ=\dfrac{\sqrt3}{3}$ (còn $\tan60^\circ=\sqrt3$).</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\sqrt3$.', 0),
+(@q, 'B', N'$\dfrac{1}{2}$.', 0),
+(@q, 'C', N'$\dfrac{\sqrt3}{2}$.', 0),
+(@q, 'D', N'$\dfrac{\sqrt3}{3}$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>$\sin35^\circ$ bằng</p>', N'<p>Vì $35^\circ+55^\circ=90^\circ$ nên hai góc phụ nhau, do đó $\sin35^\circ=\cos55^\circ$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\cos55^\circ$.', 1),
+(@q, 'B', N'$\cos35^\circ$.', 0),
+(@q, 'C', N'$\sin55^\circ$.', 0),
+(@q, 'D', N'$\tan55^\circ$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho tam giác $ABC$ vuông tại $A$ có $AB=6$ cm, $AC=8$ cm. Khi đó $\tan B$ bằng</p>', N'<p>Với góc $B$: cạnh đối là $AC=8$, cạnh kề là $AB=6$. Do đó $\tan B=\dfrac{AC}{AB}=\dfrac{8}{6}=\dfrac{4}{3}$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\dfrac{3}{4}$.', 0),
+(@q, 'B', N'$\dfrac{4}{3}$.', 1),
+(@q, 'C', N'$\dfrac{3}{5}$.', 0),
+(@q, 'D', N'$\dfrac{4}{5}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho tam giác $ABC$ vuông tại $A$ có $AB=5$ cm, $BC=13$ cm. Khi đó $\cos C$ bằng</p>', N'<p>Theo định lí Pythagore $AC=\sqrt{13^2-5^2}=\sqrt{144}=12$ (cm). Với góc $C$: cạnh kề là $AC$, cạnh huyền là $BC$ nên $\cos C=\dfrac{AC}{BC}=\dfrac{12}{13}$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\dfrac{5}{13}$.', 0),
+(@q, 'B', N'$\dfrac{5}{12}$.', 0),
+(@q, 'C', N'$\dfrac{12}{13}$.', 1),
+(@q, 'D', N'$\dfrac{12}{5}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Giá trị của biểu thức $\sin40^\circ-\cos50^\circ$ là</p>', N'<p>Vì $40^\circ+50^\circ=90^\circ$ nên $\cos50^\circ=\sin40^\circ$. Do đó $\sin40^\circ-\cos50^\circ=0$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$0$.', 1),
+(@q, 'B', N'$1$.', 0),
+(@q, 'C', N'$-1$.', 0),
+(@q, 'D', N'$\sin10^\circ$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho tam giác $ABC$ vuông tại $A$ có $\widehat{C}=30^\circ$ và $BC=12$ cm. Độ dài cạnh $AB$ là</p>', N'<p>$AB$ là cạnh đối của góc $C$ nên $AB=BC\cdot\sin C=12\cdot\sin30^\circ=12\cdot\dfrac{1}{2}=6$ (cm).</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$6\sqrt3$ cm.', 0),
+(@q, 'B', N'$24$ cm.', 0),
+(@q, 'C', N'$4\sqrt3$ cm.', 0),
+(@q, 'D', N'$6$ cm.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho góc nhọn $\alpha$ có $\sin\alpha=\dfrac{3}{5}$. Khi đó $\tan\alpha$ bằng</p>', N'<p>Xét tam giác vuông có góc nhọn $\alpha$, cạnh đối bằng $3$, cạnh huyền bằng $5$. Theo định lí Pythagore cạnh kề bằng $\sqrt{5^2-3^2}=4$. Do đó $\tan\alpha=\dfrac{\text{cạnh đối}}{\text{cạnh kề}}=\dfrac{3}{4}$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\dfrac{4}{3}$.', 0),
+(@q, 'B', N'$\dfrac{3}{5}$.', 0),
+(@q, 'C', N'$\dfrac{3}{4}$.', 1),
+(@q, 'D', N'$\dfrac{4}{5}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một hình chữ nhật có chiều rộng $2$ cm và chiều dài $2\sqrt3$ cm. Góc tạo bởi đường chéo và cạnh dài của hình chữ nhật bằng</p>', N'<p>Gọi $\alpha$ là góc giữa đường chéo và cạnh dài. Trong tam giác vuông tạo bởi hai cạnh và đường chéo, cạnh kề của $\alpha$ là $2\sqrt3$, cạnh đối là $2$, nên $\tan\alpha=\dfrac{2}{2\sqrt3}=\dfrac{\sqrt3}{3}$. Vậy $\alpha=30^\circ$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$60^\circ$.', 0),
+(@q, 'B', N'$30^\circ$.', 1),
+(@q, 'C', N'$45^\circ$.', 0),
+(@q, 'D', N'$35^\circ$.', 0);
+END
+
+-- Bài 12. Một số hệ thức giữa cạnh, góc trong tam giác vuông và ứng dụng
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 12. Một số hệ thức giữa cạnh, góc trong tam giác vuông và ứng dụng' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho tam giác $ABC$ vuông tại $A$ có $BC=a$, $AC=b$, $AB=c$. Hệ thức nào sau đây đúng?</p>', N'<p>Theo Định lí 1, cạnh góc vuông bằng cạnh huyền nhân với sin góc đối: $b=a\sin B$. Các hệ thức khác sai: $a\cos B=c$; $b=c\tan B$ (không phải $a\tan B$); $c\cot B=\dfrac{c^2}{b}$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$b=a\sin B$.', 1),
+(@q, 'B', N'$b=a\cos B$.', 0),
+(@q, 'C', N'$b=a\tan B$.', 0),
+(@q, 'D', N'$b=c\cot B$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho tam giác $ABC$ vuông tại $A$ có $BC=a$, $AC=b$, $AB=c$. Hệ thức nào sau đây đúng?</p>', N'<p>Theo Định lí 2, cạnh góc vuông bằng cạnh góc vuông kia nhân với tang góc đối: $c=b\tan C$. Các hệ thức khác sai: $b\tan B=\dfrac{b^2}{c}$; $a\sin B=b$; $b\cot C=\dfrac{b^2}{c}$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$c=b\tan B$.', 0),
+(@q, 'B', N'$c=a\sin B$.', 0),
+(@q, 'C', N'$c=b\cot C$.', 0),
+(@q, 'D', N'$c=b\tan C$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho tam giác $ABC$ vuông tại $A$ có $BC=10$ cm và $\widehat{B}=30^\circ$. Độ dài cạnh $AC$ là</p>', N'<p>$AC$ là cạnh góc vuông đối diện góc $B$ nên $AC=BC\cdot\sin B=10\cdot\sin30^\circ=10\cdot\dfrac{1}{2}=5$ (cm).</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$5\sqrt3$ cm.', 0),
+(@q, 'B', N'$5$ cm.', 1),
+(@q, 'C', N'$10\sqrt3$ cm.', 0),
+(@q, 'D', N'$20$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho tam giác $ABC$ vuông tại $A$ có $AB=4$ cm và $\widehat{B}=45^\circ$. Độ dài cạnh $AC$ là</p>', N'<p>Theo Định lí 2: $AC=AB\cdot\tan B=4\cdot\tan45^\circ=4\cdot1=4$ (cm).</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$4\sqrt2$ cm.', 0),
+(@q, 'B', N'$2\sqrt2$ cm.', 0),
+(@q, 'C', N'$4$ cm.', 1),
+(@q, 'D', N'$8$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một chiếc thang dài $6$ m dựa vào một bức tường thẳng đứng, chân thang đặt trên mặt đất nằm ngang và thang tạo với mặt đất một góc $60^\circ$. Đầu trên của thang cách mặt đất</p>', N'<p>Thang là cạnh huyền ($6$ m), độ cao đầu thang là cạnh góc vuông đối diện góc $60^\circ$. Do đó độ cao bằng $6\cdot\sin60^\circ=6\cdot\dfrac{\sqrt3}{2}=3\sqrt3$ (m), khoảng $5{,}2$ m.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$3$ m.', 0),
+(@q, 'B', N'$6\sqrt3$ m.', 0),
+(@q, 'C', N'$2\sqrt3$ m.', 0),
+(@q, 'D', N'$3\sqrt3$ m.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một cây mọc thẳng đứng trên mặt đất phẳng có bóng trên mặt đất dài $10$ m. Biết tia nắng mặt trời tạo với mặt đất một góc $60^\circ$. Chiều cao của cây là</p>', N'<p>Chiều cao cây $h$ và bóng cây là hai cạnh góc vuông; góc $60^\circ$ đối diện với chiều cao cây và kề với bóng. Do đó $h=10\cdot\tan60^\circ=10\sqrt3$ (m).</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$10\sqrt3$ m.', 1),
+(@q, 'B', N'$\dfrac{10\sqrt3}{3}$ m.', 0),
+(@q, 'C', N'$20$ m.', 0),
+(@q, 'D', N'$5\sqrt3$ m.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho tam giác $ABC$ vuông tại $A$ có $AB=3$ cm và $AC=3\sqrt3$ cm. Số đo góc $B$ là</p>', N'<p>$\tan B=\dfrac{AC}{AB}=\dfrac{3\sqrt3}{3}=\sqrt3$ nên $\widehat{B}=60^\circ$ (và $\widehat{C}=30^\circ$).</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$30^\circ$.', 0),
+(@q, 'B', N'$45^\circ$.', 0),
+(@q, 'C', N'$60^\circ$.', 1),
+(@q, 'D', N'$75^\circ$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho tam giác $ABC$ vuông tại $A$ có $AB=6$ cm và $\widehat{C}=30^\circ$. Độ dài cạnh huyền $BC$ là</p>', N'<p>$AB$ là cạnh góc vuông đối diện góc $C$ nên $AB=BC\cdot\sin C$, suy ra $BC=\dfrac{AB}{\sin30^\circ}=\dfrac{6}{\frac{1}{2}}=12$ (cm).</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$3$ cm.', 0),
+(@q, 'B', N'$12$ cm.', 1),
+(@q, 'C', N'$6\sqrt3$ cm.', 0),
+(@q, 'D', N'$4\sqrt3$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một máy bay cất cánh bay lên theo đường thẳng tạo với phương nằm ngang một góc $30^\circ$, với vận tốc $300$ km/h. Sau $2$ phút, máy bay ở độ cao (so với điểm cất cánh) là</p>', N'<p>$2$ phút $=\dfrac{1}{30}$ giờ nên quãng đường bay được là $300\cdot\dfrac{1}{30}=10$ (km). Độ cao bằng $10\cdot\sin30^\circ=10\cdot\dfrac{1}{2}=5$ (km).</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$5$ km.', 1),
+(@q, 'B', N'$10$ km.', 0),
+(@q, 'C', N'$5\sqrt3$ km.', 0),
+(@q, 'D', N'$2{,}5$ km.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một người đứng trên mặt đất phẳng, cách chân một tòa tháp thẳng đứng $30$ m, nhìn thấy đỉnh tháp với góc nâng $30^\circ$ (so với phương nằm ngang qua mắt). Biết mắt người đó cách mặt đất $1{,}6$ m. Chiều cao của tòa tháp (làm tròn đến chữ số thập phân thứ nhất) là</p>', N'<p>Phần tháp cao hơn tầm mắt là $h=30\cdot\tan30^\circ=30\cdot\dfrac{\sqrt3}{3}=10\sqrt3\approx17{,}32$ (m). Chiều cao tháp bằng $17{,}32+1{,}6\approx18{,}9$ (m).</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$17{,}3$ m.', 0),
+(@q, 'B', N'$16{,}6$ m.', 0),
+(@q, 'C', N'$53{,}6$ m.', 0),
+(@q, 'D', N'$18{,}9$ m.', 1);
+END
+
+-- Bài 13. Mở đầu về đường tròn
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 13. Mở đầu về đường tròn' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho đường tròn $(O;5\text{ cm})$ và điểm $M$ sao cho $OM=4$ cm. Khẳng định nào sau đây đúng?</p>', N'<p>Vì $OM=4\lt5=R$ nên $M$ nằm trong đường tròn $(O;5\text{ cm})$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$M$ nằm trên đường tròn.', 0),
+(@q, 'B', N'$M$ nằm ngoài đường tròn.', 0),
+(@q, 'C', N'$M$ nằm trong đường tròn.', 1),
+(@q, 'D', N'$M$ trùng với tâm $O$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Đường tròn có bao nhiêu trục đối xứng?</p>', N'<p>Mỗi đường thẳng đi qua tâm là một trục đối xứng của đường tròn. Có vô số đường thẳng đi qua tâm nên đường tròn có vô số trục đối xứng.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$1$.', 0),
+(@q, 'B', N'$2$.', 0),
+(@q, 'C', N'$4$.', 0),
+(@q, 'D', N'Vô số.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Tâm đối xứng của đường tròn $(O;R)$ là</p>', N'<p>Đường tròn là hình có tâm đối xứng; tâm của đường tròn chính là tâm đối xứng của nó. Vậy tâm đối xứng là điểm $O$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'điểm $O$.', 1),
+(@q, 'B', N'một điểm bất kì nằm trên đường tròn.', 0),
+(@q, 'C', N'trung điểm của một bán kính.', 0),
+(@q, 'D', N'không có, vì đường tròn không có tâm đối xứng.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một đường tròn có đường kính bằng $10$ cm. Bán kính của đường tròn đó bằng</p>', N'<p>Đường kính bằng hai lần bán kính nên $R=\dfrac{10}{2}=5$ (cm).</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$10$ cm.', 0),
+(@q, 'B', N'$5$ cm.', 1),
+(@q, 'C', N'$20$ cm.', 0),
+(@q, 'D', N'$2{,}5$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Trong mặt phẳng tọa độ $Oxy$, điểm nào sau đây nằm trên đường tròn $(O;5)$ với $O$ là gốc tọa độ?</p>', N'<p>Tính khoảng cách từ $O$: $(2;4)$ cho $\sqrt{20}\lt5$; $(3;-4)$ cho $\sqrt{9+16}=5$; $(4;4)$ cho $\sqrt{32}\gt5$; $(1;5)$ cho $\sqrt{26}\gt5$. Chỉ điểm $(3;-4)$ cách $O$ đúng bằng $5$ nên nằm trên đường tròn.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$(2;4)$.', 0),
+(@q, 'B', N'$(3;-4)$.', 1),
+(@q, 'C', N'$(4;4)$.', 0),
+(@q, 'D', N'$(1;5)$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho tam giác $ABC$ vuông tại $A$ có $AB=6$ cm, $AC=8$ cm. Bán kính của đường tròn đi qua ba điểm $A,\ B,\ C$ bằng</p>', N'<p>Tâm đường tròn là trung điểm của cạnh huyền $BC$. Ta có $BC=\sqrt{6^2+8^2}=10$ (cm) nên $R=\dfrac{BC}{2}=5$ cm.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$10$ cm.', 0),
+(@q, 'B', N'$7$ cm.', 0),
+(@q, 'C', N'$4{,}8$ cm.', 0),
+(@q, 'D', N'$5$ cm.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho hình chữ nhật có hai cạnh dài $5$ cm và $12$ cm. Bán kính của đường tròn đi qua bốn đỉnh của hình chữ nhật đó bằng</p>', N'<p>Hai đường chéo của hình chữ nhật bằng nhau và cắt nhau tại trung điểm mỗi đường nên giao điểm của chúng cách đều bốn đỉnh. Đường chéo dài $\sqrt{5^2+12^2}=13$ (cm), do đó bán kính $R=\dfrac{13}{2}=6{,}5$ cm.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$6{,}5$ cm.', 1),
+(@q, 'B', N'$13$ cm.', 0),
+(@q, 'C', N'$8{,}5$ cm.', 0),
+(@q, 'D', N'$6$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho điểm $M$ nằm trên đường tròn $(O;6\text{ cm})$. Gọi $N$ là điểm đối xứng với $M$ qua tâm $O$. Độ dài đoạn $MN$ bằng</p>', N'<p>$N$ đối xứng với $M$ qua $O$ nên $O$ là trung điểm của $MN$ và $N\in(O)$. Do đó $MN$ là một đường kính: $MN=2\cdot6=12$ (cm).</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$6$ cm.', 0),
+(@q, 'B', N'$3$ cm.', 0),
+(@q, 'C', N'$12$ cm.', 1),
+(@q, 'D', N'$18$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Trong mặt phẳng tọa độ $Oxy$, cho hai điểm $A(-1;0)$ và $B(5;0)$. Điểm nào sau đây nằm trên đường tròn đường kính $AB$?</p>', N'<p>Tâm $I$ là trung điểm của $AB$: $I(2;0)$, bán kính $R=\dfrac{AB}{2}=3$. Khoảng cách từ $I$: $(2;-3)$ cho $3=R$; $(4;2)$ cho $\sqrt{8}\lt3$; $(5;3)$ cho $\sqrt{18}\gt3$; $(0;3)$ cho $\sqrt{13}\gt3$. Vậy chỉ $(2;-3)$ nằm trên đường tròn.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$(2;-3)$.', 1),
+(@q, 'B', N'$(4;2)$.', 0),
+(@q, 'C', N'$(5;3)$.', 0),
+(@q, 'D', N'$(0;3)$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Trong mặt phẳng tọa độ $Oxy$, cho đường tròn tâm $I(1;2)$ đi qua điểm $A(4;6)$. Điểm nào sau đây nằm trong đường tròn đó?</p>', N'<p>Bán kính $R=IA=\sqrt{3^2+4^2}=5$. Khoảng cách từ $I$: $(5;5)$ cho $\sqrt{16+9}=5$ (nằm trên); $(-3;6)$ cho $\sqrt{32}\gt5$ (ngoài); $(4;-1)$ cho $\sqrt{18}\lt5$ (trong); $(6;3)$ cho $\sqrt{26}\gt5$ (ngoài). Vậy điểm $(4;-1)$ nằm trong đường tròn.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$(5;5)$.', 0),
+(@q, 'B', N'$(-3;6)$.', 0),
+(@q, 'C', N'$(4;-1)$.', 1),
+(@q, 'D', N'$(6;3)$.', 0);
+END
+
+-- Bài 14. Cung và dây của một đường tròn
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 14. Cung và dây của một đường tròn' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Dây lớn nhất của đường tròn $(O;R)$ có độ dài bằng</p>', N'<p>Trong một đường tròn, đường kính là dây lớn nhất; đường kính có độ dài $2R$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$R$.', 0),
+(@q, 'B', N'$2R$.', 1),
+(@q, 'C', N'$\pi R$.', 0),
+(@q, 'D', N'$R\sqrt{2}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho đường tròn $(O)$ và hai điểm $A,\ B$ thuộc đường tròn sao cho $\widehat{AOB}=70^\circ$. Số đo cung nhỏ $AB$ bằng</p>', N'<p>Số đo của cung nhỏ bằng số đo của góc ở tâm chắn cung đó nên $\mathrm{sđ}\,\overset{\frown}{AB}=\widehat{AOB}=70^\circ$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$70^\circ$.', 1),
+(@q, 'B', N'$140^\circ$.', 0),
+(@q, 'C', N'$35^\circ$.', 0),
+(@q, 'D', N'$290^\circ$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Trên đường tròn $(O)$, cung nhỏ $AB$ có số đo $110^\circ$. Số đo cung lớn $AB$ bằng</p>', N'<p>Số đo cung lớn bằng $360^\circ$ trừ số đo cung nhỏ có chung hai mút: $360^\circ-110^\circ=250^\circ$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$70^\circ$.', 0),
+(@q, 'B', N'$110^\circ$.', 0),
+(@q, 'C', N'$250^\circ$.', 1),
+(@q, 'D', N'$220^\circ$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Góc ở tâm của một đường tròn là góc</p>', N'<p>Theo định nghĩa, góc ở tâm là góc có đỉnh trùng với tâm đường tròn.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'có đỉnh nằm trên đường tròn.', 0),
+(@q, 'B', N'có hai cạnh là hai dây của đường tròn.', 0),
+(@q, 'C', N'có đỉnh nằm ngoài đường tròn.', 0),
+(@q, 'D', N'có đỉnh trùng với tâm đường tròn.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho đường tròn $(O;5\text{ cm})$ và dây $AB=8$ cm. Khoảng cách từ tâm $O$ đến dây $AB$ bằng</p>', N'<p>Gọi $H$ là chân đường vuông góc hạ từ $O$ xuống $AB$. Tam giác $OAB$ cân tại $O$ nên $H$ là trung điểm của $AB$, $AH=4$ cm. Suy ra $OH=\sqrt{OA^2-AH^2}=\sqrt{25-16}=3$ (cm).</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$4$ cm.', 0),
+(@q, 'B', N'$3$ cm.', 1),
+(@q, 'C', N'$\sqrt{41}$ cm.', 0),
+(@q, 'D', N'$6$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho đường tròn $(O;R)$ và dây $AB$ có độ dài bằng $R$. Số đo cung nhỏ $AB$ bằng</p>', N'<p>Tam giác $OAB$ có $OA=OB=AB=R$ nên là tam giác đều, suy ra $\widehat{AOB}=60^\circ$. Vậy $\mathrm{sđ}\,\overset{\frown}{AB}=60^\circ$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$30^\circ$.', 0),
+(@q, 'B', N'$90^\circ$.', 0),
+(@q, 'C', N'$120^\circ$.', 0),
+(@q, 'D', N'$60^\circ$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho đường tròn $(O;R)$ và dây $AB=R\sqrt{2}$. Số đo cung lớn $AB$ bằng</p>', N'<p>Ta có $OA^2+OB^2=2R^2=AB^2$ nên tam giác $OAB$ vuông tại $O$ (định lí Pythagore đảo), tức $\widehat{AOB}=90^\circ$. Cung nhỏ $AB$ có số đo $90^\circ$, cung lớn $AB$ có số đo $360^\circ-90^\circ=270^\circ$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$270^\circ$.', 1),
+(@q, 'B', N'$90^\circ$.', 0),
+(@q, 'C', N'$180^\circ$.', 0),
+(@q, 'D', N'$315^\circ$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Trên mặt đồng hồ, sau $20$ phút đầu kim phút vạch nên một cung có số đo bằng</p>', N'<p>Kim phút quay một vòng ($360^\circ$) trong $60$ phút nên trong $20$ phút vạch nên cung có số đo $\dfrac{20}{60}\cdot360^\circ=120^\circ$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$20^\circ$.', 0),
+(@q, 'B', N'$60^\circ$.', 0),
+(@q, 'C', N'$120^\circ$.', 1),
+(@q, 'D', N'$240^\circ$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Trên đường tròn $(O)$ lấy ba điểm $A,\ B,\ C$ sao cho $C$ thuộc cung nhỏ $AB$, $\mathrm{sđ}\,\overset{\frown}{AC}=40^\circ$ và $\mathrm{sđ}\,\overset{\frown}{CB}=75^\circ$ (các cung $AC$, $CB$ là cung không chứa điểm còn lại). Số đo cung lớn $AB$ bằng</p>', N'<p>Vì $C$ thuộc cung nhỏ $AB$ nên $\mathrm{sđ}\,\overset{\frown}{ACB}=\mathrm{sđ}\,\overset{\frown}{AC}+\mathrm{sđ}\,\overset{\frown}{CB}=40^\circ+75^\circ=115^\circ$. Cung lớn $AB$ có số đo $360^\circ-115^\circ=245^\circ$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$115^\circ$.', 0),
+(@q, 'B', N'$245^\circ$.', 1),
+(@q, 'C', N'$285^\circ$.', 0),
+(@q, 'D', N'$35^\circ$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho đường tròn $(O;6\text{ cm})$ và dây $AB$ cách tâm $O$ một khoảng $3$ cm. Số đo cung nhỏ $AB$ bằng</p>', N'<p>Gọi $H$ là chân đường vuông góc hạ từ $O$ xuống $AB$, $OH=3$ cm. Trong tam giác vuông $OHA$: $\cos\widehat{AOH}=\dfrac{OH}{OA}=\dfrac{3}{6}=\dfrac{1}{2}$ nên $\widehat{AOH}=60^\circ$. Vì $OH$ là phân giác của góc $AOB$ nên $\widehat{AOB}=120^\circ$, suy ra $\mathrm{sđ}\,\overset{\frown}{AB}=120^\circ$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$60^\circ$.', 0),
+(@q, 'B', N'$150^\circ$.', 0),
+(@q, 'C', N'$90^\circ$.', 0),
+(@q, 'D', N'$120^\circ$.', 1);
+END
+
+-- Bài 15. Độ dài của cung tròn. Diện tích hình quạt tròn và hình vành khuyên
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 15. Độ dài của cung tròn. Diện tích hình quạt tròn và hình vành khuyên' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Độ dài của đường tròn có bán kính $3$ cm là</p>', N'<p>$C=2\pi R=2\pi\cdot3=6\pi$ (cm).</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$3\pi$ cm.', 0),
+(@q, 'B', N'$9\pi$ cm.', 0),
+(@q, 'C', N'$6\pi$ cm.', 1),
+(@q, 'D', N'$12\pi$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Độ dài của cung $60^\circ$ trên đường tròn bán kính $6$ cm là</p>', N'<p>$l=\dfrac{n}{180}\pi R=\dfrac{60}{180}\pi\cdot6=2\pi$ (cm).</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$2\pi$ cm.', 1),
+(@q, 'B', N'$6\pi$ cm.', 0),
+(@q, 'C', N'$\pi$ cm.', 0),
+(@q, 'D', N'$4\pi$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Diện tích của hình quạt tròn bán kính $4$ cm, ứng với cung $90^\circ$ là</p>', N'<p>$S_q=\dfrac{n}{360}\pi R^2=\dfrac{90}{360}\pi\cdot4^2=4\pi$ (cm²).</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$16\pi$ cm².', 0),
+(@q, 'B', N'$8\pi$ cm².', 0),
+(@q, 'C', N'$2\pi$ cm².', 0),
+(@q, 'D', N'$4\pi$ cm².', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Diện tích của hình vành khuyên nằm giữa hai đường tròn đồng tâm có bán kính $5$ cm và $4$ cm là</p>', N'<p>$S_v=\pi(R^2-r^2)=\pi(5^2-4^2)=9\pi$ (cm²).</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\pi$ cm².', 0),
+(@q, 'B', N'$9\pi$ cm².', 1),
+(@q, 'C', N'$41\pi$ cm².', 0),
+(@q, 'D', N'$3\pi$ cm².', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Trên đường tròn bán kính $9$ cm, một cung có độ dài $3\pi$ cm. Số đo của cung đó bằng</p>', N'<p>Từ $l=\dfrac{n}{180}\pi R$ suy ra $n=\dfrac{180\,l}{\pi R}=\dfrac{180\cdot3\pi}{9\pi}=60$. Vậy cung có số đo $60^\circ$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$30^\circ$.', 0),
+(@q, 'B', N'$60^\circ$.', 1),
+(@q, 'C', N'$120^\circ$.', 0),
+(@q, 'D', N'$20^\circ$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một hình quạt tròn có bán kính $6$ cm và độ dài cung tương ứng là $5\pi$ cm. Diện tích của hình quạt tròn đó là</p>', N'<p>$S_q=\dfrac{l\cdot R}{2}=\dfrac{5\pi\cdot6}{2}=15\pi$ (cm²).</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$30\pi$ cm².', 0),
+(@q, 'B', N'$5\pi$ cm².', 0),
+(@q, 'C', N'$15\pi$ cm².', 1),
+(@q, 'D', N'$18\pi$ cm².', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một đường tròn có độ dài $10\pi$ cm. Diện tích của hình tròn tương ứng là</p>', N'<p>Từ $2\pi R=10\pi$ suy ra $R=5$ cm. Diện tích hình tròn $S=\pi R^2=25\pi$ (cm²).</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$25\pi$ cm².', 1),
+(@q, 'B', N'$100\pi$ cm².', 0),
+(@q, 'C', N'$10\pi$ cm².', 0),
+(@q, 'D', N'$50\pi$ cm².', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một hình quạt tròn bán kính $6$ cm có diện tích $6\pi$ cm². Số đo cung tương ứng của hình quạt đó bằng</p>', N'<p>Từ $S_q=\dfrac{n}{360}\pi R^2$ ta có $\dfrac{n}{360}\cdot36\pi=6\pi$, suy ra $n=60$. Vậy cung có số đo $60^\circ$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$30^\circ$.', 0),
+(@q, 'B', N'$120^\circ$.', 0),
+(@q, 'C', N'$90^\circ$.', 0),
+(@q, 'D', N'$60^\circ$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một hình vành khuyên nằm giữa hai đường tròn đồng tâm, trong đó bán kính đường tròn lớn gấp đôi bán kính đường tròn nhỏ. Biết diện tích hình vành khuyên là $27\pi$ cm². Độ dài của đường tròn lớn là</p>', N'<p>Gọi bán kính nhỏ là $r$, bán kính lớn là $R=2r$. Ta có $\pi(4r^2-r^2)=3\pi r^2=27\pi$ nên $r=3$ cm, $R=6$ cm. Độ dài đường tròn lớn $C=2\pi\cdot6=12\pi$ (cm).</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$6\pi$ cm.', 0),
+(@q, 'B', N'$12\pi$ cm.', 1),
+(@q, 'C', N'$36\pi$ cm.', 0),
+(@q, 'D', N'$9\pi$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Chu vi của hình quạt tròn bán kính $6$ cm, ứng với cung $120^\circ$ (gồm hai bán kính và cung tròn) là</p>', N'<p>Độ dài cung $l=\dfrac{120}{180}\pi\cdot6=4\pi$ (cm). Chu vi hình quạt bằng tổng hai bán kính và độ dài cung: $6+6+4\pi=12+4\pi$ (cm).</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$12+4\pi$ cm.', 1),
+(@q, 'B', N'$4\pi$ cm.', 0),
+(@q, 'C', N'$6+4\pi$ cm.', 0),
+(@q, 'D', N'$12+12\pi$ cm.', 0);
+END
+
+-- Bài 16. Vị trí tương đối của đường thẳng và đường tròn
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 16. Vị trí tương đối của đường thẳng và đường tròn' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho đường tròn $(O;5\text{ cm})$ và đường thẳng $a$ cách $O$ một khoảng $3$ cm. Vị trí tương đối của $a$ và $(O)$ là</p>', N'<p>Vì $d=3\lt5=R$ nên đường thẳng $a$ và đường tròn $(O)$ cắt nhau.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'tiếp xúc nhau.', 0),
+(@q, 'B', N'không giao nhau.', 0),
+(@q, 'C', N'cắt nhau.', 1),
+(@q, 'D', N'không xác định được.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Nếu đường thẳng $a$ và đường tròn $(O)$ tiếp xúc nhau thì số điểm chung của chúng là</p>', N'<p>Đường thẳng và đường tròn tiếp xúc nhau khi chúng có duy nhất một điểm chung (tiếp điểm).</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$0$.', 0),
+(@q, 'B', N'$1$.', 1),
+(@q, 'C', N'$2$.', 0),
+(@q, 'D', N'$3$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho đường tròn $(O;6\text{ cm})$ và đường thẳng $a$ cách $O$ một khoảng $6$ cm. Vị trí tương đối của $a$ và $(O)$ là</p>', N'<p>Vì $d=6=R$ nên đường thẳng $a$ và đường tròn $(O)$ tiếp xúc nhau.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'tiếp xúc nhau.', 1),
+(@q, 'B', N'cắt nhau.', 0),
+(@q, 'C', N'không giao nhau.', 0),
+(@q, 'D', N'đường thẳng $a$ đi qua tâm $O$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho đường thẳng $a$ tiếp xúc với đường tròn $(O;R)$ tại $H$. Khẳng định nào sau đây đúng?</p>', N'<p>Nếu $a$ tiếp xúc với $(O)$ tại $H$ thì $OH\perp a$ (và $OH=R$). Các khẳng định còn lại đều sai.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$OH\parallel a$.', 0),
+(@q, 'B', N'$OH=2R$.', 0),
+(@q, 'C', N'$OH\lt R$.', 0),
+(@q, 'D', N'$OH\perp a$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Từ điểm $M$ nằm ngoài đường tròn $(O;3\text{ cm})$ kẻ tiếp tuyến $MA$ ($A$ là tiếp điểm). Biết $MO=5$ cm. Độ dài $MA$ bằng</p>', N'<p>Vì $MA$ là tiếp tuyến nên $OA\perp MA$, tam giác $OAM$ vuông tại $A$. Do đó $MA=\sqrt{MO^2-OA^2}=\sqrt{25-9}=4$ (cm).</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$4$ cm.', 1),
+(@q, 'B', N'$\sqrt{34}$ cm.', 0),
+(@q, 'C', N'$2$ cm.', 0),
+(@q, 'D', N'$8$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Từ điểm $M$ nằm ngoài đường tròn $(O)$ kẻ hai tiếp tuyến $MA$, $MB$ ($A$, $B$ là các tiếp điểm) sao cho $\widehat{AMB}=60^\circ$. Số đo góc $AOB$ bằng</p>', N'<p>Vì $\widehat{OAM}=\widehat{OBM}=90^\circ$ nên trong tứ giác $OAMB$: $\widehat{AOB}=360^\circ-90^\circ-90^\circ-60^\circ=120^\circ$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$60^\circ$.', 0),
+(@q, 'B', N'$30^\circ$.', 0),
+(@q, 'C', N'$120^\circ$.', 1),
+(@q, 'D', N'$150^\circ$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho đường tròn $(O;4\text{ cm})$ và đường thẳng $a$ cách $O$ một khoảng $d$. Biết $a$ và $(O)$ không có điểm chung. Giá trị nào sau đây có thể là $d$?</p>', N'<p>Đường thẳng và đường tròn không giao nhau khi $d\gt R=4$ cm. Trong các giá trị đã cho chỉ có $d=5$ cm thỏa mãn ($d=4$ thì tiếp xúc; $d=2$ hoặc $d=3{,}5$ thì cắt nhau).</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$2$ cm.', 0),
+(@q, 'B', N'$4$ cm.', 0),
+(@q, 'C', N'$3{,}5$ cm.', 0),
+(@q, 'D', N'$5$ cm.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Từ điểm $M$ nằm ngoài đường tròn $(O;5\text{ cm})$ kẻ tiếp tuyến $MA$ ($A$ là tiếp điểm) với $MA=12$ cm. Khoảng cách $MO$ bằng</p>', N'<p>Tam giác $OAM$ vuông tại $A$ nên $MO=\sqrt{MA^2+OA^2}=\sqrt{144+25}=13$ (cm).</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$7$ cm.', 0),
+(@q, 'B', N'$13$ cm.', 1),
+(@q, 'C', N'$17$ cm.', 0),
+(@q, 'D', N'$\sqrt{119}$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Từ điểm $M$ nằm ngoài đường tròn $(O;2\text{ cm})$ kẻ hai tiếp tuyến $MA$, $MB$ ($A$, $B$ là các tiếp điểm). Biết $MO=4$ cm. Độ dài đoạn $AB$ bằng</p>', N'<p>Tam giác $OAM$ vuông tại $A$: $MA=\sqrt{16-4}=2\sqrt{3}$ cm và $\sin\widehat{AMO}=\dfrac{OA}{OM}=\dfrac{1}{2}$ nên $\widehat{AMO}=30^\circ$. Vì $MO$ là phân giác của góc $AMB$ nên $\widehat{AMB}=60^\circ$. Tam giác $MAB$ cân tại $M$ ($MA=MB$) có một góc $60^\circ$ nên là tam giác đều, do đó $AB=MA=2\sqrt{3}$ cm.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$2\sqrt{3}$ cm.', 1),
+(@q, 'B', N'$4$ cm.', 0),
+(@q, 'C', N'$\sqrt{3}$ cm.', 0),
+(@q, 'D', N'$2$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho $SA$ và $SB$ là hai tiếp tuyến cắt nhau của đường tròn $(O)$ ($A$, $B$ là các tiếp điểm), $SA=10$ cm. Tiếp tuyến của $(O)$ tại điểm $M$ thuộc cung nhỏ $AB$ cắt $SA$, $SB$ lần lượt tại $E$ và $F$. Chu vi tam giác $SEF$ bằng</p>', N'<p>Theo tính chất hai tiếp tuyến cắt nhau: $EA=EM$, $FB=FM$, $SB=SA=10$ cm. Chu vi tam giác $SEF$ là $SE+EM+MF+SF=(SE+EA)+(SF+FB)=SA+SB=20$ (cm).</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$10$ cm.', 0),
+(@q, 'B', N'$15$ cm.', 0),
+(@q, 'C', N'$20$ cm.', 1),
+(@q, 'D', N'$30$ cm.', 0);
+END
+
+-- Bài 17. Vị trí tương đối của hai đường tròn
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 17. Vị trí tương đối của hai đường tròn' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Hai đường tròn cắt nhau thì có bao nhiêu điểm chung?</p>', N'<p>Theo định nghĩa, hai đường tròn cắt nhau khi chúng có đúng hai điểm chung.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$0$.', 0),
+(@q, 'B', N'$1$.', 0),
+(@q, 'C', N'$2$.', 1),
+(@q, 'D', N'$3$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho hai đường tròn $(O;4\text{ cm})$ và $(O'';3\text{ cm})$ với $OO''=7$ cm. Vị trí tương đối của hai đường tròn là</p>', N'<p>Ta có $R+R''=4+3=7=OO''$ nên hai đường tròn tiếp xúc ngoài.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'cắt nhau.', 0),
+(@q, 'B', N'tiếp xúc ngoài.', 1),
+(@q, 'C', N'tiếp xúc trong.', 0),
+(@q, 'D', N'ngoài nhau.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho hai đường tròn $(O;5\text{ cm})$ và $(O'';2\text{ cm})$ với $OO''=10$ cm. Vị trí tương đối của hai đường tròn là</p>', N'<p>Ta có $OO''=10\gt7=R+R''$ nên hai đường tròn ngoài nhau.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'ngoài nhau.', 1),
+(@q, 'B', N'cắt nhau.', 0),
+(@q, 'C', N'tiếp xúc ngoài.', 0),
+(@q, 'D', N'đựng nhau.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Nếu hai đường tròn $(O)$ và $(O'')$ tiếp xúc nhau tại $A$ thì</p>', N'<p>Nếu hai đường tròn tiếp xúc nhau thì tiếp điểm thẳng hàng với hai tâm. Các khẳng định còn lại chỉ đúng trong trường hợp đặc biệt (hai bán kính bằng nhau và tiếp xúc ngoài) hoặc sai.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$A$ luôn là trung điểm của $OO''$.', 0),
+(@q, 'B', N'$A$ luôn cách đều hai tâm $O$ và $O''$.', 0),
+(@q, 'C', N'$A$ nằm trên đường trung trực của $OO''$.', 0),
+(@q, 'D', N'$A$, $O$, $O''$ thẳng hàng.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho hai đường tròn $(O;6\text{ cm})$ và $(O'';2\text{ cm})$ với $OO''=4$ cm. Vị trí tương đối của hai đường tròn là</p>', N'<p>Ta có $R-R''=6-2=4=OO''\gt0$ nên hai đường tròn tiếp xúc trong.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'tiếp xúc ngoài.', 0),
+(@q, 'B', N'cắt nhau.', 0),
+(@q, 'C', N'tiếp xúc trong.', 1),
+(@q, 'D', N'đựng nhau.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho hai đường tròn $(O;5\text{ cm})$ và $(O'';3\text{ cm})$ với $OO''=1$ cm. Khẳng định nào sau đây đúng?</p>', N'<p>Ta có $R-R''=5-3=2$ và $OO''=1\lt2=R-R''$ nên đường tròn $(O;5\text{ cm})$ đựng đường tròn $(O'';3\text{ cm})$; hai đường tròn không có điểm chung.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'Hai đường tròn cắt nhau.', 0),
+(@q, 'B', N'Đường tròn $(O)$ đựng đường tròn $(O'')$.', 1),
+(@q, 'C', N'Hai đường tròn tiếp xúc trong.', 0),
+(@q, 'D', N'Hai đường tròn ngoài nhau.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Hai đường tròn $(O;7\text{ cm})$ và $(O'';R'')$ tiếp xúc ngoài với nhau, biết $OO''=12$ cm. Bán kính $R''$ bằng</p>', N'<p>Hai đường tròn tiếp xúc ngoài nên $OO''=R+R''$, suy ra $R''=12-7=5$ (cm).</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$5$ cm.', 1),
+(@q, 'B', N'$19$ cm.', 0),
+(@q, 'C', N'$12$ cm.', 0),
+(@q, 'D', N'$7$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho hai đường tròn $(O;5\text{ cm})$ và $(O'';3\text{ cm})$. Với giá trị nào sau đây của $OO''$ thì hai đường tròn cắt nhau?</p>', N'<p>Hai đường tròn cắt nhau khi $R-R''\lt OO''\lt R+R''$, tức $2\lt OO''\lt8$. Chỉ có $OO''=6$ cm thỏa mãn ($OO''=2$: tiếp xúc trong; $OO''=8$: tiếp xúc ngoài; $OO''=9$: ngoài nhau).</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$2$ cm.', 0),
+(@q, 'B', N'$8$ cm.', 0),
+(@q, 'C', N'$9$ cm.', 0),
+(@q, 'D', N'$6$ cm.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Hai đường tròn $(O;6\text{ cm})$ và $(O'';R'')$ tiếp xúc trong với nhau, biết $OO''=2$ cm. Bán kính $R''$ bằng</p>', N'<p>Hai đường tròn tiếp xúc trong nên $OO''=|R-R''|$, tức $|6-R''|=2$. Suy ra $R''=4$ cm (khi $(O)$ đựng $(O'')$) hoặc $R''=8$ cm (khi $(O'')$ đựng $(O)$). Cả hai giá trị đều thỏa mãn.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$4$ cm.', 0),
+(@q, 'B', N'$8$ cm.', 0),
+(@q, 'C', N'$4$ cm hoặc $8$ cm.', 1),
+(@q, 'D', N'$2$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho ba đường tròn $(A;2\text{ cm})$, $(B;3\text{ cm})$ và $(C;4\text{ cm})$ đôi một tiếp xúc ngoài với nhau. Chu vi của tam giác $ABC$ bằng</p>', N'<p>Hai đường tròn tiếp xúc ngoài thì khoảng cách hai tâm bằng tổng hai bán kính: $AB=2+3=5$, $BC=3+4=7$, $CA=4+2=6$ (cm). Chu vi tam giác $ABC$ là $5+7+6=18$ (cm).</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$9$ cm.', 0),
+(@q, 'B', N'$18$ cm.', 1),
+(@q, 'C', N'$24$ cm.', 0),
+(@q, 'D', N'$12$ cm.', 0);
+END
+
+-- Bài 18. Hàm số y = ax² (a ≠ 0)
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 18. Hàm số y = ax² (a ≠ 0)' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Hàm số nào sau đây có dạng $y=ax^2$ ($a\neq0$)?</p>', N'<p>Hàm số $y=-3x^2$ có dạng $y=ax^2$ với $a=-3\neq0$. Hàm số $y=2x+1$ là hàm số bậc nhất; $y=x^3$ có lũy thừa bậc ba; $y=\dfrac{1}{x^2}$ có ẩn ở mẫu nên không có dạng $y=ax^2$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$y=2x+1$.', 0),
+(@q, 'B', N'$y=-3x^2$.', 1),
+(@q, 'C', N'$y=x^3$.', 0),
+(@q, 'D', N'$y=\dfrac{1}{x^2}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho hàm số $y=2x^2$. Giá trị của $y$ khi $x=-3$ là</p>', N'<p>$y=2\cdot(-3)^2=2\cdot9=18$. Lưu ý $(-3)^2=9$ chứ không phải $-9$; và phải bình phương $x$ trước rồi mới nhân với 2 (không tính $(2\cdot(-3))^2=36$).</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$18$.', 1),
+(@q, 'B', N'$-18$.', 0),
+(@q, 'C', N'$-12$.', 0),
+(@q, 'D', N'$36$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Khẳng định nào sau đây về đồ thị của hàm số $y=-\dfrac{1}{3}x^2$ là đúng?</p>', N'<p>Đồ thị hàm số $y=ax^2$ ($a\neq0$) là parabol có đỉnh là gốc tọa độ $O$, trục đối xứng là trục $Oy$. Vì $a=-\dfrac{1}{3}\lt0$ nên đồ thị nằm phía dưới trục hoành. Đồ thị đi qua $O(0;0)$ chứ không đi qua $(0;1)$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'Đồ thị nằm phía trên trục hoành.', 0),
+(@q, 'B', N'Đồ thị nhận trục $Ox$ làm trục đối xứng.', 0),
+(@q, 'C', N'Đồ thị có đỉnh là gốc tọa độ $O$ và nằm phía dưới trục hoành.', 1),
+(@q, 'D', N'Đồ thị đi qua điểm $(0;1)$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Điểm nào sau đây thuộc đồ thị của hàm số $y=3x^2$?</p>', N'<p>Với $x=-2$: $y=3\cdot(-2)^2=12$ nên điểm $(-2;12)$ thuộc đồ thị. Kiểm tra các điểm khác: $x=1$ cho $y=3\neq-3$; $x=2$ cho $y=12\neq6$; $x=-1$ cho $y=3\neq-3$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$(1;-3)$.', 0),
+(@q, 'B', N'$(2;6)$.', 0),
+(@q, 'C', N'$(-1;-3)$.', 0),
+(@q, 'D', N'$(-2;12)$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Biết parabol $y=ax^2$ ($a\neq0$) đi qua điểm $A(2;-8)$. Giá trị của $a$ là</p>', N'<p>Thay tọa độ điểm $A$: $-8=a\cdot2^2=4a$, suy ra $a=-2$. (Nhầm $a\cdot2=-8$ sẽ được $a=-4$.)</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$a=2$.', 0),
+(@q, 'B', N'$a=-4$.', 0),
+(@q, 'C', N'$a=-2$.', 1),
+(@q, 'D', N'$a=-\dfrac{1}{2}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Các điểm thuộc đồ thị hàm số $y=2x^2$ có tung độ bằng $8$ là</p>', N'<p>Ta có $2x^2=8$ suy ra $x^2=4$, $x=2$ hoặc $x=-2$. Vậy có hai điểm $(2;8)$ và $(-2;8)$, đối xứng nhau qua trục $Oy$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'chỉ có điểm $(2;8)$.', 0),
+(@q, 'B', N'$(2;8)$ và $(-2;8)$.', 1),
+(@q, 'C', N'$(4;8)$ và $(-4;8)$.', 0),
+(@q, 'D', N'$(\sqrt{2};8)$ và $(-\sqrt{2};8)$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Điểm $M(3;-6)$ thuộc parabol $y=-\dfrac{2}{3}x^2$. Điểm đối xứng với $M$ qua trục đối xứng của parabol đó là</p>', N'<p>Kiểm tra: $-\dfrac{2}{3}\cdot3^2=-6$ nên $M$ thuộc parabol. Trục đối xứng của parabol là trục $Oy$; hai điểm $(x;y)$ và $(-x;y)$ đối xứng nhau qua $Oy$. Vậy điểm cần tìm là $(-3;-6)$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$(-3;-6)$.', 1),
+(@q, 'B', N'$(3;6)$.', 0),
+(@q, 'C', N'$(-3;6)$.', 0),
+(@q, 'D', N'$(6;-3)$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Diện tích hình tròn được tính bởi công thức $S=\pi r^2$. Nếu bán kính $r$ tăng gấp 3 lần thì diện tích $S$</p>', N'<p>Khi bán kính là $3r$: $S''=\pi(3r)^2=9\pi r^2=9S$. Vậy diện tích tăng gấp 9 lần.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'tăng gấp 3 lần.', 0),
+(@q, 'B', N'tăng gấp 6 lần.', 0),
+(@q, 'C', N'giảm 9 lần.', 0),
+(@q, 'D', N'tăng gấp 9 lần.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Dây cáp của một cây cầu treo có dạng đồ thị hàm số $y=ax^2$, trong đó đỉnh $O$ nằm trên mặt cầu, ở chính giữa cầu; trục $Ox$ nằm trên mặt cầu, đơn vị trên các trục là mét. Hai trụ tháp cách nhau 200 m và dây cáp gắn vào đỉnh trụ ở độ cao 50 m so với mặt cầu. Chiều cao của dây cáp so với mặt cầu tại vị trí cách $O$ một khoảng 40 m (theo phương ngang) là</p>', N'<p>Đỉnh trụ ứng với điểm $(100;50)$ thuộc đồ thị nên $50=a\cdot100^2$, suy ra $a=\dfrac{1}{200}$. Tại $x=40$: $y=\dfrac{1}{200}\cdot40^2=\dfrac{1600}{200}=8$ (m). (Nếu tính tỉ lệ bậc nhất $50\cdot\dfrac{40}{100}=20$ là sai vì dây cáp có dạng parabol.)</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'20 m.', 0),
+(@q, 'B', N'8 m.', 1),
+(@q, 'C', N'16 m.', 0),
+(@q, 'D', N'4 m.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Biết parabol $y=ax^2$ ($a\neq0$) đi qua điểm $A(-2;3)$. Điểm nào sau đây cũng thuộc parabol đó?</p>', N'<p>$3=a\cdot(-2)^2=4a$ nên $a=\dfrac{3}{4}$, parabol là $y=\dfrac{3}{4}x^2$. Với $x=4$: $y=\dfrac{3}{4}\cdot16=12$, nên $(4;12)$ thuộc parabol. Kiểm tra các điểm khác: $x=2$ cho $y=3\neq-3$; $x=4$ cho $y=12\neq6$; $x=-1$ cho $y=\dfrac{3}{4}\neq\dfrac{3}{2}$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$(2;-3)$.', 0),
+(@q, 'B', N'$(4;6)$.', 0),
+(@q, 'C', N'$(4;12)$.', 1),
+(@q, 'D', N'$\left(-1;\dfrac{3}{2}\right)$.', 0);
+END
+
+-- Bài 19. Phương trình bậc hai một ẩn
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 19. Phương trình bậc hai một ẩn' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Phương trình nào sau đây là phương trình bậc hai một ẩn?</p>', N'<p>$-5x^2=0$ có dạng $ax^2+bx+c=0$ với $a=-5\neq0$, $b=0$, $c=0$ nên là phương trình bậc hai. Phương trình $0x^2+2x-1=0$ có $a=0$; $2x^3+x^2=0$ có bậc ba; $\dfrac{1}{x^2}+x+1=0$ có ẩn ở mẫu nên đều không phải phương trình bậc hai.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$0x^2+2x-1=0$.', 0),
+(@q, 'B', N'$2x^3+x^2=0$.', 0),
+(@q, 'C', N'$-5x^2=0$.', 1),
+(@q, 'D', N'$\dfrac{1}{x^2}+x+1=0$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Đưa phương trình $2x^2-7=3x$ về dạng $ax^2+bx+c=0$, các hệ số $a,b,c$ là</p>', N'<p>Chuyển vế: $2x^2-3x-7=0$. Vậy $a=2,\ b=-3,\ c=-7$. Khi chuyển $3x$ sang vế trái phải đổi dấu thành $-3x$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$a=2,\ b=3,\ c=-7$.', 0),
+(@q, 'B', N'$a=2,\ b=-3,\ c=7$.', 0),
+(@q, 'C', N'$a=2,\ b=-7,\ c=-3$.', 0),
+(@q, 'D', N'$a=2,\ b=-3,\ c=-7$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Biệt thức $\Delta$ của phương trình $2x^2-5x+3=0$ là</p>', N'<p>$a=2,\ b=-5,\ c=3$: $\Delta=b^2-4ac=(-5)^2-4\cdot2\cdot3=25-24=1$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\Delta=1$.', 1),
+(@q, 'B', N'$\Delta=49$.', 0),
+(@q, 'C', N'$\Delta=-1$.', 0),
+(@q, 'D', N'$\Delta=19$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Nghiệm của phương trình $3x^2-12x=0$ là</p>', N'<p>Đặt nhân tử chung: $3x(x-4)=0$, suy ra $x=0$ hoặc $x=4$. Không được chia hai vế cho $x$ vì sẽ làm mất nghiệm $x=0$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x=4$.', 0),
+(@q, 'B', N'$x_1=0,\ x_2=4$.', 1),
+(@q, 'C', N'$x_1=0,\ x_2=-4$.', 0),
+(@q, 'D', N'$x=\pm2$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Nghiệm của phương trình $(x-3)^2=7$ là</p>', N'<p>$(x-3)^2=7$ suy ra $x-3=\sqrt{7}$ hoặc $x-3=-\sqrt{7}$. Vậy $x=3+\sqrt{7}$ hoặc $x=3-\sqrt{7}$, tức $x=3\pm\sqrt{7}$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x=-3\pm\sqrt{7}$.', 0),
+(@q, 'B', N'$x=3+\sqrt{7}$.', 0),
+(@q, 'C', N'$x=3\pm\sqrt{7}$.', 1),
+(@q, 'D', N'$x=10$ hoặc $x=-4$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Phương trình $4x^2-4x+1=0$</p>', N'<p>$a=4,\ b''=-2,\ c=1$: $\Delta''=(-2)^2-4\cdot1=0$ nên phương trình có nghiệm kép $x_1=x_2=-\dfrac{b''}{a}=\dfrac{2}{4}=\dfrac{1}{2}$. (Cũng có thể viết $(2x-1)^2=0$.)</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'vô nghiệm.', 0),
+(@q, 'B', N'có hai nghiệm phân biệt.', 0),
+(@q, 'C', N'có nghiệm kép $x_1=x_2=-\dfrac{1}{2}$.', 0),
+(@q, 'D', N'có nghiệm kép $x_1=x_2=\dfrac{1}{2}$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Dùng công thức nghiệm thu gọn, nghiệm của phương trình $x^2-6x+4=0$ là</p>', N'<p>$a=1,\ b''=-3,\ c=4$: $\Delta''=b''^2-ac=9-4=5\gt0$. Phương trình có hai nghiệm phân biệt $x_{1,2}=\dfrac{-b''\pm\sqrt{\Delta''}}{a}=3\pm\sqrt{5}$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x=3\pm\sqrt{5}$.', 1),
+(@q, 'B', N'$x=-3\pm\sqrt{5}$.', 0),
+(@q, 'C', N'$x=3\pm\sqrt{13}$.', 0),
+(@q, 'D', N'$x=6\pm\sqrt{5}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Phương trình nào sau đây vô nghiệm?</p>', N'<p>Tính $\Delta$: $x^2-2x-3=0$ có $\Delta=4+12=16\gt0$; $2x^2+x+1=0$ có $\Delta=1-8=-7\lt0$ nên vô nghiệm; $x^2-4x+4=0$ có $\Delta=0$ (nghiệm kép); $3x^2-x-5=0$ có $\Delta=1+60=61\gt0$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x^2-2x-3=0$.', 0),
+(@q, 'B', N'$2x^2+x+1=0$.', 1),
+(@q, 'C', N'$x^2-4x+4=0$.', 0),
+(@q, 'D', N'$3x^2-x-5=0$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Với giá trị nào của $m$ thì phương trình $x^2-4x+m=0$ có nghiệm kép? Khi đó nghiệm kép bằng bao nhiêu?</p>', N'<p>$a=1,\ b''=-2,\ c=m$: $\Delta''=4-m$. Phương trình có nghiệm kép khi $\Delta''=0$, tức $m=4$. Khi đó nghiệm kép là $x_1=x_2=-\dfrac{b''}{a}=2$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$m=-4$, nghiệm kép $x=2$.', 0),
+(@q, 'B', N'$m=16$, nghiệm kép $x=4$.', 0),
+(@q, 'C', N'$m=4$, nghiệm kép $x=2$.', 1),
+(@q, 'D', N'$m=4$, nghiệm kép $x=-2$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một mảnh đất hình chữ nhật có kích thước 20 m × 14 m. Người ta làm một lối đi xung quanh mảnh đất có chiều rộng như nhau là $x$ (m), phần đất còn lại bên trong là hình chữ nhật có diện tích 160 m². Chiều rộng $x$ của lối đi là</p>', N'<p>Điều kiện $0\lt x\lt7$. Phần còn lại có kích thước $(20-2x)$ và $(14-2x)$ nên $(20-2x)(14-2x)=160$, hay $4x^2-68x+120=0$, tức $x^2-17x+30=0$. $\Delta=289-120=169$, $\sqrt{\Delta}=13$: $x=\dfrac{17-13}{2}=2$ (thỏa mãn) hoặc $x=\dfrac{17+13}{2}=15$ (loại). Vậy lối đi rộng 2 m.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'15 m.', 0),
+(@q, 'B', N'3 m.', 0),
+(@q, 'C', N'1 m.', 0),
+(@q, 'D', N'2 m.', 1);
+END
+
+-- Bài 20. Định lí Viète và ứng dụng
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 20. Định lí Viète và ứng dụng' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Gọi $x_1,x_2$ là hai nghiệm của phương trình $x^2-7x+10=0$. Khi đó</p>', N'<p>$\Delta=49-40=9\gt0$ nên phương trình có hai nghiệm. Theo định lí Viète: $x_1+x_2=-\dfrac{b}{a}=7$ và $x_1x_2=\dfrac{c}{a}=10$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x_1+x_2=-7,\ x_1x_2=10$.', 0),
+(@q, 'B', N'$x_1+x_2=7,\ x_1x_2=10$.', 1),
+(@q, 'C', N'$x_1+x_2=7,\ x_1x_2=-10$.', 0),
+(@q, 'D', N'$x_1+x_2=10,\ x_1x_2=7$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Gọi $x_1,x_2$ là hai nghiệm của phương trình $2x^2+5x-3=0$. Tổng và tích hai nghiệm là</p>', N'<p>$\Delta=25+24=49\gt0$. Theo định lí Viète: $x_1+x_2=-\dfrac{b}{a}=-\dfrac{5}{2}$; $x_1x_2=\dfrac{c}{a}=-\dfrac{3}{2}$. Cần chia cho $a=2$ và chú ý dấu.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x_1+x_2=\dfrac{5}{2},\ x_1x_2=-\dfrac{3}{2}$.', 0),
+(@q, 'B', N'$x_1+x_2=-\dfrac{5}{2},\ x_1x_2=\dfrac{3}{2}$.', 0),
+(@q, 'C', N'$x_1+x_2=-5,\ x_1x_2=-3$.', 0),
+(@q, 'D', N'$x_1+x_2=-\dfrac{5}{2},\ x_1x_2=-\dfrac{3}{2}$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Nhẩm nghiệm của phương trình $3x^2-8x+5=0$ ta được</p>', N'<p>$a+b+c=3-8+5=0$ nên phương trình có một nghiệm $x_1=1$, nghiệm kia là $x_2=\dfrac{c}{a}=\dfrac{5}{3}$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x_1=1,\ x_2=\dfrac{5}{3}$.', 1),
+(@q, 'B', N'$x_1=-1,\ x_2=-\dfrac{5}{3}$.', 0),
+(@q, 'C', N'$x_1=1,\ x_2=-\dfrac{5}{3}$.', 0),
+(@q, 'D', N'$x_1=1,\ x_2=\dfrac{3}{5}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Hai số có tổng bằng 7 và tích bằng 12 là hai nghiệm của phương trình nào sau đây?</p>', N'<p>Hai số có tổng $S$ và tích $P$ là hai nghiệm của phương trình $x^2-Sx+P=0$. Với $S=7,\ P=12$ ta được $x^2-7x+12=0$ (điều kiện $S^2-4P=49-48=1\ge0$ thỏa mãn).</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x^2+7x+12=0$.', 0),
+(@q, 'B', N'$x^2-12x+7=0$.', 0),
+(@q, 'C', N'$x^2-7x+12=0$.', 1),
+(@q, 'D', N'$x^2-7x-12=0$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Nhẩm nghiệm của phương trình $2x^2+7x+5=0$ ta được</p>', N'<p>$a-b+c=2-7+5=0$ nên phương trình có một nghiệm $x_1=-1$, nghiệm kia là $x_2=-\dfrac{c}{a}=-\dfrac{5}{2}$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x_1=-1,\ x_2=\dfrac{5}{2}$.', 0),
+(@q, 'B', N'$x_1=-1,\ x_2=-\dfrac{5}{2}$.', 1),
+(@q, 'C', N'$x_1=1,\ x_2=\dfrac{5}{2}$.', 0),
+(@q, 'D', N'$x_1=-1,\ x_2=-\dfrac{2}{5}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Biết phương trình $x^2-9x+14=0$ có một nghiệm $x_1=2$. Nghiệm còn lại là</p>', N'<p>Theo định lí Viète $x_1x_2=14$ nên $x_2=\dfrac{14}{2}=7$ (kiểm tra: $x_1+x_2=9$, đúng).</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x_2=-7$.', 0),
+(@q, 'B', N'$x_2=11$.', 0),
+(@q, 'C', N'$x_2=-11$.', 0),
+(@q, 'D', N'$x_2=7$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Hai số $u$ và $v$ thỏa mãn $u+v=11$ và $uv=28$ là</p>', N'<p>$u,v$ là hai nghiệm của $x^2-11x+28=0$. $\Delta=121-112=9$, $\sqrt{\Delta}=3$: $x=\dfrac{11\pm3}{2}$, tức $7$ và $4$. Kiểm tra: $4+7=11$, $4\cdot7=28$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$4$ và $7$.', 1),
+(@q, 'B', N'$-4$ và $-7$.', 0),
+(@q, 'C', N'$2$ và $14$.', 0),
+(@q, 'D', N'không tồn tại.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Gọi $x_1,x_2$ là hai nghiệm của phương trình $x^2-5x+3=0$. Giá trị của $x_1^2+x_2^2$ là</p>', N'<p>$\Delta=25-12=13\gt0$ nên phương trình có hai nghiệm. Theo định lí Viète $x_1+x_2=5$, $x_1x_2=3$. Khi đó $x_1^2+x_2^2=(x_1+x_2)^2-2x_1x_2=25-6=19$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$25$.', 0),
+(@q, 'B', N'$31$.', 0),
+(@q, 'C', N'$19$.', 1),
+(@q, 'D', N'$22$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một mảnh vườn hình chữ nhật có chu vi 34 m và diện tích 60 m². Các kích thước của mảnh vườn là</p>', N'<p>Nửa chu vi là 17 m nên chiều dài và chiều rộng là hai nghiệm của $x^2-17x+60=0$. $\Delta=289-240=49$, $\sqrt{\Delta}=7$: $x=\dfrac{17\pm7}{2}$, tức $12$ và $5$. Vậy kích thước là 12 m và 5 m. (Phương án 10 m và 6 m có diện tích 60 m² nhưng chu vi chỉ 32 m.)</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'10 m và 6 m.', 0),
+(@q, 'B', N'12 m và 5 m.', 1),
+(@q, 'C', N'15 m và 4 m.', 0),
+(@q, 'D', N'20 m và 3 m.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Tìm $m$ để phương trình $x^2-6x+m=0$ có hai nghiệm $x_1,x_2$ thỏa mãn $x_1-x_2=4$.</p>', N'<p>Theo định lí Viète $x_1+x_2=6$. Kết hợp $x_1-x_2=4$ được $x_1=5$, $x_2=1$. Khi đó $m=x_1x_2=5$. Kiểm tra: với $m=5$, $\Delta''=9-5=4\gt0$, phương trình $x^2-6x+5=0$ có hai nghiệm $5$ và $1$, thỏa mãn.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$m=8$.', 0),
+(@q, 'B', N'$m=-5$.', 0),
+(@q, 'C', N'$m=9$.', 0),
+(@q, 'D', N'$m=5$.', 1);
+END
+
+-- Bài 21. Giải bài toán bằng cách lập phương trình
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 21. Giải bài toán bằng cách lập phương trình' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Trong các bước giải bài toán bằng cách lập phương trình, việc làm đầu tiên là</p>', N'<p>Bước 1 (lập phương trình) bắt đầu bằng việc chọn ẩn số và đặt điều kiện thích hợp cho ẩn số; sau đó mới biểu diễn các đại lượng, lập phương trình (Bước 1), giải phương trình (Bước 2) và kiểm tra, trả lời (Bước 3).</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'chọn ẩn số và đặt điều kiện thích hợp cho ẩn số.', 1),
+(@q, 'B', N'giải phương trình.', 0),
+(@q, 'C', N'kiểm tra nghiệm và kết luận.', 0),
+(@q, 'D', N'vẽ đồ thị của hàm số.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một mảnh vườn hình chữ nhật có chiều dài hơn chiều rộng 5 m và diện tích bằng 84 m². Gọi chiều rộng của mảnh vườn là $x$ (m), $x\gt0$. Phương trình lập được là</p>', N'<p>Chiều dài là $x+5$ (m). Diện tích bằng chiều dài nhân chiều rộng nên $x(x+5)=84$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x(x-5)=84$.', 0),
+(@q, 'B', N'$x(x+5)=84$.', 1),
+(@q, 'C', N'$2(x+x+5)=84$.', 0),
+(@q, 'D', N'$x+5x=84$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Tích của hai số tự nhiên liên tiếp bằng 132. Hai số đó là</p>', N'<p>Gọi số nhỏ là $x$ ($x\in\mathbb{N}$), số lớn là $x+1$. Ta có $x(x+1)=132$ hay $x^2+x-132=0$. $\Delta=1+528=529$, $\sqrt{\Delta}=23$: $x=\dfrac{-1+23}{2}=11$ (thỏa mãn) hoặc $x=-12$ (loại). Hai số là 11 và 12.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'12 và 13.', 0),
+(@q, 'B', N'10 và 11.', 0),
+(@q, 'C', N'11 và 12.', 1),
+(@q, 'D', N'13 và 14.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một người gửi 100 triệu đồng vào ngân hàng, kì hạn 12 tháng, lãi suất $x$ mỗi năm ($x$ viết dưới dạng số thập phân), tiền lãi sau mỗi kì được nhập vào vốn. Số tiền (triệu đồng) người đó có sau 2 năm là</p>', N'<p>Sau kì thứ nhất có $100(1+x)$ triệu đồng. Số tiền này lại là vốn của kì thứ hai nên sau kì thứ hai có $100(1+x)(1+x)=100(1+x)^2$ triệu đồng.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$100(1+2x)$.', 0),
+(@q, 'B', N'$100+x^2$.', 0),
+(@q, 'C', N'$100(1+x)$.', 0),
+(@q, 'D', N'$100(1+x)^2$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một mảnh vườn hình chữ nhật có chiều dài hơn chiều rộng 4 m và diện tích bằng 96 m². Chiều rộng của mảnh vườn là</p>', N'<p>Gọi chiều rộng là $x$ (m), $x\gt0$; chiều dài $x+4$. Ta có $x(x+4)=96$ hay $x^2+4x-96=0$. $\Delta''=4+96=100$, $\sqrt{\Delta''}=10$: $x=-2+10=8$ (thỏa mãn) hoặc $x=-2-10=-12$ (loại). Chiều rộng là 8 m (chiều dài 12 m).</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'8 m.', 1),
+(@q, 'B', N'12 m.', 0),
+(@q, 'C', N'6 m.', 0),
+(@q, 'D', N'10 m.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Bác Hùng gửi 200 triệu đồng vào ngân hàng, kì hạn 12 tháng, lãi kép (tiền lãi sau mỗi kì được nhập vào vốn). Sau 2 năm bác nhận được 233,28 triệu đồng. Lãi suất mỗi năm là</p>', N'<p>Gọi lãi suất là $x$ (số thập phân, $x\gt0$). Ta có $200(1+x)^2=233{,}28$ suy ra $(1+x)^2=1{,}1664$. Do $1+x\gt0$ nên $1+x=1{,}08$, $x=0{,}08$. Vậy lãi suất là 8%/năm. (Chia đều tiền lãi $33{,}28$ cho 2 năm sẽ được 8,32% là sai vì lãi được nhập vào vốn.)</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'16,64%.', 0),
+(@q, 'B', N'8%.', 1),
+(@q, 'C', N'9%.', 0),
+(@q, 'D', N'8,32%.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một đội xe dự định chở 60 tấn hàng, mỗi xe chở khối lượng như nhau. Lúc sắp khởi hành có 1 xe bị hỏng nên mỗi xe còn lại phải chở thêm 2 tấn. Số xe lúc đầu của đội là</p>', N'<p>Gọi số xe lúc đầu là $x$ ($x\in\mathbb{N}$, $x\gt1$). Ta có $\dfrac{60}{x-1}-\dfrac{60}{x}=2$. Khử mẫu: $60x-60(x-1)=2x(x-1)$, hay $x^2-x-30=0$. $\Delta=1+120=121$: $x=\dfrac{1+11}{2}=6$ (thỏa mãn) hoặc $x=-5$ (loại). Vậy lúc đầu đội có 6 xe (5 là số xe còn lại).</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'5 xe.', 0),
+(@q, 'B', N'10 xe.', 0),
+(@q, 'C', N'6 xe.', 1),
+(@q, 'D', N'12 xe.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Tổng của hai số dương bằng 17 và tổng các bình phương của chúng bằng 145. Hai số đó là</p>', N'<p>Gọi một số là $x$ ($0\lt x\lt17$), số kia là $17-x$. Ta có $x^2+(17-x)^2=145$ hay $2x^2-34x+144=0$, tức $x^2-17x+72=0$. $\Delta=289-288=1$: $x=9$ hoặc $x=8$. Hai số là 8 và 9 (kiểm tra $64+81=145$).</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'7 và 10.', 0),
+(@q, 'B', N'6 và 11.', 0),
+(@q, 'C', N'5 và 12.', 0),
+(@q, 'D', N'8 và 9.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một ca nô đi xuôi dòng 30 km rồi ngay lập tức đi ngược dòng 30 km, tổng thời gian cả đi và về là 4 giờ. Biết vận tốc dòng nước là 4 km/h. Vận tốc thực của ca nô là</p>', N'<p>Gọi vận tốc thực là $x$ (km/h), $x\gt4$. Ta có $\dfrac{30}{x+4}+\dfrac{30}{x-4}=4$. Khử mẫu: $30(x-4)+30(x+4)=4(x^2-16)$, hay $4x^2-60x-64=0$, tức $x^2-15x-16=0$. Vì $a-b+c=1+15-16=0$ nên $x=-1$ (loại) hoặc $x=16$ (thỏa mãn). Vận tốc thực là 16 km/h (20 km/h và 12 km/h là vận tốc xuôi và ngược dòng).</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'15 km/h.', 0),
+(@q, 'B', N'20 km/h.', 0),
+(@q, 'C', N'16 km/h.', 1),
+(@q, 'D', N'12 km/h.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Hai đội công nhân cùng làm chung một công việc thì hoàn thành trong 4 ngày. Nếu làm riêng thì đội I hoàn thành công việc nhanh hơn đội II là 6 ngày. Thời gian mỗi đội làm riêng xong công việc lần lượt là</p>', N'<p>Gọi thời gian đội I làm riêng xong là $x$ (ngày), $x\gt0$; đội II là $x+6$ ngày. Mỗi ngày hai đội làm được $\dfrac{1}{x}+\dfrac{1}{x+6}=\dfrac{1}{4}$ công việc. Khử mẫu: $4(2x+6)=x(x+6)$, hay $x^2-2x-24=0$. $\Delta''=1+24=25$: $x=1+5=6$ (thỏa mãn) hoặc $x=-4$ (loại). Vậy đội I làm 6 ngày, đội II làm 12 ngày (kiểm tra $\dfrac{1}{6}+\dfrac{1}{12}=\dfrac{1}{4}$).</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'4 ngày và 10 ngày.', 0),
+(@q, 'B', N'6 ngày và 12 ngày.', 1),
+(@q, 'C', N'8 ngày và 14 ngày.', 0),
+(@q, 'D', N'2 ngày và 8 ngày.', 0);
+END
+
+-- Bài 22. Bảng tần số và biểu đồ tần số
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 22. Bảng tần số và biểu đồ tần số' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Tần số của một giá trị trong mẫu dữ liệu là</p>', N'<p>Theo định nghĩa, tần số của một giá trị là số lần xuất hiện giá trị đó trong mẫu dữ liệu. Số giá trị của mẫu dữ liệu là cỡ mẫu; tỉ số giữa số lần xuất hiện và cỡ mẫu là tần số tương đối.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'số lần xuất hiện giá trị đó trong mẫu dữ liệu.', 1),
+(@q, 'B', N'số giá trị của mẫu dữ liệu.', 0),
+(@q, 'C', N'tỉ số giữa số lần xuất hiện giá trị đó và cỡ mẫu.', 0),
+(@q, 'D', N'giá trị xuất hiện nhiều nhất trong mẫu dữ liệu.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Điểm kiểm tra môn Toán của một nhóm học sinh được ghi lại như sau: 7; 8; 9; 7; 10; 8; 7; 6; 9; 7. Cỡ mẫu của mẫu dữ liệu trên là</p>', N'<p>Cỡ mẫu là số giá trị của mẫu dữ liệu. Đếm được 10 giá trị nên cỡ mẫu là 10. (Có 5 giá trị khác nhau là 6; 7; 8; 9; 10, còn 78 là tổng các điểm.)</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'5.', 0),
+(@q, 'B', N'4.', 0),
+(@q, 'C', N'10.', 1),
+(@q, 'D', N'78.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Điểm kiểm tra môn Toán của một nhóm học sinh được ghi lại như sau: 7; 8; 9; 7; 10; 8; 7; 6; 9; 7. Tần số của giá trị 7 là</p>', N'<p>Giá trị 7 xuất hiện ở các vị trí thứ 1, 4, 7 và 10 nên xuất hiện 4 lần. Vậy tần số của giá trị 7 là 4.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'3.', 0),
+(@q, 'B', N'4.', 1),
+(@q, 'C', N'7.', 0),
+(@q, 'D', N'10.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Biểu đồ tần số dạng đoạn thẳng còn được gọi là</p>', N'<p>Biểu đồ tần số dạng đoạn thẳng còn được gọi là đa giác tần số. Tổ chức đồ là tên gọi của biểu đồ tần số tương đối ghép nhóm dạng cột.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'biểu đồ hình quạt tròn.', 0),
+(@q, 'B', N'tổ chức đồ.', 0),
+(@q, 'C', N'biểu đồ tranh.', 0),
+(@q, 'D', N'đa giác tần số.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cỡ giày của các bạn nam trong một lớp được cho bởi bảng tần số sau:</p>
+<table border="1"><tr><th>Cỡ giày</th><td>36</td><td>37</td><td>38</td><td>39</td><td>40</td></tr><tr><th>Tần số</th><td>5</td><td>4</td><td>8</td><td>2</td><td>3</td></tr></table>
+<p>Cỡ mẫu của mẫu dữ liệu là</p>', N'<p>Cỡ mẫu bằng tổng các tần số: $n=5+4+8+2+3=22$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'5.', 0),
+(@q, 'B', N'8.', 0),
+(@q, 'C', N'190.', 0),
+(@q, 'D', N'22.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Số lỗi chính tả trong bài kiểm tra của các bạn trong lớp được cho bởi bảng tần số sau:</p>
+<table border="1"><tr><th>Số lỗi</th><td>0</td><td>1</td><td>2</td><td>3</td><td>4</td></tr><tr><th>Số bạn</th><td>6</td><td>10</td><td>7</td><td>4</td><td>3</td></tr></table>
+<p>Số bạn mắc không quá 1 lỗi chính tả là</p>', N'<p>"Không quá 1 lỗi" nghĩa là mắc 0 lỗi hoặc 1 lỗi. Số bạn là $6+10=16$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'16.', 1),
+(@q, 'B', N'10.', 0),
+(@q, 'C', N'23.', 0),
+(@q, 'D', N'7.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho bảng tần số:</p>
+<table border="1"><tr><th>Giá trị</th><td>5</td><td>6</td><td>7</td><td>8</td></tr><tr><th>Tần số</th><td>3</td><td>7</td><td>9</td><td>1</td></tr></table>
+<p>Biểu đồ tần số dạng đoạn thẳng biểu diễn bảng trên đi qua điểm nào sau đây (trục ngang biểu diễn giá trị, trục đứng biểu diễn tần số)?</p>', N'<p>Mỗi điểm của biểu đồ có dạng (giá trị; tần số): $(5;3)$, $(6;7)$, $(7;9)$, $(8;1)$. Trong các phương án chỉ có $(7;9)$ thuộc biểu đồ.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$(3;5)$.', 0),
+(@q, 'B', N'$(7;6)$.', 0),
+(@q, 'C', N'$(7;9)$.', 1),
+(@q, 'D', N'$(9;7)$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Gieo một con xúc xắc 20 lần, ghi lại số chấm xuất hiện. Mặt 1 chấm xuất hiện 3 lần, mặt 2 chấm xuất hiện 4 lần, mặt 3 chấm xuất hiện 2 lần, mặt 4 chấm xuất hiện 5 lần, mặt 6 chấm xuất hiện 2 lần. Tần số của giá trị 5 chấm là</p>', N'<p>Tổng các tần số bằng cỡ mẫu 20. Tần số của giá trị 5 chấm là $20-(3+4+2+5+2)=20-16=4$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'2.', 0),
+(@q, 'B', N'4.', 1),
+(@q, 'C', N'5.', 0),
+(@q, 'D', N'16.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Kết quả xếp loại học tập của 12 học sinh như sau: Tốt, Khá, Tốt, Đạt, Khá, Tốt, Tốt, Chưa đạt, Khá, Tốt, Đạt, Khá. Phát biểu nào sau đây là đúng?</p>', N'<p>Lập bảng tần số: Tốt có tần số 5; Khá có tần số 4; Đạt có tần số 2; Chưa đạt có tần số 1; cỡ mẫu là 12. Số học sinh xếp loại Tốt và Khá là $5+4=9$. Các phát biểu còn lại sai: tần số của Khá là 4 (không phải 5); cỡ mẫu là 12 (không phải 4); tần số của Đạt (2) khác tần số của Chưa đạt (1).</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'Tần số của giá trị Khá là 5.', 0),
+(@q, 'B', N'Cỡ mẫu là 4.', 0),
+(@q, 'C', N'Số học sinh xếp loại Tốt và Khá là 9.', 1),
+(@q, 'D', N'Tần số của giá trị Đạt bằng tần số của giá trị Chưa đạt.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Điểm kiểm tra của 30 học sinh được cho bởi bảng tần số sau, trong đó tần số của điểm 7 bị mờ:</p>
+<table border="1"><tr><th>Điểm</th><td>5</td><td>6</td><td>7</td><td>8</td><td>9</td><td>10</td></tr><tr><th>Tần số</th><td>2</td><td>5</td><td>$m$</td><td>8</td><td>6</td><td>3</td></tr></table>
+<p>Số học sinh đạt từ 7 điểm trở lên là</p>', N'<p>Cỡ mẫu là 30 nên $2+5+m+8+6+3=30$, suy ra $m=6$. Số học sinh đạt từ 7 điểm trở lên là $6+8+6+3=23$ (hoặc $30-2-5=23$).</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'17.', 0),
+(@q, 'B', N'23.', 1),
+(@q, 'C', N'6.', 0),
+(@q, 'D', N'24.', 0);
+END
+
+-- Bài 23. Bảng tần số tương đối và biểu đồ tần số tương đối
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 23. Bảng tần số tương đối và biểu đồ tần số tương đối' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho mẫu dữ liệu có cỡ mẫu $n$, giá trị $x_i$ có tần số $m_i$. Tần số tương đối $f_i$ của $x_i$ được tính bởi công thức nào?</p>', N'<p>Tần số tương đối của $x_i$ là tỉ số giữa tần số $m_i$ và cỡ mẫu $n$: $f_i=\dfrac{m_i}{n}\cdot100\%$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$f_i=\dfrac{n}{m_i}\cdot100\%$.', 0),
+(@q, 'B', N'$f_i=\dfrac{m_i}{n}\cdot100\%$.', 1),
+(@q, 'C', N'$f_i=m_i\cdot n\cdot100\%$.', 0),
+(@q, 'D', N'$f_i=\dfrac{m_i}{100}\cdot n$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một mẫu dữ liệu có cỡ mẫu 40, trong đó giá trị $x$ có tần số 10. Tần số tương đối của $x$ là</p>', N'<p>$f=\dfrac{10}{40}\cdot100\%=25\%$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'10%.', 0),
+(@q, 'B', N'40%.', 0),
+(@q, 'C', N'4%.', 0),
+(@q, 'D', N'25%.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Trong một bảng tần số tương đối, tổng các tần số tương đối của tất cả các giá trị bằng</p>', N'<p>$f_1+f_2+\dots+f_k=\dfrac{m_1+m_2+\dots+m_k}{n}\cdot100\%=\dfrac{n}{n}\cdot100\%=100\%$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'100%.', 1),
+(@q, 'B', N'50%.', 0),
+(@q, 'C', N'cỡ mẫu $n$.', 0),
+(@q, 'D', N'$360^\circ$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Trong biểu đồ hình quạt tròn biểu diễn tần số tương đối, hình quạt biểu diễn giá trị có tần số tương đối 25% có số đo cung là</p>', N'<p>Số đo cung bằng $360^\circ\cdot25\%=90^\circ$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$25^\circ$.', 0),
+(@q, 'B', N'$45^\circ$.', 0),
+(@q, 'C', N'$90^\circ$.', 1),
+(@q, 'D', N'$100^\circ$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Lớp 9A có 40 học sinh. Khảo sát phương tiện đến trường cho kết quả: đi xe đạp 18 bạn, đi bộ 10 bạn, đi xe buýt 8 bạn, được bố mẹ đưa đón 4 bạn. Tần số tương đối của nhóm học sinh đi xe đạp là</p>', N'<p>$f=\dfrac{18}{40}\cdot100\%=45\%$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'18%.', 0),
+(@q, 'B', N'45%.', 1),
+(@q, 'C', N'40%.', 0),
+(@q, 'D', N'55%.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Khi vẽ biểu đồ hình quạt tròn biểu diễn bảng tần số tương đối, hình quạt biểu diễn giá trị có tần số tương đối 15% có số đo cung là</p>', N'<p>Số đo cung bằng $360^\circ\cdot15\%=360^\circ\cdot0{,}15=54^\circ$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$15^\circ$.', 0),
+(@q, 'B', N'$30^\circ$.', 0),
+(@q, 'C', N'$45^\circ$.', 0),
+(@q, 'D', N'$54^\circ$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Khảo sát 50 người về đồ uống yêu thích, tần số tương đối của câu trả lời "trà sữa" là 36%. Số người chọn trà sữa là</p>', N'<p>Từ $f=\dfrac{m}{n}\cdot100\%$ suy ra $m=n\cdot f=50\cdot36\%=18$ (người).</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'18.', 1),
+(@q, 'B', N'36.', 0),
+(@q, 'C', N'14.', 0),
+(@q, 'D', N'32.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Chất lượng không khí tại một địa điểm được cho bởi bảng tần số tương đối sau:</p>
+<table border="1"><tr><th>Chất lượng</th><td>Tốt</td><td>Trung bình</td><td>Kém</td><td>Xấu</td></tr><tr><th>Tần số tương đối</th><td>30%</td><td>$x$%</td><td>20%</td><td>10%</td></tr></table>
+<p>Giá trị của $x$ là</p>', N'<p>Tổng các tần số tương đối bằng 100% nên $x=100-(30+20+10)=40$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$x=60$.', 0),
+(@q, 'B', N'$x=30$.', 0),
+(@q, 'C', N'$x=40$.', 1),
+(@q, 'D', N'$x=50$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Khảo sát môn thể thao yêu thích của 45 học sinh, kết quả được biểu diễn bằng biểu đồ hình quạt tròn. Hình quạt biểu diễn môn bóng đá có số đo cung là $144^\circ$. Số học sinh thích bóng đá là</p>', N'<p>Tần số tương đối của môn bóng đá là $f=\dfrac{144^\circ}{360^\circ}=0{,}4=40\%$. Số học sinh thích bóng đá là $45\cdot40\%=18$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'40.', 0),
+(@q, 'B', N'16.', 0),
+(@q, 'C', N'18.', 1),
+(@q, 'D', N'27.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một mẫu dữ liệu chỉ gồm ba giá trị khác nhau $x$, $y$, $z$ với tần số tương đối lần lượt là 25%; 37,5%; 37,5%. Biết giá trị $x$ có tần số là 6. Tần số của giá trị $y$ là</p>', N'<p>Từ $\dfrac{6}{n}\cdot100\%=25\%$ suy ra cỡ mẫu $n=24$. Tần số của $y$ là $24\cdot37{,}5\%=9$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'9.', 1),
+(@q, 'B', N'6.', 0),
+(@q, 'C', N'24.', 0),
+(@q, 'D', N'12.', 0);
+END
+
+-- Bài 24. Bảng tần số, tần số tương đối ghép nhóm và biểu đồ
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 24. Bảng tần số, tần số tương đối ghép nhóm và biểu đồ' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Nhóm số liệu $[a;b)$ gồm các số liệu</p>', N'<p>Nhóm $[a;b)$ gồm các số liệu lớn hơn hoặc bằng $a$ và nhỏ hơn $b$ (chứa đầu mút trái, không chứa đầu mút phải).</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'lớn hơn $a$ và nhỏ hơn $b$.', 0),
+(@q, 'B', N'lớn hơn hoặc bằng $a$ và nhỏ hơn hoặc bằng $b$.', 0),
+(@q, 'C', N'lớn hơn $a$ và nhỏ hơn hoặc bằng $b$.', 0),
+(@q, 'D', N'lớn hơn hoặc bằng $a$ và nhỏ hơn $b$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Giá trị đại diện của nhóm số liệu $[150;158)$ là</p>', N'<p>Giá trị đại diện của nhóm $[a_i;a_{i+1})$ là $x_i=\dfrac{a_i+a_{i+1}}{2}$, nên giá trị đại diện là $\dfrac{150+158}{2}=154$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'154.', 1),
+(@q, 'B', N'150.', 0),
+(@q, 'C', N'158.', 0),
+(@q, 'D', N'8.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Chiều cao (cm) của học sinh được ghép thành các nhóm $[150;155)$, $[155;160)$, $[160;165)$, $[165;170)$. Một học sinh cao 160 cm được xếp vào nhóm nào?</p>', N'<p>Số liệu 160 thỏa mãn $160\le160<165$ nên thuộc nhóm $[160;165)$. Nó không thuộc nhóm $[155;160)$ vì nhóm này chỉ gồm các số nhỏ hơn 160.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$[155;160)$.', 0),
+(@q, 'B', N'$[160;165)$.', 1),
+(@q, 'C', N'Cả hai nhóm $[155;160)$ và $[160;165)$.', 0),
+(@q, 'D', N'$[165;170)$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Biểu đồ tần số tương đối ghép nhóm dạng cột (gồm các cột liền nhau, các nhóm có độ dài bằng nhau) còn được gọi là</p>', N'<p>Biểu đồ tần số tương đối ghép nhóm dạng cột còn được gọi là tổ chức đồ.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'biểu đồ hình quạt tròn.', 0),
+(@q, 'B', N'đa giác tần số.', 0),
+(@q, 'C', N'tổ chức đồ.', 1),
+(@q, 'D', N'biểu đồ tranh.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cân nặng (kg) của 50 học sinh được cho bởi bảng tần số ghép nhóm sau:</p>
+<table border="1"><tr><th>Cân nặng</th><td>$[40;45)$</td><td>$[45;50)$</td><td>$[50;55)$</td><td>$[55;60)$</td></tr><tr><th>Tần số</th><td>8</td><td>15</td><td>17</td><td>10</td></tr></table>
+<p>Tần số tương đối của nhóm $[50;55)$ là</p>', N'<p>$f=\dfrac{17}{50}\cdot100\%=34\%$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'34%.', 1),
+(@q, 'B', N'17%.', 0),
+(@q, 'C', N'30%.', 0),
+(@q, 'D', N'50%.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Thời gian (phút) đi từ nhà đến trường của 10 học sinh là: 12; 15; 20; 18; 25; 10; 15; 22; 19; 30. Tần số của nhóm $[15;20)$ là</p>', N'<p>Các số liệu lớn hơn hoặc bằng 15 và nhỏ hơn 20 là: 15; 18; 15; 19. Vậy tần số của nhóm $[15;20)$ là 4 (số liệu 20 không thuộc nhóm này).</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'2.', 0),
+(@q, 'B', N'5.', 0),
+(@q, 'C', N'3.', 0),
+(@q, 'D', N'4.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Khi vẽ biểu đồ tần số tương đối ghép nhóm dạng đoạn thẳng (trục ngang biểu diễn giá trị đại diện, trục đứng biểu diễn tần số tương đối theo %), nhóm $[2;2{,}5)$ có tần số tương đối 30% được biểu diễn bởi điểm nào?</p>', N'<p>Giá trị đại diện của nhóm $[2;2{,}5)$ là $\dfrac{2+2{,}5}{2}=2{,}25$. Điểm biểu diễn là $M(x_i;f_i)=(2{,}25;30)$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$(2;30)$.', 0),
+(@q, 'B', N'$(2{,}25;30)$.', 1),
+(@q, 'C', N'$(2{,}5;30)$.', 0),
+(@q, 'D', N'$(30;2{,}25)$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Thời gian dùng Internet trong ngày (giờ) của học sinh lớp 9 tại một trường được cho bởi bảng tần số tương đối ghép nhóm sau:</p>
+<table border="1"><tr><th>Thời gian</th><td>$[0;0{,}5)$</td><td>$[0{,}5;1)$</td><td>$[1;1{,}5)$</td><td>$[1{,}5;2)$</td><td>$[2;2{,}5)$</td></tr><tr><th>Tỉ lệ</th><td>12%</td><td>30%</td><td>25%</td><td>20%</td><td>13%</td></tr></table>
+<p>Tỉ lệ học sinh dùng Internet từ 1,5 giờ trở lên trong ngày là</p>', N'<p>Học sinh dùng Internet từ 1,5 giờ trở lên thuộc hai nhóm $[1{,}5;2)$ và $[2;2{,}5)$. Tỉ lệ là $20\%+13\%=33\%$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'13%.', 0),
+(@q, 'B', N'20%.', 0),
+(@q, 'C', N'33%.', 1),
+(@q, 'D', N'58%.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một mẫu số liệu có cỡ mẫu 80 được ghép thành bốn nhóm với tần số tương đối như sau: nhóm $[10;20)$ là 15%, nhóm $[20;30)$ là 35%, nhóm $[30;40)$ chưa biết, nhóm $[40;50)$ là 20%. Số giá trị của mẫu thuộc nhóm $[30;40)$ là</p>', N'<p>Tần số tương đối của nhóm $[30;40)$ là $100\%-(15\%+35\%+20\%)=30\%$. Tần số của nhóm này là $80\cdot30\%=24$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'30.', 0),
+(@q, 'B', N'16.', 0),
+(@q, 'C', N'28.', 0),
+(@q, 'D', N'24.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Tuổi thọ (năm) của 10 bóng đèn là: $3{,}2$; $4{,}5$; $5{,}0$; $2{,}8$; $4{,}9$; $3{,}5$; $4{,}0$; $5{,}6$; $3{,}9$; $4{,}5$. Ghép các số liệu thành các nhóm $[2{,}5;3{,}5)$, $[3{,}5;4{,}5)$, $[4{,}5;5{,}5)$, $[5{,}5;6{,}5)$. Tần số tương đối của nhóm $[4{,}5;5{,}5)$ là</p>', N'<p>Các số liệu thuộc nhóm $[4{,}5;5{,}5)$ là $4{,}5$; $5{,}0$; $4{,}9$; $4{,}5$ (chú ý $4{,}5$ thuộc nhóm này, không thuộc nhóm $[3{,}5;4{,}5)$). Tần số là 4, nên tần số tương đối là $\dfrac{4}{10}\cdot100\%=40\%$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'40%.', 1),
+(@q, 'B', N'20%.', 0),
+(@q, 'C', N'30%.', 0),
+(@q, 'D', N'10%.', 0);
+END
+
+-- Bài 25. Phép thử ngẫu nhiên và không gian mẫu
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 25. Phép thử ngẫu nhiên và không gian mẫu' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Không gian mẫu của một phép thử được kí hiệu là</p>', N'<p>Tập hợp tất cả các kết quả có thể xảy ra của phép thử gọi là không gian mẫu, kí hiệu là $\Omega$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$E$.', 0),
+(@q, 'B', N'$\Omega$.', 1),
+(@q, 'C', N'$P$.', 0),
+(@q, 'D', N'$n$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Gieo một con xúc xắc cân đối và quan sát số chấm xuất hiện. Không gian mẫu của phép thử có bao nhiêu phần tử?</p>', N'<p>$\Omega=\{1;2;3;4;5;6\}$ nên không gian mẫu có 6 phần tử.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'2.', 0),
+(@q, 'B', N'12.', 0),
+(@q, 'C', N'6.', 1),
+(@q, 'D', N'36.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Tung một đồng xu một lần và quan sát mặt xuất hiện (mặt sấp S, mặt ngửa N). Không gian mẫu của phép thử là</p>', N'<p>Phép thử có hai kết quả có thể xảy ra là S và N, nên $\Omega=\{S;N\}$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\Omega=\{S;N\}$.', 1),
+(@q, 'B', N'$\Omega=\{S\}$.', 0),
+(@q, 'C', N'$\Omega=\{(S;N)\}$.', 0),
+(@q, 'D', N'$\Omega=\{S;N;(S;N)\}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Hoạt động nào sau đây <b>không</b> phải là phép thử ngẫu nhiên?</p>', N'<p>Phép thử ngẫu nhiên là hoạt động mà kết quả không biết trước được. Số ngày trong một tuần luôn là 7, biết trước kết quả nên không phải phép thử ngẫu nhiên. Các hoạt động gieo xúc xắc, rút thẻ ngẫu nhiên, tung đồng xu đều không biết trước kết quả.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'Gieo một con xúc xắc và quan sát số chấm xuất hiện.', 0),
+(@q, 'B', N'Rút ngẫu nhiên một tấm thẻ từ hộp có 5 tấm thẻ đánh số 1 đến 5.', 0),
+(@q, 'C', N'Tung một đồng xu và quan sát mặt xuất hiện.', 0),
+(@q, 'D', N'Đếm số ngày trong một tuần.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Tung một đồng xu hai lần liên tiếp và quan sát mặt xuất hiện ở mỗi lần. Không gian mẫu của phép thử có bao nhiêu phần tử?</p>', N'<p>$\Omega=\{SS;SN;NS;NN\}$, gồm 4 phần tử (chú ý $SN$ và $NS$ là hai kết quả khác nhau).</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'2.', 0),
+(@q, 'B', N'3.', 0),
+(@q, 'C', N'4.', 1),
+(@q, 'D', N'8.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Gieo đồng thời hai con xúc xắc (một con màu xanh, một con màu đỏ) và quan sát số chấm xuất hiện trên mỗi con. Không gian mẫu của phép thử có bao nhiêu phần tử?</p>', N'<p>Mỗi kết quả là một cặp $(a;b)$ với $a,b\in\{1;2;3;4;5;6\}$. Lập bảng 6 hàng, 6 cột được $6\cdot6=36$ kết quả.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'12.', 0),
+(@q, 'B', N'36.', 1),
+(@q, 'C', N'6.', 0),
+(@q, 'D', N'21.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một hộp có 3 quả bóng giống nhau đánh số 1; 2; 3. Lấy ngẫu nhiên lần lượt hai quả bóng, quả lấy ra lần đầu không trả lại hộp. Kết quả là cặp $(a;b)$ với $a$, $b$ lần lượt là số trên quả bóng lấy ra lần thứ nhất và lần thứ hai. Cặp nào sau đây <b>không</b> thuộc không gian mẫu?</p>', N'<p>Vì không trả lại nên $a\neq b$. Không gian mẫu là $\Omega=\{(1;2);(1;3);(2;1);(2;3);(3;1);(3;2)\}$, không chứa $(2;2)$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$(1;2)$.', 0),
+(@q, 'B', N'$(3;1)$.', 0),
+(@q, 'C', N'$(2;3)$.', 0),
+(@q, 'D', N'$(2;2)$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một hộp có 5 tấm thẻ đánh số 1; 2; 3; 4; 5. Rút ngẫu nhiên lần lượt hai tấm thẻ, thẻ rút lần đầu không trả lại hộp. Không gian mẫu của phép thử có bao nhiêu phần tử?</p>', N'<p>Lập bảng $5\times5$ có 25 ô, xoá 5 ô $(1;1),(2;2),\dots,(5;5)$ vì hai thẻ phải khác nhau. Không gian mẫu có $25-5=20$ phần tử.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'20.', 1),
+(@q, 'B', N'25.', 0),
+(@q, 'C', N'10.', 0),
+(@q, 'D', N'16.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Chọn ngẫu nhiên một gia đình có ba con và quan sát giới tính của ba người con theo thứ tự con thứ nhất, con thứ hai, con thứ ba ($T$: con trai, $G$: con gái). Không gian mẫu của phép thử có bao nhiêu phần tử?</p>', N'<p>Mỗi người con có 2 khả năng nên có $2\cdot2\cdot2=8$ kết quả: $TTT;TTG;TGT;TGG;GTT;GTG;GGT;GGG$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'6.', 0),
+(@q, 'B', N'8.', 1),
+(@q, 'C', N'3.', 0),
+(@q, 'D', N'9.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một hộp có 4 quả bóng giống nhau đánh số 1; 2; 3; 4. Lấy ngẫu nhiên <b>đồng thời</b> hai quả bóng từ hộp và quan sát số trên hai quả bóng đó (không xét thứ tự). Không gian mẫu của phép thử có bao nhiêu phần tử?</p>', N'<p>Lấy đồng thời nên kết quả là một tập gồm hai số khác nhau, không phân biệt thứ tự: $\Omega=\{\{1;2\};\{1;3\};\{1;4\};\{2;3\};\{2;4\};\{3;4\}\}$, gồm 6 phần tử. (Nếu lấy lần lượt không hoàn lại thì có 12 kết quả.)</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'12.', 0),
+(@q, 'B', N'16.', 0),
+(@q, 'C', N'6.', 1),
+(@q, 'D', N'8.', 0);
+END
+
+-- Bài 26. Xác suất của biến cố liên quan tới phép thử
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 26. Xác suất của biến cố liên quan tới phép thử' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Giả sử các kết quả có thể của phép thử $T$ là đồng khả năng. Xác suất của biến cố $E$ được tính bởi công thức nào? ($n(E)$ là số kết quả thuận lợi cho $E$, $n(\Omega)$ là số phần tử của không gian mẫu.)</p>', N'<p>Khi các kết quả đồng khả năng, $P(E)=\dfrac{n(E)}{n(\Omega)}$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$P(E)=\dfrac{n(\Omega)}{n(E)}$.', 0),
+(@q, 'B', N'$P(E)=n(E)\cdot n(\Omega)$.', 0),
+(@q, 'C', N'$P(E)=\dfrac{n(E)}{n(\Omega)}$.', 1),
+(@q, 'D', N'$P(E)=n(\Omega)-n(E)$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Gieo một con xúc xắc cân đối. Xác suất của biến cố "Số chấm xuất hiện là số chẵn" là</p>', N'<p>$\Omega=\{1;2;3;4;5;6\}$ có 6 kết quả đồng khả năng. Các kết quả thuận lợi là 2; 4; 6. Vậy $P=\dfrac{3}{6}=\dfrac{1}{2}$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\dfrac{1}{2}$.', 1),
+(@q, 'B', N'$\dfrac{1}{3}$.', 0),
+(@q, 'C', N'$\dfrac{1}{6}$.', 0),
+(@q, 'D', N'$\dfrac{2}{3}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một hộp có 10 tấm thẻ cùng loại đánh số từ 1 đến 10. Rút ngẫu nhiên một tấm thẻ. Xác suất của biến cố "Số ghi trên thẻ chia hết cho 3" là</p>', N'<p>Không gian mẫu có 10 kết quả đồng khả năng. Các kết quả thuận lợi là 3; 6; 9. Vậy $P=\dfrac{3}{10}$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\dfrac{1}{3}$.', 0),
+(@q, 'B', N'$\dfrac{1}{10}$.', 0),
+(@q, 'C', N'$\dfrac{2}{5}$.', 0),
+(@q, 'D', N'$\dfrac{3}{10}$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Gieo một con xúc xắc. Số kết quả thuận lợi cho biến cố "Số chấm xuất hiện lớn hơn 4" là</p>', N'<p>Các kết quả thuận lợi là 5 và 6, nên có 2 kết quả thuận lợi.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'4.', 0),
+(@q, 'B', N'2.', 1),
+(@q, 'C', N'1.', 0),
+(@q, 'D', N'3.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Tung một đồng xu cân đối hai lần liên tiếp. Xác suất của biến cố "Có một lần xuất hiện mặt sấp và một lần xuất hiện mặt ngửa" là</p>', N'<p>$\Omega=\{SS;SN;NS;NN\}$ có 4 kết quả đồng khả năng. Các kết quả thuận lợi là $SN$, $NS$. Vậy $P=\dfrac{2}{4}=\dfrac{1}{2}$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\dfrac{1}{2}$.', 1),
+(@q, 'B', N'$\dfrac{1}{4}$.', 0),
+(@q, 'C', N'$\dfrac{1}{3}$.', 0),
+(@q, 'D', N'$\dfrac{3}{4}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một tấm bìa hình tròn được chia thành 4 hình quạt bằng nhau, đánh số 1; 2; 3; 4. Quay tấm bìa hai lần, mỗi lần ghi lại số của hình quạt mà mũi tên chỉ vào. Xác suất của biến cố "Tổng hai số ghi được bằng 5" là</p>', N'<p>Không gian mẫu gồm $4\cdot4=16$ cặp $(a;b)$ đồng khả năng. Các kết quả thuận lợi là $(1;4);(2;3);(3;2);(4;1)$. Vậy $P=\dfrac{4}{16}=\dfrac{1}{4}$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\dfrac{1}{16}$.', 0),
+(@q, 'B', N'$\dfrac{3}{16}$.', 0),
+(@q, 'C', N'$\dfrac{1}{4}$.', 1),
+(@q, 'D', N'$\dfrac{5}{16}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Ba bạn Bảo, Châu, Dương được xếp ngẫu nhiên ngồi trên một hàng ghế có ba chỗ. Xác suất của biến cố "Châu ngồi ở giữa" là</p>', N'<p>$\Omega=\{BCD;BDC;CBD;CDB;DBC;DCB\}$ có 6 kết quả đồng khả năng. Các kết quả thuận lợi (Châu ở vị trí giữa) là $BCD$, $DCB$. Vậy $P=\dfrac{2}{6}=\dfrac{1}{3}$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\dfrac{1}{6}$.', 0),
+(@q, 'B', N'$\dfrac{1}{3}$.', 1),
+(@q, 'C', N'$\dfrac{1}{2}$.', 0),
+(@q, 'D', N'$\dfrac{2}{3}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một hộp có 4 quả bóng giống nhau đánh số 1; 2; 3; 4. Lấy ngẫu nhiên lần lượt hai quả bóng, quả lấy ra lần đầu không trả lại hộp. Xác suất của biến cố "Tổng hai số trên hai quả bóng là số lẻ" là</p>', N'<p>Không gian mẫu có $16-4=12$ kết quả đồng khả năng. Tổng là số lẻ khi một số lẻ và một số chẵn: $(1;2);(1;4);(3;2);(3;4);(2;1);(4;1);(2;3);(4;3)$, gồm 8 kết quả. Vậy $P=\dfrac{8}{12}=\dfrac{2}{3}$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\dfrac{1}{2}$.', 0),
+(@q, 'B', N'$\dfrac{1}{3}$.', 0),
+(@q, 'C', N'$\dfrac{3}{4}$.', 0),
+(@q, 'D', N'$\dfrac{2}{3}$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Gieo đồng thời hai con xúc xắc cân đối (một xanh, một đỏ). Xác suất của biến cố "Tích số chấm xuất hiện trên hai con xúc xắc là số chẵn" là</p>', N'<p>Không gian mẫu có $6\cdot6=36$ kết quả đồng khả năng. Tích là số lẻ khi cả hai số đều lẻ: có $3\cdot3=9$ kết quả. Do đó số kết quả thuận lợi cho tích chẵn là $36-9=27$, và $P=\dfrac{27}{36}=\dfrac{3}{4}$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\dfrac{3}{4}$.', 1),
+(@q, 'B', N'$\dfrac{1}{2}$.', 0),
+(@q, 'C', N'$\dfrac{1}{4}$.', 0),
+(@q, 'D', N'$\dfrac{2}{3}$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một hộp có 5 tấm thẻ đánh số 1; 2; 3; 4; 5. Rút ngẫu nhiên lần lượt hai tấm thẻ (không trả lại), rồi ghép thành số có hai chữ số, trong đó số trên thẻ rút lần đầu là chữ số hàng chục. Xác suất của biến cố "Số tạo thành chia hết cho 3" là</p>', N'<p>Không gian mẫu có $5\cdot4=20$ kết quả đồng khả năng. Số $\overline{ab}$ chia hết cho 3 khi $a+b$ chia hết cho 3 (với $a\neq b$): $12;21;15;51;24;42;45;54$, gồm 8 kết quả. Vậy $P=\dfrac{8}{20}=\dfrac{2}{5}$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\dfrac{1}{3}$.', 0),
+(@q, 'B', N'$\dfrac{3}{10}$.', 0),
+(@q, 'C', N'$\dfrac{2}{5}$.', 1),
+(@q, 'D', N'$\dfrac{9}{25}$.', 0);
+END
+
+-- Bài 27. Góc nội tiếp
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 27. Góc nội tiếp' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Góc nội tiếp của một đường tròn là góc</p>', N'<p>Theo định nghĩa, góc nội tiếp là góc có đỉnh nằm trên đường tròn và hai cạnh chứa hai dây cung của đường tròn đó. Góc có đỉnh trùng tâm là góc ở tâm; góc có đỉnh nằm trong đường tròn hoặc có một cạnh là tiếp tuyến đều không phải góc nội tiếp.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'có đỉnh trùng với tâm đường tròn.', 0),
+(@q, 'B', N'có đỉnh nằm trên đường tròn và hai cạnh chứa hai dây cung của đường tròn.', 1),
+(@q, 'C', N'có đỉnh nằm bên trong đường tròn.', 0),
+(@q, 'D', N'có đỉnh nằm trên đường tròn và một cạnh là tiếp tuyến của đường tròn.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một góc nội tiếp chắn cung có số đo $80^\circ$. Số đo của góc nội tiếp đó là</p>', N'<p>Số đo góc nội tiếp bằng nửa số đo cung bị chắn: $\dfrac{1}{2}\cdot80^\circ=40^\circ$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$40^\circ$.', 1),
+(@q, 'B', N'$80^\circ$.', 0),
+(@q, 'C', N'$160^\circ$.', 0),
+(@q, 'D', N'$20^\circ$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Góc nội tiếp chắn nửa đường tròn có số đo bằng</p>', N'<p>Nửa đường tròn có số đo $180^\circ$ nên góc nội tiếp chắn nửa đường tròn bằng $\dfrac{1}{2}\cdot180^\circ=90^\circ$ (là góc vuông).</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$180^\circ$.', 0),
+(@q, 'B', N'$45^\circ$.', 0),
+(@q, 'C', N'$90^\circ$.', 1),
+(@q, 'D', N'$60^\circ$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho các điểm $A,B,C$ thuộc đường tròn $(O)$ sao cho góc nội tiếp $\widehat{BAC}=35^\circ$ chắn cung nhỏ $BC$. Số đo góc ở tâm $\widehat{BOC}$ là</p>', N'<p>Góc nội tiếp chắn cung nhỏ bằng nửa góc ở tâm chắn cùng cung nên $\widehat{BOC}=2\widehat{BAC}=2\cdot35^\circ=70^\circ$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$17{,}5^\circ$.', 0),
+(@q, 'B', N'$35^\circ$.', 0),
+(@q, 'C', N'$145^\circ$.', 0),
+(@q, 'D', N'$70^\circ$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho bốn điểm $A,B,C,D$ thuộc đường tròn $(O)$, trong đó $C$ và $D$ cùng nằm trên một cung $AB$. Biết $\widehat{ACB}=50^\circ$. Số đo góc $\widehat{ADB}$ là</p>', N'<p>Hai góc nội tiếp $\widehat{ACB}$ và $\widehat{ADB}$ cùng chắn cung $AB$ (cung không chứa $C,D$) nên bằng nhau: $\widehat{ADB}=\widehat{ACB}=50^\circ$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$100^\circ$.', 0),
+(@q, 'B', N'$50^\circ$.', 1),
+(@q, 'C', N'$130^\circ$.', 0),
+(@q, 'D', N'$25^\circ$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Tam giác $ABC$ nội tiếp đường tròn $(O)$, tâm $O$ nằm trong tam giác. Biết $\widehat{AOB}=100^\circ$ và $\widehat{BOC}=140^\circ$. Số đo góc $\widehat{BAC}$ là</p>', N'<p>Góc nội tiếp $\widehat{BAC}$ chắn cung nhỏ $BC$ nên bằng nửa góc ở tâm $\widehat{BOC}$: $\widehat{BAC}=\dfrac{1}{2}\cdot140^\circ=70^\circ$. (Ngoài ra $\widehat{AOC}=360^\circ-100^\circ-140^\circ=120^\circ$, nên $\widehat{ABC}=60^\circ$, $\widehat{ACB}=50^\circ$; tổng ba góc bằng $180^\circ$.)</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$50^\circ$.', 0),
+(@q, 'B', N'$60^\circ$.', 0),
+(@q, 'C', N'$70^\circ$.', 1),
+(@q, 'D', N'$140^\circ$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho đường tròn $(O)$ bán kính $3$ cm và dây cung $BC=3\sqrt{2}$ cm. Điểm $A$ thuộc cung lớn $BC$. Số đo góc $\widehat{BAC}$ là</p>', N'<p>Ta có $OB^2+OC^2=9+9=18=BC^2$ nên tam giác $BOC$ vuông tại $O$, tức $\widehat{BOC}=90^\circ$. Góc nội tiếp $\widehat{BAC}$ chắn cung nhỏ $BC$ nên $\widehat{BAC}=\dfrac{1}{2}\cdot90^\circ=45^\circ$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$45^\circ$.', 1),
+(@q, 'B', N'$90^\circ$.', 0),
+(@q, 'C', N'$30^\circ$.', 0),
+(@q, 'D', N'$60^\circ$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho $AB$ là đường kính của đường tròn $(O)$ và điểm $C$ thuộc đường tròn ($C$ khác $A,B$). Biết $AC=6$ cm, $BC=8$ cm. Bán kính của đường tròn $(O)$ là</p>', N'<p>Góc $\widehat{ACB}$ là góc nội tiếp chắn nửa đường tròn nên $\widehat{ACB}=90^\circ$. Theo định lí Pythagore $AB^2=6^2+8^2=100$, suy ra $AB=10$ cm. Bán kính $R=\dfrac{AB}{2}=5$ cm.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$10$ cm.', 0),
+(@q, 'B', N'$7$ cm.', 0),
+(@q, 'C', N'$14$ cm.', 0),
+(@q, 'D', N'$5$ cm.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Hai dây cung $AB$ và $CD$ của đường tròn $(O)$ cắt nhau tại điểm $X$ nằm trong đường tròn. Biết $XA=4$ cm, $XB=6$ cm, $XC=3$ cm. Độ dài $XD$ là</p>', N'<p>Ta có $\widehat{ACX}=\widehat{DBX}$ (hai góc nội tiếp cùng chắn cung $AD$) và $\widehat{AXC}=\widehat{DXB}$ (đối đỉnh) nên $\triangle AXC\backsim\triangle DXB$ (g.g). Suy ra $\dfrac{XA}{XD}=\dfrac{XC}{XB}$, tức $XA\cdot XB=XC\cdot XD$. Do đó $4\cdot6=3\cdot XD$, $XD=8$ cm.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$4{,}5$ cm.', 0),
+(@q, 'B', N'$8$ cm.', 1),
+(@q, 'C', N'$2$ cm.', 0),
+(@q, 'D', N'$6$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Tam giác $ABC$ nội tiếp đường tròn $(O;R)$ có $\widehat{BAC}=30^\circ$ và $BC=5$ cm. Bán kính $R$ bằng</p>', N'<p>Góc nội tiếp $\widehat{BAC}=30^\circ$ chắn cung nhỏ $BC$ nên góc ở tâm $\widehat{BOC}=2\cdot30^\circ=60^\circ$. Tam giác $OBC$ cân tại $O$ ($OB=OC=R$) có một góc $60^\circ$ nên là tam giác đều, do đó $R=OB=BC=5$ cm.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$2{,}5$ cm.', 0),
+(@q, 'B', N'$5\sqrt{3}$ cm.', 0),
+(@q, 'C', N'$5$ cm.', 1),
+(@q, 'D', N'$10$ cm.', 0);
+END
+
+-- Bài 28. Đường tròn ngoại tiếp và đường tròn nội tiếp của một tam giác
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 28. Đường tròn ngoại tiếp và đường tròn nội tiếp của một tam giác' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Tâm đường tròn ngoại tiếp một tam giác là giao điểm của</p>', N'<p>Tâm đường tròn ngoại tiếp cách đều ba đỉnh của tam giác nên là giao điểm của ba đường trung trực của tam giác.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'ba đường trung tuyến.', 0),
+(@q, 'B', N'ba đường phân giác.', 0),
+(@q, 'C', N'ba đường cao.', 0),
+(@q, 'D', N'ba đường trung trực.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Tâm đường tròn nội tiếp một tam giác là giao điểm của</p>', N'<p>Tâm đường tròn nội tiếp cách đều ba cạnh của tam giác nên là giao điểm của ba đường phân giác của tam giác.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'ba đường phân giác.', 1),
+(@q, 'B', N'ba đường trung trực.', 0),
+(@q, 'C', N'ba đường trung tuyến.', 0),
+(@q, 'D', N'ba đường cao.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một tam giác vuông có cạnh huyền dài $10$ cm. Bán kính đường tròn ngoại tiếp tam giác đó là</p>', N'<p>Đường tròn ngoại tiếp tam giác vuông có tâm là trung điểm cạnh huyền và bán kính bằng nửa cạnh huyền: $R=\dfrac{10}{2}=5$ cm.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$10$ cm.', 0),
+(@q, 'B', N'$5$ cm.', 1),
+(@q, 'C', N'$20$ cm.', 0),
+(@q, 'D', N'$5\sqrt{2}$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Bán kính đường tròn ngoại tiếp tam giác đều cạnh $6$ cm là</p>', N'<p>Với tam giác đều cạnh $a$: $R=\dfrac{\sqrt{3}}{3}a=\dfrac{\sqrt{3}}{3}\cdot6=2\sqrt{3}$ cm.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$3\sqrt{3}$ cm.', 0),
+(@q, 'B', N'$\sqrt{3}$ cm.', 0),
+(@q, 'C', N'$2\sqrt{3}$ cm.', 1),
+(@q, 'D', N'$6\sqrt{3}$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Tam giác $ABC$ vuông tại $A$ có $AB=5$ cm, $AC=12$ cm. Bán kính đường tròn ngoại tiếp tam giác $ABC$ là</p>', N'<p>Theo định lí Pythagore $BC^2=5^2+12^2=169$ nên $BC=13$ cm. Bán kính đường tròn ngoại tiếp tam giác vuông bằng nửa cạnh huyền: $R=\dfrac{13}{2}=6{,}5$ cm.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$13$ cm.', 0),
+(@q, 'B', N'$8{,}5$ cm.', 0),
+(@q, 'C', N'$6$ cm.', 0),
+(@q, 'D', N'$6{,}5$ cm.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Bán kính đường tròn nội tiếp tam giác đều cạnh $6$ cm là</p>', N'<p>Với tam giác đều cạnh $a$: $r=\dfrac{\sqrt{3}}{6}a=\dfrac{\sqrt{3}}{6}\cdot6=\sqrt{3}$ cm (bằng nửa bán kính đường tròn ngoại tiếp $2\sqrt{3}$ cm).</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\sqrt{3}$ cm.', 1),
+(@q, 'B', N'$2\sqrt{3}$ cm.', 0),
+(@q, 'C', N'$3\sqrt{3}$ cm.', 0),
+(@q, 'D', N'$3$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Tam giác $ABC$ ngoại tiếp đường tròn $(I)$ có $\widehat{A}=50^\circ$, $\widehat{B}=70^\circ$. Số đo góc $\widehat{BIC}$ là</p>', N'<p>$\widehat{C}=180^\circ-50^\circ-70^\circ=60^\circ$. Vì $I$ là giao điểm các đường phân giác nên $\widehat{IBC}=35^\circ$, $\widehat{ICB}=30^\circ$. Do đó $\widehat{BIC}=180^\circ-35^\circ-30^\circ=115^\circ$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$130^\circ$.', 0),
+(@q, 'B', N'$115^\circ$.', 1),
+(@q, 'C', N'$120^\circ$.', 0),
+(@q, 'D', N'$125^\circ$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một tam giác đều nội tiếp đường tròn bán kính $6$ cm. Độ dài cạnh của tam giác đều đó là</p>', N'<p>Từ $R=\dfrac{\sqrt{3}}{3}a$ suy ra $a=\sqrt{3}R=6\sqrt{3}$ cm.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$2\sqrt{3}$ cm.', 0),
+(@q, 'B', N'$3\sqrt{3}$ cm.', 0),
+(@q, 'C', N'$6\sqrt{3}$ cm.', 1),
+(@q, 'D', N'$12$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một tam giác đều có bán kính đường tròn nội tiếp bằng $2$ cm. Độ dài cạnh của tam giác đều đó là</p>', N'<p>Bán kính đường tròn nội tiếp tam giác đều bằng nửa bán kính đường tròn ngoại tiếp nên $R=2r=4$ cm. Do đó $a=\sqrt{3}R=4\sqrt{3}$ cm. Kiểm tra: $r=\dfrac{\sqrt{3}}{6}\cdot4\sqrt{3}=2$ cm.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$4\sqrt{3}$ cm.', 1),
+(@q, 'B', N'$2\sqrt{3}$ cm.', 0),
+(@q, 'C', N'$12$ cm.', 0),
+(@q, 'D', N'$6\sqrt{3}$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Tam giác $ABC$ cân tại $A$ có $AB=AC=5$ cm, $BC=6$ cm. Bán kính đường tròn ngoại tiếp tam giác $ABC$ là</p>', N'<p>Gọi $H$ là trung điểm $BC$ thì $AH\perp BC$, $BH=3$ cm, $AH=\sqrt{5^2-3^2}=4$ cm. Đường cao $AH$ cũng là đường trung trực của $BC$ nên tâm $O$ nằm trên $AH$, $OA=OB=R$, $OH=4-R$. Trong tam giác vuông $OHB$: $R^2=(4-R)^2+3^2$, suy ra $8R=25$, $R=\dfrac{25}{8}$ cm.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\dfrac{5}{2}$ cm.', 0),
+(@q, 'B', N'$3$ cm.', 0),
+(@q, 'C', N'$4$ cm.', 0),
+(@q, 'D', N'$\dfrac{25}{8}$ cm.', 1);
+END
+
+-- Bài 29. Tứ giác nội tiếp
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 29. Tứ giác nội tiếp' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Tứ giác $ABCD$ nội tiếp đường tròn có $\widehat{A}=80^\circ$. Số đo góc $\widehat{C}$ là</p>', N'<p>Trong tứ giác nội tiếp, tổng hai góc đối bằng $180^\circ$ nên $\widehat{C}=180^\circ-80^\circ=100^\circ$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$80^\circ$.', 0),
+(@q, 'B', N'$100^\circ$.', 1),
+(@q, 'C', N'$160^\circ$.', 0),
+(@q, 'D', N'$10^\circ$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Tứ giác nội tiếp đường tròn là tứ giác</p>', N'<p>Theo định nghĩa, tứ giác có bốn đỉnh nằm trên một đường tròn gọi là tứ giác nội tiếp đường tròn. Tứ giác có bốn cạnh tiếp xúc với đường tròn là tứ giác ngoại tiếp; hai góc đối bằng nhau hay hai đường chéo vuông góc không đảm bảo tứ giác nội tiếp.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'có bốn cạnh tiếp xúc với một đường tròn.', 0),
+(@q, 'B', N'có hai góc đối nhau bằng nhau.', 0),
+(@q, 'C', N'có bốn đỉnh nằm trên một đường tròn.', 1),
+(@q, 'D', N'có hai đường chéo vuông góc với nhau.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Hình nào sau đây luôn là tứ giác nội tiếp?</p>', N'<p>Hình chữ nhật luôn nội tiếp đường tròn có tâm là giao điểm hai đường chéo, bán kính bằng nửa đường chéo. Hình thoi, hình bình hành, hình thang vuông nói chung có tổng hai góc đối khác $180^\circ$ nên không nội tiếp.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'Hình thoi.', 0),
+(@q, 'B', N'Hình bình hành.', 0),
+(@q, 'C', N'Hình thang vuông.', 0),
+(@q, 'D', N'Hình chữ nhật.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Bán kính đường tròn ngoại tiếp hình vuông cạnh $4$ cm là</p>', N'<p>Đường chéo hình vuông dài $\sqrt{4^2+4^2}=4\sqrt{2}$ cm. Bán kính đường tròn ngoại tiếp bằng nửa đường chéo: $R=2\sqrt{2}$ cm.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$2\sqrt{2}$ cm.', 1),
+(@q, 'B', N'$4\sqrt{2}$ cm.', 0),
+(@q, 'C', N'$2$ cm.', 0),
+(@q, 'D', N'$4$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Hình chữ nhật $ABCD$ có $AB=6$ cm, $AD=8$ cm. Bán kính đường tròn ngoại tiếp hình chữ nhật là</p>', N'<p>Đường chéo $BD=\sqrt{6^2+8^2}=10$ cm. Bán kính đường tròn ngoại tiếp bằng nửa đường chéo: $R=5$ cm.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$10$ cm.', 0),
+(@q, 'B', N'$7$ cm.', 0),
+(@q, 'C', N'$5$ cm.', 1),
+(@q, 'D', N'$14$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Tứ giác $MNPQ$ nội tiếp đường tròn có $\widehat{M}=70^\circ$, $\widehat{N}=105^\circ$. Số đo hai góc $\widehat{P}$ và $\widehat{Q}$ lần lượt là</p>', N'<p>$\widehat{P}$ đối với $\widehat{M}$, $\widehat{Q}$ đối với $\widehat{N}$ nên $\widehat{P}=180^\circ-70^\circ=110^\circ$ và $\widehat{Q}=180^\circ-105^\circ=75^\circ$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$70^\circ$ và $105^\circ$.', 0),
+(@q, 'B', N'$110^\circ$ và $75^\circ$.', 1),
+(@q, 'C', N'$105^\circ$ và $70^\circ$.', 0),
+(@q, 'D', N'$75^\circ$ và $110^\circ$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Tứ giác $ABCD$ có số đo các góc $\widehat{A},\widehat{B},\widehat{C},\widehat{D}$ lần lượt như sau. Trường hợp nào tứ giác $ABCD$ <b>không thể</b> nội tiếp đường tròn?</p>', N'<p>Nếu tứ giác nội tiếp thì tổng hai góc đối bằng $180^\circ$. Với $70^\circ,110^\circ,70^\circ,110^\circ$ ta có $\widehat{A}+\widehat{C}=140^\circ\neq180^\circ$ nên tứ giác không thể nội tiếp. Ba trường hợp còn lại đều có $\widehat{A}+\widehat{C}=\widehat{B}+\widehat{D}=180^\circ$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$70^\circ;\ 110^\circ;\ 70^\circ;\ 110^\circ$.', 1),
+(@q, 'B', N'$80^\circ;\ 90^\circ;\ 100^\circ;\ 90^\circ$.', 0),
+(@q, 'C', N'$75^\circ;\ 95^\circ;\ 105^\circ;\ 85^\circ$.', 0),
+(@q, 'D', N'$60^\circ;\ 120^\circ;\ 120^\circ;\ 60^\circ$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Tam giác nhọn $ABC$ có các đường cao $BE$, $CF$ ($E$ thuộc $AC$, $F$ thuộc $AB$), $\widehat{B}=65^\circ$, $\widehat{C}=75^\circ$. Số đo góc $\widehat{BFE}$ là</p>', N'<p>Vì $\widehat{BEC}=\widehat{BFC}=90^\circ$ nên $E,F$ nằm trên đường tròn đường kính $BC$, tức tứ giác $BCEF$ nội tiếp. Do đó $\widehat{BFE}=180^\circ-\widehat{BCE}=180^\circ-75^\circ=105^\circ$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$115^\circ$.', 0),
+(@q, 'B', N'$75^\circ$.', 0),
+(@q, 'C', N'$105^\circ$.', 1),
+(@q, 'D', N'$65^\circ$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Tứ giác $ABCD$ nội tiếp đường tròn $(O)$, hai đường thẳng $AB$ và $DC$ cắt nhau tại $X$. Biết $\widehat{DAB}=75^\circ$, $\widehat{ABC}=120^\circ$. Số đo góc $\widehat{AXD}$ là</p>', N'<p>Tứ giác nội tiếp nên $\widehat{CDA}=180^\circ-\widehat{ABC}=60^\circ$. Trong tam giác $AXD$: $\widehat{AXD}=180^\circ-\widehat{DAB}-\widehat{CDA}=180^\circ-75^\circ-60^\circ=45^\circ$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$60^\circ$.', 0),
+(@q, 'B', N'$75^\circ$.', 0),
+(@q, 'C', N'$105^\circ$.', 0),
+(@q, 'D', N'$45^\circ$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho hình thoi $ABCD$ cạnh $5$ cm. Gọi $M,N,P,Q$ lần lượt là trung điểm của $AB,BC,CD,DA$. Bán kính đường tròn ngoại tiếp tứ giác $MNPQ$ là</p>', N'<p>$MN\parallel AC\parallel QP$ và $NP\parallel BD\parallel MQ$ nên $MNPQ$ là hình bình hành; vì $AC\perp BD$ nên $MN\perp NP$, do đó $MNPQ$ là hình chữ nhật. Đường chéo $MP$ nối trung điểm hai cạnh đối của hình thoi nên $MP=AD=5$ cm. Bán kính đường tròn ngoại tiếp là $\dfrac{MP}{2}=2{,}5$ cm.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$5$ cm.', 0),
+(@q, 'B', N'$\dfrac{5\sqrt{2}}{2}$ cm.', 0),
+(@q, 'C', N'$10$ cm.', 0),
+(@q, 'D', N'$2{,}5$ cm.', 1);
+END
+
+-- Bài 30. Đa giác đều
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 30. Đa giác đều' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Đa giác đều là</p>', N'<p>Theo định nghĩa, đa giác đều là một đa giác lồi có các cạnh bằng nhau và các góc bằng nhau. Chỉ có cạnh bằng nhau (như hình thoi) hoặc chỉ có góc bằng nhau (như hình chữ nhật) thì chưa đủ.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'đa giác lồi có các cạnh bằng nhau và các góc bằng nhau.', 1),
+(@q, 'B', N'đa giác có tất cả các cạnh bằng nhau.', 0),
+(@q, 'C', N'đa giác có tất cả các góc bằng nhau.', 0),
+(@q, 'D', N'đa giác có các đỉnh nằm trên một đường tròn.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Hình nào sau đây luôn là đa giác đều?</p>', N'<p>Hình vuông có bốn cạnh bằng nhau và bốn góc bằng nhau (đều bằng $90^\circ$) nên là đa giác đều. Hình thoi nói chung có các góc không bằng nhau; hình chữ nhật nói chung có các cạnh không bằng nhau; tam giác cân nói chung không có ba cạnh bằng nhau.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'Hình thoi.', 0),
+(@q, 'B', N'Hình chữ nhật.', 0),
+(@q, 'C', N'Hình vuông.', 1),
+(@q, 'D', N'Tam giác cân.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Mỗi góc của lục giác đều có số đo là</p>', N'<p>Lục giác đều nội tiếp đường tròn $(O)$ được chia thành sáu tam giác đều chung đỉnh $O$, nên mỗi góc của lục giác bằng $60^\circ+60^\circ=120^\circ$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$60^\circ$.', 0),
+(@q, 'B', N'$108^\circ$.', 0),
+(@q, 'C', N'$135^\circ$.', 0),
+(@q, 'D', N'$120^\circ$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một lục giác đều nội tiếp đường tròn bán kính $5$ cm. Độ dài mỗi cạnh của lục giác đều đó là</p>', N'<p>Lục giác đều nội tiếp đường tròn bán kính $R$ có cạnh bằng $R$ (các tam giác $OAB,\ldots$ đều). Vậy cạnh bằng $5$ cm.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$10$ cm.', 0),
+(@q, 'B', N'$5$ cm.', 1),
+(@q, 'C', N'$5\sqrt{3}$ cm.', 0),
+(@q, 'D', N'$5\sqrt{2}$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Mỗi góc của ngũ giác đều có số đo là</p>', N'<p>Tổng các góc của ngũ giác là $(5-2)\cdot180^\circ=540^\circ$; ngũ giác đều có năm góc bằng nhau nên mỗi góc bằng $540^\circ:5=108^\circ$. ($72^\circ$ là số đo mỗi cung khi chia đường tròn thành 5 cung bằng nhau.)</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$108^\circ$.', 1),
+(@q, 'B', N'$72^\circ$.', 0),
+(@q, 'C', N'$120^\circ$.', 0),
+(@q, 'D', N'$100^\circ$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Lấy 8 điểm chia đường tròn $(O)$ thành 8 cung bằng nhau, ta được một bát giác đều. Số đo mỗi cung đó là</p>', N'<p>Mỗi cung có số đo $\dfrac{360^\circ}{8}=45^\circ$. ($135^\circ$ là số đo mỗi góc của bát giác đều.)</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$135^\circ$.', 0),
+(@q, 'B', N'$60^\circ$.', 0),
+(@q, 'C', N'$45^\circ$.', 1),
+(@q, 'D', N'$40^\circ$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho hình vuông $ABCD$ nội tiếp đường tròn $(O)$. Phép quay thuận chiều nào sau đây tâm $O$ <b>không</b> giữ nguyên hình vuông $ABCD$?</p>', N'<p>Các phép quay thuận chiều $90^\circ,180^\circ,270^\circ,360^\circ$ tâm $O$ biến các đỉnh của hình vuông thành các đỉnh của nó nên giữ nguyên hình vuông. Phép quay $120^\circ$ biến đỉnh $A$ thành một điểm trên đường tròn không phải là đỉnh nên không giữ nguyên hình vuông.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'Phép quay $90^\circ$.', 0),
+(@q, 'B', N'Phép quay $180^\circ$.', 0),
+(@q, 'C', N'Phép quay $270^\circ$.', 0),
+(@q, 'D', N'Phép quay $120^\circ$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho ngũ giác đều $ABCDE$ nội tiếp đường tròn $(O)$. Có bao nhiêu phép quay thuận chiều $\alpha^\circ$ tâm $O$, với $0^\circ\lt\alpha^\circ\le360^\circ$, giữ nguyên ngũ giác đều đó?</p>', N'<p>Các đỉnh chia đường tròn thành 5 cung bằng nhau, mỗi cung $72^\circ$. Phép quay giữ nguyên ngũ giác khi $\alpha^\circ$ là bội của $72^\circ$: $72^\circ,144^\circ,216^\circ,288^\circ,360^\circ$. Có 5 phép quay.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$4$.', 0),
+(@q, 'B', N'$5$.', 1),
+(@q, 'C', N'$10$.', 0),
+(@q, 'D', N'$6$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho tam giác đều $ABC$ cạnh $9$ cm. Chia mỗi cạnh thành ba đoạn bằng nhau bởi các điểm $M,N$ trên $AB$; $P,Q$ trên $BC$; $E,F$ trên $CA$ (sao cho $AM=MN=NB=BP=PQ=QC=CE=EF=FA$). Chu vi của lục giác đều $MNPQEF$ là</p>', N'<p>Mỗi đoạn chia dài $9:3=3$ cm. Vì $\dfrac{AM}{AB}=\dfrac{AF}{AC}=\dfrac{1}{3}$ nên $MF\parallel BC$ và $MF=\dfrac{BC}{3}=3$ cm; tương tự $NP=QE=3$ cm. Lục giác đều $MNPQEF$ có 6 cạnh bằng $3$ cm nên chu vi là $6\cdot3=18$ cm.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$27$ cm.', 0),
+(@q, 'B', N'$9$ cm.', 0),
+(@q, 'C', N'$18$ cm.', 1),
+(@q, 'D', N'$24$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cho lục giác đều $ABCDEF$ nội tiếp đường tròn $(O)$ bán kính $4$ cm. Độ dài đường chéo $AC$ là</p>', N'<p>$A$ và $D$ là hai đỉnh đối diện nên $AD$ là đường kính, $AD=8$ cm. Góc $\widehat{ACD}$ là góc nội tiếp chắn nửa đường tròn nên $\widehat{ACD}=90^\circ$; cạnh $CD=R=4$ cm. Theo định lí Pythagore $AC=\sqrt{8^2-4^2}=\sqrt{48}=4\sqrt{3}$ cm.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$4\sqrt{3}$ cm.', 1),
+(@q, 'B', N'$8$ cm.', 0),
+(@q, 'C', N'$4\sqrt{2}$ cm.', 0),
+(@q, 'D', N'$4$ cm.', 0);
+END
+
+-- Bài 31. Hình trụ và hình nón
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 31. Hình trụ và hình nón' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Hình trụ có bán kính đáy $R$ và chiều cao $h$ thì diện tích xung quanh là</p>', N'<p>Hình khai triển mặt xung quanh là hình chữ nhật có kích thước $2\pi R$ và $h$ nên $S_{xq}=2\pi Rh$. ($\pi R^2h$ là thể tích.)</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$S_{xq}=\pi Rh$.', 0),
+(@q, 'B', N'$S_{xq}=2\pi Rh$.', 1),
+(@q, 'C', N'$S_{xq}=\pi R^2h$.', 0),
+(@q, 'D', N'$S_{xq}=2\pi R^2h$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Hình nón có bán kính đáy $r$, độ dài đường sinh $l$ và chiều cao $h$ thì thể tích là</p>', N'<p>$V=\dfrac{1}{3}S_{\text{đáy}}\cdot h=\dfrac{1}{3}\pi r^2h$. ($\pi rl$ là diện tích xung quanh của hình nón.)</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$V=\pi r^2h$.', 0),
+(@q, 'B', N'$V=\dfrac{1}{3}\pi rl$.', 0),
+(@q, 'C', N'$V=\dfrac{1}{3}\pi r^2h$.', 1),
+(@q, 'D', N'$V=\pi rl$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Thể tích của hình trụ có bán kính đáy $3$ cm và chiều cao $5$ cm là</p>', N'<p>$V=\pi R^2h=\pi\cdot3^2\cdot5=45\pi\ (\text{cm}^3)$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$15\pi\ \text{cm}^3$.', 0),
+(@q, 'B', N'$30\pi\ \text{cm}^3$.', 0),
+(@q, 'C', N'$75\pi\ \text{cm}^3$.', 0),
+(@q, 'D', N'$45\pi\ \text{cm}^3$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Diện tích xung quanh của hình nón có bán kính đáy $4$ cm và độ dài đường sinh $7$ cm là</p>', N'<p>$S_{xq}=\pi rl=\pi\cdot4\cdot7=28\pi\ (\text{cm}^2)$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$28\pi\ \text{cm}^2$.', 1),
+(@q, 'B', N'$56\pi\ \text{cm}^2$.', 0),
+(@q, 'C', N'$112\pi\ \text{cm}^2$.', 0),
+(@q, 'D', N'$14\pi\ \text{cm}^2$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một hình nón có bán kính đáy $6$ cm và chiều cao $8$ cm. Độ dài đường sinh của hình nón là</p>', N'<p>Theo hệ thức $l^2=h^2+r^2=8^2+6^2=100$ nên $l=10$ cm.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$14$ cm.', 0),
+(@q, 'B', N'$10$ cm.', 1),
+(@q, 'C', N'$2\sqrt{7}$ cm.', 0),
+(@q, 'D', N'$100$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một hình trụ có bán kính đáy $5$ cm và chiều cao $10$ cm. Tổng diện tích xung quanh và diện tích hai đáy của hình trụ là</p>', N'<p>$S_{xq}=2\pi\cdot5\cdot10=100\pi$; diện tích hai đáy $2\cdot\pi\cdot5^2=50\pi$. Tổng: $100\pi+50\pi=150\pi\ (\text{cm}^2)$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$100\pi\ \text{cm}^2$.', 0),
+(@q, 'B', N'$125\pi\ \text{cm}^2$.', 0),
+(@q, 'C', N'$150\pi\ \text{cm}^2$.', 1),
+(@q, 'D', N'$250\pi\ \text{cm}^2$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một hình nón có độ dài đường sinh $13$ cm và bán kính đáy $5$ cm. Thể tích của hình nón là</p>', N'<p>Chiều cao $h=\sqrt{13^2-5^2}=\sqrt{144}=12$ cm. Thể tích $V=\dfrac{1}{3}\pi\cdot5^2\cdot12=100\pi\ (\text{cm}^3)$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\dfrac{325\pi}{3}\ \text{cm}^3$.', 0),
+(@q, 'B', N'$300\pi\ \text{cm}^3$.', 0),
+(@q, 'C', N'$65\pi\ \text{cm}^3$.', 0),
+(@q, 'D', N'$100\pi\ \text{cm}^3$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Quay hình chữ nhật $ABCD$ có $AB=3$ cm, $BC=4$ cm một vòng quanh cạnh $AB$ cố định, ta được một hình trụ. Thể tích của hình trụ đó là</p>', N'<p>Quay quanh cạnh $AB$ thì chiều cao $h=AB=3$ cm và bán kính đáy $R=BC=4$ cm. Vậy $V=\pi\cdot4^2\cdot3=48\pi\ (\text{cm}^3)$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$48\pi\ \text{cm}^3$.', 1),
+(@q, 'B', N'$36\pi\ \text{cm}^3$.', 0),
+(@q, 'C', N'$24\pi\ \text{cm}^3$.', 0),
+(@q, 'D', N'$12\pi\ \text{cm}^3$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một hình nón có bán kính đáy $3$ cm và diện tích xung quanh $15\pi\ \text{cm}^2$. Thể tích của hình nón là</p>', N'<p>Từ $S_{xq}=\pi rl=15\pi$ suy ra $l=5$ cm. Chiều cao $h=\sqrt{5^2-3^2}=4$ cm. Thể tích $V=\dfrac{1}{3}\pi\cdot3^2\cdot4=12\pi\ (\text{cm}^3)$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$15\pi\ \text{cm}^3$.', 0),
+(@q, 'B', N'$12\pi\ \text{cm}^3$.', 1),
+(@q, 'C', N'$36\pi\ \text{cm}^3$.', 0),
+(@q, 'D', N'$45\pi\ \text{cm}^3$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một khối gỗ hình trụ có bán kính đáy $3$ cm, chiều cao $8$ cm được tiện thành một hình nón có cùng đáy và cùng chiều cao với hình trụ. Thể tích phần gỗ bị bỏ đi là</p>', N'<p>$V_{\text{trụ}}=\pi\cdot3^2\cdot8=72\pi$; $V_{\text{nón}}=\dfrac{1}{3}\pi\cdot3^2\cdot8=24\pi$. Phần bỏ đi: $72\pi-24\pi=48\pi\ (\text{cm}^3)$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$24\pi\ \text{cm}^3$.', 0),
+(@q, 'B', N'$72\pi\ \text{cm}^3$.', 0),
+(@q, 'C', N'$48\pi\ \text{cm}^3$.', 1),
+(@q, 'D', N'$64\pi\ \text{cm}^3$.', 0);
+END
+
+-- Bài 32. Hình cầu
+SET @l = (SELECT TOP 1 LessonId FROM Lessons WHERE Title = N'Bài 32. Hình cầu' ORDER BY LessonId);
+IF @l IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Questions WHERE LessonId = @l AND QuestionType = 'MCQ')
+BEGIN
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Diện tích mặt cầu bán kính $R$ là</p>', N'<p>Công thức diện tích mặt cầu: $S=4\pi R^2$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$S=\pi R^2$.', 0),
+(@q, 'B', N'$S=4\pi R^2$.', 1),
+(@q, 'C', N'$S=\dfrac{4}{3}\pi R^2$.', 0),
+(@q, 'D', N'$S=2\pi R^2$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Thể tích hình cầu bán kính $R$ là</p>', N'<p>Công thức thể tích hình cầu: $V=\dfrac{4}{3}\pi R^3$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$V=\dfrac{4}{3}\pi R^3$.', 1),
+(@q, 'B', N'$V=4\pi R^3$.', 0),
+(@q, 'C', N'$V=\dfrac{1}{3}\pi R^3$.', 0),
+(@q, 'D', N'$V=4\pi R^2$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cắt một hình cầu bởi một mặt phẳng, phần chung của mặt phẳng và hình cầu (mặt cắt) là</p>', N'<p>Mặt cắt của hình cầu bởi một mặt phẳng là một hình tròn. (Cắt <i>mặt cầu</i> thì được một <i>đường tròn</i>.)</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'một hình vuông.', 0),
+(@q, 'B', N'một đường tròn.', 0),
+(@q, 'C', N'một hình tròn.', 1),
+(@q, 'D', N'một hình quạt tròn.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Diện tích mặt cầu bán kính $3$ cm là</p>', N'<p>$S=4\pi R^2=4\pi\cdot3^2=36\pi\ (\text{cm}^2)$.</p>', 1, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$12\pi\ \text{cm}^2$.', 0),
+(@q, 'B', N'$9\pi\ \text{cm}^2$.', 0),
+(@q, 'C', N'$27\pi\ \text{cm}^2$.', 0),
+(@q, 'D', N'$36\pi\ \text{cm}^2$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Thể tích của hình cầu có đường kính $6$ cm là</p>', N'<p>Bán kính $R=3$ cm nên $V=\dfrac{4}{3}\pi\cdot3^3=36\pi\ (\text{cm}^3)$. (Nhầm $R=6$ cm sẽ được $288\pi$.)</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$288\pi\ \text{cm}^3$.', 0),
+(@q, 'B', N'$36\pi\ \text{cm}^3$.', 1),
+(@q, 'C', N'$12\pi\ \text{cm}^3$.', 0),
+(@q, 'D', N'$72\pi\ \text{cm}^3$.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một mặt cầu có diện tích $100\pi\ \text{cm}^2$. Bán kính của mặt cầu là</p>', N'<p>$4\pi R^2=100\pi\Rightarrow R^2=25\Rightarrow R=5$ cm.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$10$ cm.', 0),
+(@q, 'B', N'$25$ cm.', 0),
+(@q, 'C', N'$5$ cm.', 1),
+(@q, 'D', N'$2{,}5$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Cắt mặt cầu tâm $O$ bán kính $5$ cm bởi một mặt phẳng cách tâm $O$ một khoảng $3$ cm, ta được một đường tròn. Bán kính của đường tròn đó là</p>', N'<p>Gọi $H$ là hình chiếu của $O$ trên mặt phẳng, $M$ là một điểm của đường tròn giao tuyến thì tam giác $OHM$ vuông tại $H$, $OM=5$, $OH=3$. Bán kính $HM=\sqrt{5^2-3^2}=4$ cm (nhỏ hơn $R$ vì mặt phẳng không đi qua tâm).</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$4$ cm.', 1),
+(@q, 'B', N'$5$ cm.', 0),
+(@q, 'C', N'$2$ cm.', 0),
+(@q, 'D', N'$\sqrt{34}$ cm.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một quả bóng hình cầu có đường kính $22$ cm. Diện tích mặt ngoài của quả bóng là</p>', N'<p>Bán kính $R=11$ cm nên $S=4\pi\cdot11^2=484\pi\ (\text{cm}^2)$.</p>', 2, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$1936\pi\ \text{cm}^2$.', 0),
+(@q, 'B', N'$121\pi\ \text{cm}^2$.', 0),
+(@q, 'C', N'$242\pi\ \text{cm}^2$.', 0),
+(@q, 'D', N'$484\pi\ \text{cm}^2$.', 1);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Nếu bán kính của một hình cầu tăng lên gấp $2$ lần thì thể tích của hình cầu tăng lên</p>', N'<p>$V''=\dfrac{4}{3}\pi(2R)^3=8\cdot\dfrac{4}{3}\pi R^3=8V$. Vậy thể tích tăng $8$ lần (diện tích mặt cầu mới tăng $4$ lần).</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$2$ lần.', 0),
+(@q, 'B', N'$4$ lần.', 0),
+(@q, 'C', N'$8$ lần.', 1),
+(@q, 'D', N'$6$ lần.', 0);
+INSERT INTO Questions (LessonId, QuestionType, Content, ExplanationLatex, [Level], IsAiGenerated, IsActive, TeacherId) VALUES (@l, 'MCQ', N'<p>Một hộp hình trụ có bán kính đáy $3$ cm và chiều cao $6$ cm chứa vừa khít một quả bóng hình cầu bán kính $3$ cm. Tỉ số giữa thể tích quả bóng và thể tích hộp là</p>', N'<p>$V_{\text{cầu}}=\dfrac{4}{3}\pi\cdot3^3=36\pi$; $V_{\text{trụ}}=\pi\cdot3^2\cdot6=54\pi$. Tỉ số $\dfrac{36\pi}{54\pi}=\dfrac{2}{3}$.</p>', 3, 0, 1, @t1);
+SET @q = SCOPE_IDENTITY();
+INSERT INTO QuestionOptions (QuestionId, OptionLetter, Content, IsCorrect) VALUES
+(@q, 'A', N'$\dfrac{1}{2}$.', 0),
+(@q, 'B', N'$\dfrac{2}{3}$.', 1),
+(@q, 'C', N'$\dfrac{3}{4}$.', 0),
+(@q, 'D', N'$\dfrac{1}{3}$.', 0);
+END
+
+
+COMMIT TRANSACTION;
+
+SELECT l.LessonId, LEFT(l.Title, 60) AS BaiHoc, COUNT(q.QuestionId) AS SoCauTracNghiem
+FROM Lessons l LEFT JOIN Questions q ON q.LessonId = l.LessonId AND q.QuestionType = 'MCQ' AND q.IsActive = 1
+WHERE l.IsActive = 1
+GROUP BY l.LessonId, l.Title
+ORDER BY l.LessonId;
+GO
+
+-- =====================================================================================================================
+-- 5. Video bài giảng VietJack
 -- =====================================================================================================================
 SET NOCOUNT ON;
 
@@ -3260,7 +5996,7 @@ SELECT l.Title FROM Lessons l WHERE NOT EXISTS (SELECT 1 FROM LessonMaterials m 
 GO
 
 -- =====================================================================================================================
--- 5. Lịch sử bài làm mẫu
+-- 6. Lịch sử bài làm mẫu
 -- =====================================================================================================================
 
 SET NOCOUNT ON;
